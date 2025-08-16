@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful - Nightlife App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .success-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            text-align: center;
+            max-width: 500px;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .success-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, #4CAF50, #45a049, #4CAF50);
+            background-size: 200% 100%;
+            animation: gradient-shift 3s ease infinite;
+        }
+
+        @keyframes gradient-shift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .success-icon {
+            width: 80px;
+            height: 80px;
+            background: #4CAF50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+            animation: bounce-in 0.8s ease-out;
+        }
+
+        .success-icon svg {
+            width: 40px;
+            height: 40px;
+            fill: white;
+        }
+
+        @keyframes bounce-in {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2.2em;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .transaction-details {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 30px 0;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: #333;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            background: #4CAF50;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .action-buttons {
+            margin-top: 40px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+            min-width: 140px;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 123, 255, 0.3);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(108, 117, 125, 0.3);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #1e7e34;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
+        }
+
+        .footer-note {
+            margin-top: 30px;
+            padding: 20px;
+            background: #e8f5e8;
+            border-radius: 10px;
+            border: 1px solid #c3e6c3;
+        }
+
+        .footer-note p {
+            color: #2d5a2d;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        @media (max-width: 600px) {
+            .success-container {
+                padding: 30px 20px;
+                margin: 20px;
+            }
+
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .btn {
+                width: 100%;
+                max-width: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="success-container">
+        <div class="success-icon">
+            <svg viewBox="0 0 24 24">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+        </div>
+
+        <h1>Payment Successful! 🎉</h1>
+        <p class="subtitle">
+            Thank you for your purchase! Your transaction has been completed successfully.
+        </p>
+
+        <div class="transaction-details" id="transactionDetails">
+            <div class="detail-row">
+                <span class="detail-label">Status:</span>
+                <span class="status-badge">Approved</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Transaction ID:</span>
+                <span class="detail-value" id="transactionId">Loading...</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Amount:</span>
+                <span class="detail-value" id="amount">Loading...</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Date:</span>
+                <span class="detail-value" id="date">Loading...</span>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="checkTransactionStatus()">
+                🔍 Check Status
+            </button>
+            <a href="/test-wompi-complete.html" class="btn btn-success">
+                🏠 Go Home
+            </a>
+        </div>
+
+        <div class="footer-note">
+            <p>
+                <strong>📧 Confirmation Email:</strong> You will receive a confirmation email shortly.<br>
+                <strong>📱 Support:</strong> If you have any questions, please contact our support team.<br>
+                <strong>💡 Note:</strong> For PSE payments, transaction details may take a few minutes to appear.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const transactionId = urlParams.get('transactionId') || urlParams.get('id');
+        const amount = urlParams.get('amount');
+        const status = urlParams.get('status');
+
+        // Debug: Log all URL parameters
+        console.log('🔍 Payment Success Page - URL Parameters:');
+        console.log('Full URL:', window.location.href);
+        console.log('All params:', Object.fromEntries(urlParams.entries()));
+        console.log('Transaction ID:', transactionId);
+        console.log('Amount:', amount);
+        console.log('Status:', status);
+
+        // Update page content with URL parameters
+        if (transactionId) {
+            document.getElementById('transactionId').textContent = transactionId;
+        } else {
+            document.getElementById('transactionId').textContent = 'Not available';
+            console.log('⚠️ No transaction ID found in URL parameters');
+        }
+        
+        if (amount) {
+            document.getElementById('amount').textContent = `$${amount}`;
+        } else {
+            document.getElementById('amount').textContent = 'Not available';
+            console.log('⚠️ No amount found in URL parameters');
+        }
+
+        if (status) {
+            const statusBadge = document.querySelector('.status-badge');
+            if (status === 'APPROVED') {
+                statusBadge.textContent = 'Approved';
+                statusBadge.style.background = '#4CAF50';
+            } else if (status === 'DECLINED') {
+                statusBadge.textContent = 'Declined';
+                statusBadge.style.background = '#f44336';
+            } else if (status === 'PENDING') {
+                statusBadge.textContent = 'Pending';
+                statusBadge.style.background = '#ff9800';
+            }
+        }
+
+        // Set current date
+        document.getElementById('date').textContent = new Date().toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        // Function to check transaction status using new unified flow
+        async function checkTransactionStatus(event) {
+            if (!transactionId || transactionId === 'Not available') {
+                alert('No transaction ID available to check');
+                return;
+            }
+
+            const btn = event ? event.target : document.querySelector('.btn-primary');
+            if (btn) {
+                btn.classList.add('loading');
+                btn.textContent = 'Checking...';
+            }
+
+            try {
+                console.log('🔍 Checking transaction status for:', transactionId);
+                
+                // Try to get transaction details from the status endpoints
+                let transactionData = null;
+                
+                // First try ticket status
+                try {
+                    console.log('📊 Trying ticket status endpoint...');
+                    const ticketResponse = await fetch(`/wompi/tickets/checkout/status/${transactionId}`);
+                    console.log('📊 Ticket response status:', ticketResponse.status);
+                    
+                    if (ticketResponse.ok) {
+                        transactionData = await ticketResponse.json();
+                        console.log('✅ Ticket transaction found:', transactionData);
+                    } else {
+                        console.log('❌ Ticket response not ok:', ticketResponse.status, ticketResponse.statusText);
+                    }
+                } catch (e) {
+                    console.log('❌ Ticket status check failed:', e);
+                }
+
+                // If ticket status failed, try menu status
+                if (!transactionData) {
+                    try {
+                        console.log('📊 Trying menu status endpoint...');
+                        const menuResponse = await fetch(`/wompi/menu/checkout/status/${transactionId}`);
+                        console.log('📊 Menu response status:', menuResponse.status);
+                        
+                        if (menuResponse.ok) {
+                            transactionData = await menuResponse.json();
+                            console.log('✅ Menu transaction found:', transactionData);
+                        } else {
+                            console.log('❌ Menu response not ok:', menuResponse.status, menuResponse.statusText);
+                        }
+                    } catch (e) {
+                        console.log('❌ Menu status check failed:', e);
+                    }
+                }
+
+                if (transactionData) {
+                    // Update the page with real transaction data
+                    document.getElementById('transactionId').textContent = transactionData.transactionId || transactionData.id || transactionId;
+                    
+                    // Try to get amount from various possible fields
+                    let amount = transactionData.amount || transactionData.total || transactionData.totalAmount;
+                    if (amount) {
+                        // The amount from our database is already in Colombian pesos (COP)
+                        // Format as Colombian pesos with centavos
+                        if (typeof amount === 'number') {
+                            // Format as COP with 2 decimal places for centavos
+                            amount = amount.toFixed(2);
+                            // Add thousands separator for better readability
+                            amount = amount.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                            console.log('💰 Amount formatted as Colombian pesos with centavos:', amount);
+                        }
+                        document.getElementById('amount').textContent = `$${amount}`;
+                    } else {
+                        document.getElementById('amount').textContent = 'Processing...';
+                        console.log('⚠️ No amount found in transaction data');
+                    }
+                    
+                    // Update status badge
+                    const status = transactionData.status || transactionData.paymentStatus;
+                    if (status) {
+                        const statusBadge = document.querySelector('.status-badge');
+                        if (status === 'APPROVED') {
+                            statusBadge.textContent = 'Approved';
+                            statusBadge.style.background = '#4CAF50';
+                        } else if (status === 'DECLINED') {
+                            statusBadge.textContent = 'Declined';
+                            statusBadge.style.background = '#f44336';
+                        } else if (status === 'PENDING') {
+                            statusBadge.textContent = 'Pending';
+                            statusBadge.style.background = '#ff9800';
+                        }
+                        console.log('🏷️ Status updated:', status);
+                    }
+
+                    // Update page silently without alert
+                    console.log('✅ Transaction details updated successfully');
+                    console.log('💰 Amount:', amount);
+                    console.log('🏷️ Status:', status);
+                    console.log('🔗 Reference:', transactionData.reference);
+                } else {
+                    console.log('❌ No transaction data found from either endpoint');
+                    alert('Transaction not found. It may still be processing or the ID is incorrect.');
+                }
+            } catch (error) {
+                console.error('Error checking transaction status:', error);
+                alert('Error checking transaction status: ' + error.message);
+            } finally {
+                if (btn) {
+                    btn.classList.remove('loading');
+                    btn.textContent = '🔍 Check Status';
+                }
+            }
+        }
+
+        // Auto-check status if transaction ID is present
+        if (transactionId && transactionId !== 'Not available') {
+            console.log('🔄 Auto-checking transaction status in 2 seconds...');
+            setTimeout(() => {
+                checkTransactionStatus();
+            }, 2000);
+        } else {
+            console.log('⚠️ No transaction ID available for auto-check');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+﻿# Root ignore for monorepo
+/nightlife-frontend/node_modules
+/nightlife-frontend/.next
+/nightlife-frontend/out
+/nightlife-frontend/.turbo
+/nightlife-backend/node_modules
+/nightlife-backend/dist

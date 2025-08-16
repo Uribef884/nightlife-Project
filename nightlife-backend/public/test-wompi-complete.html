@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Wompi Payment Integration Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .payment-method {
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .payment-method h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+        .response.error {
+            background-color: #f8d7da;
+            border-left-color: #dc3545;
+            color: #721c24;
+        }
+        .response.success {
+            background-color: #d4edda;
+            border-left-color: #28a745;
+            color: #155724;
+        }
+        .sandbox-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .sandbox-info h4 {
+            margin-top: 0;
+            color: #856404;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .hidden {
+            display: none;
+        }
+        .btn-primary {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .btn-success {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .row {
+            display: flex;
+            gap: 20px;
+        }
+        .col {
+            flex: 1;
+        }
+        .redirect-notice {
+            background-color: #cce5ff;
+            border: 1px solid #007bff;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 Complete Wompi Payment Integration Test</h1>
+        <p>Test all supported Wompi payment methods for both ticket and menu purchases.</p>
+        <p><strong>🚀 New Unified Flow:</strong> With the updated system, checkout is now automatic after initiation. Simply call the initiate endpoint and the system handles everything else automatically!</p>
+        
+        <div class="sandbox-info">
+            <h4>🧪 Sandbox Test Data</h4>
+            <p><strong>Cards:</strong> 4242424242424242 (APPROVED), 4111111111111111 (DECLINED)</p>
+            <p><strong>Nequi:</strong> 3991111111 (APPROVED), 3992222222 (DECLINED)</p>
+            <p><strong>PSE:</strong> Bank code "1" (APPROVED), "2" (DECLINED)</p>
+            <p><strong>Daviplata OTP:</strong> 574829 (APPROVED), 932015 (DECLINED), 186743 (DECLINED - no funds), 999999 (ERROR)</p>
+            <p><strong>Bancolombia:</strong> Choose status on redirect page</p>
+        </div>
+    </div>
+
+    <!-- Purchase Type Selection -->
+    <div class="container">
+        <h2>Purchase Type</h2>
+        <div class="form-group">
+            <label>
+                <input type="radio" name="purchaseType" value="ticket" checked> Ticket Purchase
+            </label>
+            <label>
+                <input type="radio" name="purchaseType" value="menu"> Menu Purchase
+            </label>
+        </div>
+        <div class="form-group">
+            <label for="customerEmail">Customer Email:</label>
+            <input type="email" id="customerEmail" value="test@example.com" required>
+        </div>
+        <div class="form-group">
+            <label for="redirectUrl">Redirect URL (optional):</label>
+            <input type="url" id="redirectUrl" value="http://localhost:4000/payment-success" placeholder="Return URL after payment">
+        </div>
+    </div>
+
+    <!-- PSE Banks -->
+    <div class="container">
+        <h2>🏦 PSE Banks</h2>
+        <button id="loadPSEBanksBtn">Load PSE Banks</button>
+        <div id="psebanks-response" class="response hidden"></div>
+    </div>
+
+    <!-- Card Payment -->
+    <div class="container payment-method">
+        <h3>💳 Credit/Debit Card Payment</h3>
+        <div class="row">
+            <div class="col">
+                <div class="form-group">
+                    <label for="cardNumber">Card Number:</label>
+                    <input type="text" id="cardNumber" value="4242424242424242" placeholder="4242424242424242">
+                </div>
+                <div class="form-group">
+                    <label for="cardCvc">CVC:</label>
+                    <input type="text" id="cardCvc" value="123" placeholder="123">
+                </div>
+            </div>
+            <div class="col">
+                <div class="form-group">
+                    <label for="cardExpMonth">Expiry Month:</label>
+                    <input type="text" id="cardExpMonth" value="12" placeholder="12">
+                </div>
+                <div class="form-group">
+                    <label for="cardExpYear">Expiry Year:</label>
+                    <input type="text" id="cardExpYear" value="29" placeholder="29">
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="cardHolder">Card Holder Name:</label>
+            <input type="text" id="cardHolder" value="John Doe" placeholder="John Doe">
+        </div>
+        <div class="form-group">
+            <label for="cardInstallments">Installments:</label>
+            <select id="cardInstallments">
+                <option value="1">1 (No installments)</option>
+                <option value="2">2 months</option>
+                <option value="3">3 months</option>
+                <option value="6">6 months</option>
+                <option value="12">12 months</option>
+            </select>
+        </div>
+        <button id="testCardBtn">Test Card Payment</button>
+        <div id="card-response" class="response hidden"></div>
+    </div>
+
+    <!-- Nequi Payment -->
+    <div class="container payment-method">
+        <h3>📱 Nequi Payment</h3>
+        <div class="form-group">
+            <label for="nequiPhone">Phone Number:</label>
+            <input type="text" id="nequiPhone" value="3991111111" placeholder="3991111111">
+        </div>
+        <button id="testNequiBtn">Test Nequi Payment</button>
+        <div id="nequi-response" class="response hidden"></div>
+    </div>
+
+    <!-- PSE Payment -->
+    <div class="container payment-method">
+        <h3>🏦 PSE Payment</h3>
+        <div class="row">
+            <div class="col">
+                <div class="form-group">
+                    <label for="pseUserType">User Type:</label>
+                    <select id="pseUserType">
+                        <option value="0">Natural Person</option>
+                        <option value="1">Business</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pseIdType">ID Type:</label>
+                    <select id="pseIdType">
+                        <option value="CC">Cédula de Ciudadanía</option>
+                        <option value="CE">Cédula de Extranjería</option>
+                        <option value="NIT">NIT</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pseIdNumber">ID Number:</label>
+                    <input type="text" id="pseIdNumber" value="1234567890" placeholder="1234567890">
+                </div>
+            </div>
+            <div class="col">
+                <div class="form-group">
+                    <label for="pseBank">Financial Institution:</label>
+                    <select id="pseBank">
+                        <option value="1">Banco que aprueba (Test APPROVED)</option>
+                        <option value="2">Banco que rechaza (Test DECLINED)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pseFullName">Full Name:</label>
+                    <input type="text" id="pseFullName" value="John Doe" placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label for="psePhone">Phone Number:</label>
+                    <input type="text" id="psePhone" value="3001234567" placeholder="3001234567">
+                </div>
+            </div>
+        </div>
+        <button id="testPSEBtn">Test PSE Payment</button>
+        <div id="pse-response" class="response hidden"></div>
+    </div>
+
+    <!-- Bancolombia Transfer -->
+    <div class="container payment-method">
+        <h3>🏛️ Bancolombia Transfer</h3>
+        <div class="form-group">
+            <label for="bancolombiaDescription">Payment Description:</label>
+            <input type="text" id="bancolombiaDescription" value="Test purchase from Nightlife App" placeholder="Payment description">
+        </div>
+        <div class="form-group">
+            <label for="bancolombiaEcommerce">Ecommerce URL (optional):</label>
+            <input type="url" id="bancolombiaEcommerce" value="http://localhost:4000/test-wompi-complete.html" placeholder="Thank you page URL">
+        </div>
+        <button id="testBancolombiaBtn">Test Bancolombia Transfer</button>
+        <div id="bancolombia-response" class="response hidden"></div>
+    </div>
+
+    <!-- Daviplata Payment - DISABLED -->
+    <!-- <div class="container payment-method">
+        <h3>💰 Daviplata Payment</h3>
+        <div class="form-group">
+            <label for="daviplataIdType">ID Type:</label>
+            <select id="daviplataIdType">
+                <option value="CC">Cédula de Ciudadanía</option>
+                <option value="CE">Cédula de Extranjería</option>
+                <option value="NIT">NIT</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="daviplataIdNumber">ID Number:</label>
+            <input type="text" id="daviplataIdNumber" value="1234567890" placeholder="1234567890">
+        </div>
+        <div class="form-group">
+            <label for="daviplataDescription">Payment Description:</label>
+            <input type="text" id="daviplataDescription" value="Test purchase from Nightlife App" placeholder="Payment description">
+        </div>
+        <button id="testDaviplataBtn">Test Daviplata Payment</button>
+        <div id="daviplata-response" class="response hidden"></div>
+    </div> -->
+
+    <!-- Transaction Status Checker -->
+    <div class="container">
+        <h2>🔍 Check Transaction Status</h2>
+        <p><em>Note: With the new unified flow, checkout is automatic after initiation. This section just shows transaction details.</em></p>
+        <div class="form-group">
+            <label for="transactionId">Transaction ID:</label>
+            <input type="text" id="transactionId" placeholder="Enter transaction ID">
+        </div>
+        <button id="checkStatusBtn">Check Transaction Details</button>
+        <div id="status-response" class="response hidden"></div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        
+        function getPurchaseType() {
+            return document.querySelector('input[name="purchaseType"]:checked').value;
+        }
+        
+        function getCustomerEmail() {
+            return document.getElementById('customerEmail').value;
+        }
+        
+        function getRedirectUrl() {
+            return document.getElementById('redirectUrl').value;
+        }
+        
+        async function loadPSEBanks() {
+            try {
+                const response = await fetch(`${API_BASE}/api/pse/banks`);
+                const data = await response.json();
+                
+                const responseDiv = document.getElementById('psebanks-response');
+                responseDiv.classList.remove('hidden');
+                
+                if (data.success) {
+                    responseDiv.className = 'response success';
+                    responseDiv.innerHTML = `
+                        <h4>PSE Banks Loaded Successfully</h4>
+                        <pre>${JSON.stringify(data.data, null, 2)}</pre>
+                    `;
+                    
+                    // Debug: Log the actual data structure
+                    console.log('PSE Banks data structure:', data.data);
+                    if (data.data.length > 0) {
+                        console.log('First bank object properties:', Object.keys(data.data[0]));
+                        console.log('First bank object:', data.data[0]);
+                    }
+                    
+                    // Update PSE bank select
+                    const bankSelect = document.getElementById('pseBank');
+                    bankSelect.innerHTML = '<option value="">Select a bank...</option>';
+                    data.data.forEach(bank => {
+                        // Handle both possible property names from Wompi API
+                        const bankCode = bank.code || bank.financial_institution_code || bank.id;
+                        const bankName = bank.name || bank.financial_institution_name || bank.bank_name;
+                        
+                        if (bankCode && bankName) {
+                            bankSelect.innerHTML += `<option value="${bankCode}">${bankName}</option>`;
+                        } else {
+                            console.warn('Bank data missing properties:', bank);
+                        }
+                    });
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.innerHTML = `<h4>Error:</h4><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                document.getElementById('psebanks-response').innerHTML = `<h4>Error:</h4><pre>${error.message}</pre>`;
+                document.getElementById('psebanks-response').className = 'response error';
+                document.getElementById('psebanks-response').classList.remove('hidden');
+            }
+        }
+        
+        async function testCardPayment() {
+            const purchaseType = getPurchaseType();
+            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            
+            const payload = {
+                email: getCustomerEmail(),
+                paymentMethod: 'CARD',
+                redirect_url: getRedirectUrl(),
+                installments: parseInt(document.getElementById('cardInstallments').value),
+                paymentData: {
+                    number: document.getElementById('cardNumber').value,
+                    cvc: document.getElementById('cardCvc').value,
+                    exp_month: document.getElementById('cardExpMonth').value,
+                    exp_year: document.getElementById('cardExpYear').value,
+                    card_holder: document.getElementById('cardHolder').value,
+                }
+            };
+            
+            await makePaymentRequest(endpoint, payload, 'card-response');
+        }
+        
+        async function testNequiPayment() {
+            const purchaseType = getPurchaseType();
+            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            
+            const payload = {
+                email: getCustomerEmail(),
+                paymentMethod: 'NEQUI',
+                redirect_url: getRedirectUrl(),
+                paymentData: {
+                    phone_number: document.getElementById('nequiPhone').value,
+                }
+            };
+            
+            await makePaymentRequest(endpoint, payload, 'nequi-response');
+        }
+        
+        async function testPSEPayment() {
+            const purchaseType = getPurchaseType();
+            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            
+            const payload = {
+                email: getCustomerEmail(),
+                paymentMethod: 'PSE',
+                redirect_url: getRedirectUrl(),
+                paymentData: {
+                    user_type: parseInt(document.getElementById('pseUserType').value),
+                    user_legal_id_type: document.getElementById('pseIdType').value,
+                    user_legal_id: document.getElementById('pseIdNumber').value,
+                    financial_institution_code: document.getElementById('pseBank').value,
+                    payment_description: `${purchaseType} purchase from Nightlife App`,
+                },
+                customer_data: {
+                    phone_number: document.getElementById('psePhone').value,
+                    full_name: document.getElementById('pseFullName').value,
+                }
+            };
+            
+            await makePaymentRequest(endpoint, payload, 'pse-response');
+        }
+        
+        async function testBancolombiaPayment() {
+            const purchaseType = getPurchaseType();
+            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            
+            const payload = {
+                email: getCustomerEmail(),
+                paymentMethod: 'BANCOLOMBIA_TRANSFER',
+                redirect_url: getRedirectUrl(),
+                paymentData: {
+                    payment_description: document.getElementById('bancolombiaDescription').value,
+                    ecommerce_url: document.getElementById('bancolombiaEcommerce').value,
+                }
+            };
+            
+            await makePaymentRequest(endpoint, payload, 'bancolombia-response');
+        }
+        
+        // async function testDaviplataPayment() { // DISABLED
+        //     const purchaseType = getPurchaseType();
+        //     const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            
+        //     const payload = {
+        //         email: getCustomerEmail(),
+        //         paymentMethod: 'DAVIPLATA',
+        //         redirect_url: getRedirectUrl(),
+        //         paymentData: {
+        //             user_legal_id_type: document.getElementById('daviplataIdType').value,
+        //             user_legal_id: document.getElementById('daviplataIdNumber').value,
+        //             payment_description: document.getElementById('daviplataDescription').value,
+        //             }
+        //     };
+            
+        //     await makePaymentRequest(endpoint, payload, 'daviplata-response');
+        // }
+        
+        async function makePaymentRequest(endpoint, payload, responseElementId) {
+            const responseDiv = document.getElementById(responseElementId);
+            responseDiv.classList.remove('hidden');
+            responseDiv.className = 'response';
+            responseDiv.innerHTML = '<p>Processing payment...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    responseDiv.className = 'response success';
+                    let html = `<h4>🚀 Payment Initiated Successfully!</h4>`;
+                    html += `<p><strong>Transaction ID:</strong> ${data.transactionId}</p>`;
+                    html += `<p><strong>Status:</strong> ${data.status}</p>`;
+                    html += `<p><strong>Total:</strong> $${data.total}</p>`;
+                    html += `<p><strong>Automatic Checkout:</strong> ✅ Enabled</p>`;
+                    html += `<p><em>🎉 Your payment is being processed automatically! No need to call checkout manually.</em></p>`;
+                    
+                    if (data.redirectUrl) {
+                        html += `<div class="redirect-notice">
+                            <p><strong>🔄 Redirect Required:</strong></p>
+                            <p>${data.message}</p>
+                            <a href="${data.redirectUrl}" target="_blank" class="btn-primary">Complete Payment</a>
+                            <p><em>After completing payment, your order will be processed automatically!</em></p>
+                        </div>`;
+                    }
+                    
+                    if (data.otpUrl) {
+                        html += `<div class="redirect-notice">
+                            <p><strong>📱 OTP Required:</strong></p>
+                            <p>${data.message}</p>
+                            <a href="${data.otpUrl}" target="_blank" class="btn-success">Enter OTP</a>
+                            <p><em>After OTP verification, your order will be processed automatically!</em></p>
+                        </div>`;
+                    }
+                    
+                    html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                    responseDiv.innerHTML = html;
+                    
+                    // Auto-fill transaction ID for status checking
+                    document.getElementById('transactionId').value = data.transactionId;
+                    
+                } else {
+                    responseDiv.className = 'response error';
+                    responseDiv.innerHTML = `<h4>Payment Failed</h4><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                responseDiv.className = 'response error';
+                responseDiv.innerHTML = `<h4>Error:</h4><pre>${error.message}</pre>`;
+            }
+        }
+        
+        async function checkTransactionStatus() {
+            const transactionId = document.getElementById('transactionId').value;
+            if (!transactionId) {
+                alert('Please enter a transaction ID');
+                return;
+            }
+            
+            const purchaseType = getPurchaseType();
+            // Use the status check endpoint instead of checkout
+            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/status' : '/wompi/menu/status';
+            
+            const responseDiv = document.getElementById('status-response');
+            responseDiv.classList.remove('hidden');
+            responseDiv.className = 'response';
+            responseDiv.innerHTML = '<p>Checking transaction details...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}/${transactionId}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    responseDiv.className = 'response success';
+                    responseDiv.innerHTML = `
+                        <h4>📊 Transaction Details</h4>
+                        <p><strong>Transaction ID:</strong> ${data.transactionId}</p>
+                        <p><strong>Status:</strong> ${data.status}</p>
+                        <p><strong>Amount:</strong> $${data.amount}</p>
+                        <p><strong>Currency:</strong> ${data.currency}</p>
+                        <p><strong>Customer Email:</strong> ${data.customerEmail}</p>
+                        <p><strong>Created:</strong> ${data.createdAt}</p>
+                        ${data.finalizedAt ? `<p><strong>Finalized:</strong> ${data.finalizedAt}</p>` : ''}
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    const errorData = await response.json();
+                    responseDiv.className = 'response error';
+                    responseDiv.innerHTML = `<h4>Error Checking Transaction</h4><pre>${JSON.stringify(errorData, null, 2)}</pre>`;
+                }
+            } catch (error) {
+                responseDiv.className = 'response error';
+                responseDiv.innerHTML = `<h4>Error:</h4><pre>${error.message}</pre>`;
+            }
+        }
+        
+        // Auto-load PSE banks on page load
+        window.addEventListener('load', () => {
+            loadPSEBanks();
+        });
+
+        // Add event listeners for all buttons (CSP compliant)
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load PSE banks button
+            document.getElementById('loadPSEBanksBtn')?.addEventListener('click', loadPSEBanks);
+            
+            // Card payment button
+            document.getElementById('testCardBtn')?.addEventListener('click', testCardPayment);
+            
+            // Nequi payment button
+            document.getElementById('testNequiBtn')?.addEventListener('click', testNequiPayment);
+            
+            // PSE payment button
+            document.getElementById('testPSEBtn')?.addEventListener('click', testPSEPayment);
+            
+            // Bancolombia transfer button
+            document.getElementById('testBancolombiaBtn')?.addEventListener('click', testBancolombiaPayment);
+            
+            // Daviplata payment button - DISABLED
+            // document.getElementById('testDaviplataBtn')?.addEventListener('click', testDaviplataPayment);
+            
+            // Transaction status check button
+            document.getElementById('checkStatusBtn')?.addEventListener('click', checkTransactionStatus);
+        });
+    </script>
+</body>
+</html>
