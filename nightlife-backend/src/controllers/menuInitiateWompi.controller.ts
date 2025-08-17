@@ -132,7 +132,7 @@ export const initiateWompiMenuCheckout = async (req: Request, res: Response) => 
   //   if (!paymentData || !paymentData.user_legal_id || !paymentData.user_legal_id_type) {
   //     return res.status(400).json({ error: "Legal ID data is required for Daviplata payments" });
   //   }
-  // } else {
+  } else if (!Object.values(WOMPI_CONFIG.PAYMENT_METHODS).includes(paymentMethod)) {
     return res.status(400).json({ error: "Unsupported payment method" });
   }
 

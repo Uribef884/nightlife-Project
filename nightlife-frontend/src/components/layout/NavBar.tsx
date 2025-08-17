@@ -10,17 +10,22 @@ export default function NavBar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800/60 bg-slate-/80 backdrop-blur">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-800/60 bg-slate-900/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         {/* Brand */}
-        <Link href="/" className="flex items-center gap-1 sm:gap-2">
+        <Link 
+          href="/" 
+          className="flex items-center gap-1 sm:gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+          aria-label="Ir al inicio"
+        >
           {/* Bigger logo */}
           <img
             src="/icon.svg"
             alt="NightLife"
             width={40} height={40}
+            className="pointer-events-none"
           />
-          <span className="text-xl font-semibold text-slate-100">NightLife</span>
+          <span className="text-xl font-semibold text-slate-100 pointer-events-none">NightLife</span>
         </Link>
 
         {/* Desktop actions */}
@@ -47,7 +52,7 @@ export default function NavBar() {
 
           {/* Cart */}
           <button
-            aria-label="Open cart"
+            aria-label="Abrir carrito"
             className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
           >
             <ShoppingCart className="h-4 w-4" />
@@ -59,7 +64,7 @@ export default function NavBar() {
             className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
           >
             <LogIn className="h-4 w-4" />
-            Login
+            Iniciar Sesión
           </Link>
         </div>
 
@@ -103,7 +108,7 @@ export default function NavBar() {
 
               <button className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 px-3 py-2 text-left text-slate-200 hover:bg-slate-800">
                 <ShoppingCart className="h-4 w-4" />
-                Cart
+                Carrito
               </button>
 
               <Link
@@ -112,7 +117,7 @@ export default function NavBar() {
                 onClick={() => setMobileOpen(false)}
               >
                 <LogIn className="h-4 w-4" />
-                Login
+                Iniciar Sesión
               </Link>
             </div>
           </div>
