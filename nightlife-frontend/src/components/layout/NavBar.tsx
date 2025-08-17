@@ -3,18 +3,24 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Globe2, LogIn, ShoppingCart, Menu as MenuIcon, X } from "lucide-react";
+import Image from "next/image";
 
 export default function NavBar() {
   const [langOpen, setLangOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800/60 bg-slate-900/80 backdrop-blur">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-800/60 bg-slate-/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         {/* Brand */}
-        <Link href="/" className="flex items-center gap-2">
-          <span className="inline-block h-7 w-7 rounded-full bg-gradient-to-br from-fuchsia-500 to-violet-500" />
-          <span className="text-lg font-semibold text-slate-100">NightLife</span>
+        <Link href="/" className="flex items-center gap-1 sm:gap-2">
+          {/* Bigger logo */}
+          <img
+            src="/icon.svg"
+            alt="NightLife"
+            width={40} height={40}
+          />
+          <span className="text-xl font-semibold text-slate-100">NightLife</span>
         </Link>
 
         {/* Desktop actions */}
@@ -71,13 +77,7 @@ export default function NavBar() {
 
       {/* Mobile sheet */}
       {mobileOpen && (
-        <div
-          id="mobile-menu"
-          className="md:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Mobile menu"
-        >
+        <div id="mobile-menu" className="md:hidden" role="dialog" aria-modal="true" aria-label="Mobile menu">
           <div className="border-t border-slate-800/60 bg-slate-900 px-4 py-3">
             <div className="flex items-center justify-between">
               <span className="text-slate-200 font-semibold">Menu</span>

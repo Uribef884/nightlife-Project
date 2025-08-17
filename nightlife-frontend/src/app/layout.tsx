@@ -4,17 +4,6 @@ import NavBar from "@/components/layout/NavBar";
 import { Providers } from "./providers";
 import { Quicksand } from "next/font/google";
 
-// Load Quicksand with a CSS variable
-const quicksand = Quicksand({
-  subsets: ["latin"],
-  variable: "--font-quicksand",
-  display: "swap",
-});
-
-export const metadata: Metadata = {
-  title: "NightLife",
-  description: "Tickets, events, and menus for nightclubs.",
-};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -29,3 +18,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+
+// Load Quicksand with a CSS variable
+const quicksand = Quicksand({
+  subsets: ["latin"],
+  variable: "--font-quicksand",
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: "NightLife",
+  description: "Tickets, events, and menus for nightclubs.",
+};
+
+

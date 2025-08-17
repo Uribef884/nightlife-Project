@@ -29,6 +29,7 @@ function adToResponse(ad: Ad) {
     isVisible: ad.isVisible,
     targetType: ad.targetType,
     targetId: ad.targetId,
+    label: ad.label, // Include the label in the response
     link: buildAdLink(ad),
     createdAt: ad.createdAt,
     updatedAt: ad.updatedAt,
@@ -57,8 +58,10 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
       res.status(400).json({ error: "Priority must be a positive integer (min 1)." });
       return;
     }
-    // Validate target
+    // Validate target and get clubId if targeting ticket/event
     let validatedTargetId: string | null = null;
+    let clubId: string | undefined = undefined;
+    
     if (targetType) {
       if (!validateTargetType(targetType)) {
         res.status(400).json({ error: "targetType must be 'ticket' or 'event' if provided." });
@@ -68,19 +71,21 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
         res.status(400).json({ error: "targetId is required if targetType is provided." });
         return;
       }
-      // Validate existence
+      // Validate existence and get clubId
       if (targetType === "ticket") {
         const ticket = await AppDataSource.getRepository(Ticket).findOne({ where: { id: targetId } });
         if (!ticket) {
           res.status(400).json({ error: "Target ticket not found." });
           return;
         }
+        clubId = ticket.clubId; // Automatically get clubId from ticket
       } else if (targetType === "event") {
         const event = await AppDataSource.getRepository(Event).findOne({ where: { id: targetId } });
         if (!event) {
           res.status(400).json({ error: "Target event not found." });
           return;
         }
+        clubId = event.clubId; // Automatically get clubId from event
       }
       validatedTargetId = targetId;
     }
@@ -93,13 +98,14 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
     // Create ad
     const adRepo = AppDataSource.getRepository(Ad);
     const ad = adRepo.create({
-      clubId: undefined,
+      clubId: clubId, // Use clubId if targeting ticket/event, otherwise undefined
       imageUrl: "", // will be set after upload
       imageBlurhash: processed.blurhash,
       priority: prio,
       isVisible: isVisible !== undefined ? isVisible === "true" || isVisible === true : true,
       targetType: targetType || null,
       targetId: validatedTargetId,
+      label: "global", // Admin ads are labeled as "global"
     });
     await adRepo.save(ad);
     // Upload image
@@ -197,6 +203,7 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
       isVisible: isVisible !== undefined ? isVisible === "true" || isVisible === true : true,
       targetType: targetType || null,
       targetId: validatedTargetId,
+      label: "club", // Club owner ads are labeled as "club"
     });
     await adRepo.save(ad);
     // Upload image
@@ -221,18 +228,20 @@ export const updateAd = async (req: AuthenticatedRequest, res: Response): Promis
       res.status(404).json({ error: "Ad not found." });
       return;
     }
-    // Permission check
-    if (!ad.clubId && req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only admins can update admin ads." });
+    // Permission check based on label and clubId
+    if (ad.label === "global" && req.user?.role !== "admin") {
+      res.status(403).json({ error: "Only admins can update global ads." });
       return;
     }
-    if (ad.clubId && req.user?.role === "clubowner" && req.user.clubId !== ad.clubId) {
-      res.status(403).json({ error: "Only the club owner can update this ad." });
-      return;
-    }
-    if (ad.clubId && req.user?.role !== "clubowner" && req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only club owners and admins can update club ads." });
-      return;
+    if (ad.label === "club") {
+      if (req.user?.role === "clubowner" && req.user.clubId !== ad.clubId) {
+        res.status(403).json({ error: "Only the club owner can update this ad." });
+        return;
+      }
+      if (req.user?.role !== "clubowner" && req.user?.role !== "admin") {
+        res.status(403).json({ error: "Only club owners and admins can update club ads." });
+        return;
+      }
     }
     // Update fields
     const { priority, isVisible, targetType, targetId, imageUrl } = req.body;
@@ -287,18 +296,20 @@ export const deleteAd = async (req: AuthenticatedRequest, res: Response): Promis
       res.status(404).json({ error: "Ad not found." });
       return;
     }
-    // Permission check
-    if (!ad.clubId && req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only admins can delete admin ads." });
+    // Permission check based on label and clubId
+    if (ad.label === "global" && req.user?.role !== "admin") {
+      res.status(403).json({ error: "Only admins can delete global ads." });
       return;
     }
-    if (ad.clubId && req.user?.role === "clubowner" && req.user.clubId !== ad.clubId) {
-      res.status(403).json({ error: "Only the club owner can delete this ad." });
-      return;
-    }
-    if (ad.clubId && req.user?.role !== "clubowner" && req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only club owners and admins can delete club ads." });
-      return;
+    if (ad.label === "club") {
+      if (req.user?.role === "clubowner" && req.user.clubId !== ad.clubId) {
+        res.status(403).json({ error: "Only the club owner can delete this ad." });
+        return;
+      }
+      if (req.user?.role !== "clubowner" && req.user?.role !== "admin") {
+        res.status(403).json({ error: "Only club owners and admins can delete club ads." });
+        return;
+      }
     }
 
     // Check if ad has any related purchases (tickets or events)
@@ -371,7 +382,7 @@ export const getGlobalAds = async (req: Request, res: Response): Promise<void> =
     const isAdmin = authReq.user?.role === "admin";
     
     let whereCondition: any = { 
-      clubId: IsNull(), 
+      label: "global", // Use label instead of clubId check
       isDeleted: false 
     };
     
@@ -458,7 +469,7 @@ export const getGlobalAdsAdmin = async (req: AuthenticatedRequest, res: Response
     }
     const adRepo = AppDataSource.getRepository(Ad);
     const ads = await adRepo.find({ 
-      where: { clubId: IsNull() }, 
+      where: { label: "global" }, // Use label instead of clubId check
       order: { priority: "DESC", createdAt: "DESC" } 
     });
     res.json(ads.map(adToResponse));

@@ -10,6 +10,7 @@ import {
 import { Club } from "./Club";
 
 export type AdTargetType = "event" | "ticket";
+export type AdLabel = "global" | "club";
 
 @Entity()
 export class Ad {
@@ -40,6 +41,9 @@ export class Ad {
 
   @Column({ type: "varchar", nullable: true })
   targetId?: string | null;
+
+  @Column({ type: "varchar", default: "clubb" })
+  label!: AdLabel; // "global" for admin ads, "club" for club owner ads
 
   @CreateDateColumn()
   createdAt!: Date;
