@@ -4,15 +4,12 @@ import Link from "next/link";
 
 // ---- Configure your socials here (or via env vars) -------------------------
 const WHATSAPP_URL =
-  process.env.NEXT_PUBLIC_WHATSAPP_URL ||
-  "https://wa.me/57XXXXXXXXXX?text=Hola%20Nightlife"; // TODO: replace with real wa.me number
+  process.env.NEXT_PUBLIC_WHATSAPP_URL
 const INSTAGRAM_URL =
-  process.env.NEXT_PUBLIC_INSTAGRAM_URL ||
-  "https://www.instagram.com/nightlife"; // TODO: replace with your real handle
+  process.env.NEXT_PUBLIC_INSTAGRAM_URL
 const TIKTOK_URL =
-  process.env.NEXT_PUBLIC_TIKTOK_URL ||
-  "https://www.tiktok.com/@nightlife"; // TODO: replace with your real handle
-
+  process.env.NEXT_PUBLIC_TIKTOK_URL 
+  
 // ---- Minimal, crisp SVG icons that render on dark backgrounds --------------
 function WhatsAppIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
