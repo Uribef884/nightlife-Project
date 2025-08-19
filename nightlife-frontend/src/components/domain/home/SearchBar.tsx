@@ -1,52 +1,121 @@
 // src/components/domain/home/SearchBar.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+type SearchBarProps = {
+  defaultValue?: string;
+  onSearch: (q: string) => void;
+  placeholder?: string;
+  delay?: number;       // debounce delay in ms (defaults to 300 to keep your current behavior)
+  minLength?: number;   // minimum chars before firing (defaults to 2; empty string is always allowed)
+};
 
 export function SearchBar({
   defaultValue = "",
   onSearch,
   placeholder = "¿Dónde es la fiesta?",
   delay = 300,
-}: {
-  defaultValue?: string;
-  onSearch: (q: string) => void;
-  placeholder?: string;
-  delay?: number;
-}) {
+  minLength = 2,
+}: SearchBarProps) {
   const [value, setValue] = useState(defaultValue);
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // debounce search (used for regular typing)
-  const debounced = useMemo(() => {
-    let handle: any;
-    return (next: string) => {
-      clearTimeout(handle);
-      handle = setTimeout(() => onSearch(next), delay);
-    };
-  }, [onSearch, delay]);
-
-  // If we clear via the X, skip the debounced effect once
+  // --- WHY these refs? ---
+  // 1) timerRef keeps a single timeout across renders (stable debounce).
+  // 2) onSearchRef always points to the latest onSearch without recreating the debouncer.
+  // 3) lastSentRef prevents duplicate calls when the normalized query hasn't changed.
+  // 4) skipNextEffect mirrors your existing "clearNow" behavior to avoid an extra debounced call.
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onSearchRef = useRef(onSearch);
+  const lastSentRef = useRef<string>("");
   const skipNextEffect = useRef(false);
 
+  // Keep the latest onSearch without invalidating debounce
+  useEffect(() => {
+    onSearchRef.current = onSearch;
+  }, [onSearch]);
+
+  // Normalize user input: trim, collapse spaces, and lowercase for dedupe fairness
+  const normalize = (q: string) =>
+    q
+      .trim()
+      .replace(/\s+/g, " ")
+      // If your backend is case-insensitive, normalize to lower for dedupe only:
+      .toLowerCase();
+
+  // Core debounced effect
   useEffect(() => {
     if (skipNextEffect.current) {
+      // One-shot skip used by clearNow()
       skipNextEffect.current = false;
       return;
     }
-    debounced(value);
-  }, [value, debounced]);
+
+    // Always clear the previous timer
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    const normalized = normalize(value);
+
+    // Guardrail: only fire if empty OR long enough
+    const shouldFire =
+      normalized.length === 0 || normalized.length >= minLength;
+
+    if (!shouldFire) return;
+
+    // Debounce
+    timerRef.current = setTimeout(() => {
+      // Dedupe: only call if changed since last emission
+      if (normalized !== lastSentRef.current) {
+        onSearchRef.current(normalized);
+        lastSentRef.current = normalized;
+      }
+    }, delay);
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [value, delay, minLength]);
 
   const showLabel = !focused && value.trim().length === 0;
 
   // Clear immediately, refocus the input, and skip the debounced effect
   const clearNow = () => {
+    // Cancel any pending debounce
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     skipNextEffect.current = true;
     setValue("");
-    onSearch(""); // immediate clear (no debounce)
-    // refocus for quick new typing
+    lastSentRef.current = "";           // keep dedupe in sync
+    onSearchRef.current("");            // immediate clear (no debounce)
     requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  // Flush immediately on Enter (skips debounce)
+  const flushNow = () => {
+    const normalized = normalize(value);
+    const shouldFire =
+      normalized.length === 0 || normalized.length >= minLength;
+
+    if (!shouldFire) return;
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (normalized !== lastSentRef.current) {
+      onSearchRef.current(normalized);
+      lastSentRef.current = normalized;
+    }
   };
 
   return (
@@ -84,15 +153,19 @@ export function SearchBar({
             if (e.key === "Escape" && value) {
               e.preventDefault();
               clearNow();
+            } else if (e.key === "Enter") {
+              // Flush immediately on Enter (no debounce)
+              e.preventDefault();
+              flushNow();
             }
           }}
-          placeholder=" "                       /* real placeholder suppressed */
+          placeholder=" " /* real placeholder suppressed */
           aria-label={placeholder}
           className="
             w-full h-full rounded-full
             bg-transparent text-white/90
             text-[15px] leading-5
-            pl-10 pr-10 pt-2 pb-3         
+            pl-10 pr-10 pt-2 pb-3
             outline-none focus:outline-none
             border-0 focus:border-0
             ring-0 focus:ring-0
