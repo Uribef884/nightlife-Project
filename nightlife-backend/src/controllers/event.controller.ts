@@ -31,6 +31,54 @@ export const getAllEvents = async (req: Request, res: Response) => {
   }
 };
 
+// GET /events/:id — public
+export const getEventById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const eventRepo = AppDataSource.getRepository(Event);
+    
+    const event = await eventRepo.findOne({
+      where: { id, isActive: true, isDeleted: false },
+      relations: ["club", "tickets"]
+    });
+
+    if (!event) {
+      res.status(404).json({ error: "Event not found" });
+      return;
+    }
+
+    // Apply dynamic pricing to event tickets if they exist
+    if (event.tickets && event.tickets.length > 0) {
+      const { computeDynamicPrice } = await import("../utils/dynamicPricing");
+      const ticketsWithDynamic = await Promise.all(event.tickets.map(async ticket => {
+        let dynamicPrice = ticket.price;
+        
+        if (ticket.dynamicPricingEnabled && event.club) {
+          dynamicPrice = computeDynamicPrice({
+            basePrice: Number(ticket.price),
+            clubOpenDays: event.club.openDays,
+            openHours: event.club.openHours,
+            availableDate: event.availableDate,
+            useDateBasedLogic: true, // Events always use date-based logic
+          });
+        }
+        
+        return {
+          ...ticket,
+          dynamicPrice,
+        };
+      }));
+      
+      event.tickets = ticketsWithDynamic;
+    }
+
+    res.status(200).json(event);
+  } catch (err) {
+    console.error("❌ Failed to fetch event by ID:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 // GET /events/club/:clubId — public
 export const getEventsByClubId = async (req: Request, res: Response) => {
   try {

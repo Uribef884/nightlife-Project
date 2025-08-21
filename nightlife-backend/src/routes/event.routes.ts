@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getAllEvents,
+  getEventById,
   getEventsByClubId,
   getMyClubEvents,
   createEvent,
@@ -17,6 +18,7 @@ const router = Router();
 
 // 📣 Public routes
 router.get("/", getAllEvents);                    // GET /events
+router.get("/:id", getEventById);                 // GET /events/:id
 router.get("/club/:clubId", getEventsByClubId);   // GET /events/club/:clubId
 
 // 🔐 Club Owner routes

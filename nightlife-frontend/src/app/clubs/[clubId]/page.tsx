@@ -4,14 +4,14 @@ import { Suspense } from "react";
 import { getClubByIdSSR } from "@/services/clubs.service";
 import ClubPageClient from "./pageClient";
 
-type Props = { params: { clubId: string } };
+type Props = { params: Promise<{ clubId: string }> };
 
 function isUuid(id: string) {
   return /^[0-9a-fA-F-]{36}$/.test(id);
 }
 
 export default async function Page({ params }: Props) {
-  const { clubId } = params;
+  const { clubId } = await params;
   if (!isUuid(clubId)) return notFound();
 
   // SSR: fetch minimal club info for SEO/shell

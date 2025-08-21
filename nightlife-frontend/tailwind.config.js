@@ -1,3 +1,4 @@
+// tailwind.config.js
 const defaultTheme = require('tailwindcss/defaultTheme');
 
 /** @type {import('tailwindcss').Config} */
@@ -18,13 +19,14 @@ module.exports = {
         },
       },
       fontFamily: {
-        // Quicksand globally (ensure it’s loaded in _app or layout)
+        // Quicksand globally (ensure it's loaded in layout)
         sans: ["Quicksand", ...defaultTheme.fontFamily.sans],
       },
       boxShadow: {
-        'soft': '0 8px 24px rgba(0,0,0,0.25)',
+        soft: "0 8px 24px rgba(0,0,0,0.25)",
       },
     },
   },
-  plugins: [],
-}
+  // ⬇️ NEW: enable line-clamp utilities
+  plugins: [require("@tailwindcss/line-clamp")],
+};

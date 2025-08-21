@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "refresh-recurring": "ts-node src/scripts/refreshRecurringTickets.ts",
-    "auto-deactivate": "ts-node src/scripts/autoDeactivateTickets.ts"
+    "auto-deactivate": "ts-node src/scripts/autoDeactivateTickets.ts",
+    "fix-descriptions": "ts-node src/scripts/fixClubDescriptions.ts"
   },
   "keywords": [],
   "author": "",

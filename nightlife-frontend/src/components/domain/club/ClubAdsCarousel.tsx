@@ -1,32 +1,45 @@
-// src/components/domain/club/ClubAdsCarousel.tsx
 "use client";
-import Image from "next/image";
+
+import { ClubAdsCarouselClient, type ClubAdClient } from "./ClubAdsCarousel.client";
 
 export type ClubAd = {
   id: string;
   imageUrl: string;
   blurhash?: string | null;
-  link?: string | null;
+  link?: string | null;      // external or internal
   priority: number;
 };
 
+// Very small safety check — allow only http/https or internal paths
+function safeHref(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    if (url.startsWith("/")) return url;
+    const u = new URL(url);
+    if (u.protocol === "https:" || u.protocol === "http:") return u.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function ClubAdsCarousel({ ads }: { ads: ClubAd[] }) {
   if (!ads || ads.length === 0) return null;
+
+  // Sort by priority (desc) and normalize for client
+  const normalized: ClubAdClient[] = [...ads]
+    .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+    .map((a) => ({
+      id: a.id,
+      imageUrl: a.imageUrl,
+      href: safeHref(a.link),
+    }));
+
   return (
     <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
-      <h3 className="text-white font-semibold mb-3">Promociones</h3>
-      <div className="flex gap-4 overflow-x-auto snap-x">
-        {ads.sort((a, b) => b.priority - a.priority).map((ad) => {
-          const content = (
-            <div key={ad.id} className="relative h-40 w-72 shrink-0 snap-start overflow-hidden rounded-xl">
-              <Image src={ad.imageUrl} alt="Ad" fill className="object-cover" />
-            </div>
-          );
-          return ad.link ? (
-            <a key={ad.id} href={ad.link} target="_blank" rel="noopener noreferrer">{content}</a>
-          ) : content;
-        })}
-      </div>
+      {/* 🔁 Text changed from "Promociones" to "Destacado" */}
+      <h3 className="text-white font-semibold mb-3">Destacado</h3>
+      <ClubAdsCarouselClient ads={normalized} />
     </div>
   );
 }

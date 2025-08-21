@@ -21,8 +21,8 @@ export class Club {
   @Column()
   name!: string;
 
-  @Column()
-  description!: string;
+  @Column({ nullable: true, default: "No description available" })
+  description?: string;
 
   @Column()
   address!: string;

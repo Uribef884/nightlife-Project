@@ -34,25 +34,27 @@ export function ClubCalendar({
     const m = cursor.getMonth();
     const firstDow = new Date(y, m, 1).getDay(); // 0..6
     const total = daysInMonth(y, m);
-    const cells: { iso: string; disabled: boolean; kind: "event" | "open" | "free" | null }[] = [];
+    const cells: { iso: string; disabled: boolean; kind: "event" | "open" | "free" | null; isToday: boolean }[] = [];
     // Fill leading blanks
-    for (let i=0; i<firstDow; i++) cells.push({ iso: "", disabled: true, kind: null });
+    for (let i=0; i<firstDow; i++) cells.push({ iso: "", disabled: true, kind: null, isToday: false });
     // Fill days
     for (let d=1; d<=total; d++) {
       const date = new Date(y, m, d);
       const iso = toISO(date);
       const inPast = date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const isToday = iso === toISO(today);
       const dowName = WEEK[date.getDay()].toLowerCase(); // sun..sat
       // Map to full names used by openDays: convert "sun" -> "sunday" etc.
       const full = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][date.getDay()];
       let kind: "event" | "open" | "free" | null = null;
 
+      // Priority order: events > free tickets > open days
       if (eventDates.has(iso)) kind = "event";
       else if (freeDates.has(iso)) kind = "free";
       else if (openDays.has(full)) kind = "open";
 
       const disabled = inPast;
-      cells.push({ iso, disabled, kind });
+      cells.push({ iso, disabled, kind, isToday });
     }
     return { y: cursor.getFullYear(), m: cursor.getMonth(), cells };
   }, [cursor, eventDates, freeDates, openDays]);
@@ -85,19 +87,32 @@ export function ClubCalendar({
       <div className="grid grid-cols-7 gap-1">
         {meta.cells.map((c, i) => {
           const isSelected = c.iso && selectedDate === c.iso;
-          const bg =
-            c.disabled ? "bg-white/5" :
-            c.kind === "event" ? "bg-red-500/20" :
-            c.kind === "free" ? "bg-yellow-500/20" :
-            c.kind === "open" ? "bg-blue-500/20" :
-            "bg-white/10";
+          const isToday = c.isToday;
+          
+          let bg = "bg-white/10";
+          if (c.disabled) {
+            bg = "bg-white/5";
+          } else if (isToday && isSelected) {
+            bg = "bg-[#7A48D3]"; // Selected today - dark purple
+          } else if (isToday) {
+            bg = "bg-[#7A48D3]/50"; // Today - transparent purple
+          } else if (c.kind === "event") {
+            bg = "bg-red-500/20";
+          } else if (c.kind === "free") {
+            bg = "bg-yellow-500/20";
+          } else if (c.kind === "open") {
+            bg = "bg-blue-500/20";
+          }
+          
           const ring = isSelected ? "ring-2 ring-[#7A48D3]" : "ring-1 ring-white/5";
+          const textColor = "text-white/90"; // Always keep text white for better visibility
+          
           return (
             <button
               key={i}
               disabled={!c.iso || c.disabled}
               onClick={() => c.iso && onSelect(c.iso)}
-              className={`aspect-square rounded-lg ${bg} ${ring} text-white/90 text-sm flex items-center justify-center`}
+              className={`aspect-square rounded-lg ${bg} ${ring} ${textColor} text-sm flex items-center justify-center font-medium`}
             >
               {c.iso ? Number(c.iso.slice(-2)) : ""}
             </button>
@@ -110,7 +125,8 @@ export function ClubCalendar({
         <Legend color="bg-red-500/50" label="Eventos" />
         <Legend color="bg-blue-500/50" label="Días abiertos" />
         <Legend color="bg-yellow-500/50" label="Días con entradas gratis" />
-        <Legend color="bg-[#7A48D3]/70" label="Fecha seleccionada" />
+        <Legend color="bg-[#7A48D3]/50" label="Día actual" />
+        <Legend color="bg-[#7A48D3]" label="Fecha seleccionada" />
       </div>
     </div>
   );

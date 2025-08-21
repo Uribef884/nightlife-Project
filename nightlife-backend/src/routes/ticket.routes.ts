@@ -8,11 +8,13 @@ import {
   deleteTicket,
   toggleTicketVisibility,
   getTicketsForMyClub,
-  toggleTicketDynamicPricing
+  toggleTicketDynamicPricing,
+  getAvailableTicketsForDate,
+  getAllTicketsForClubCalendar
 } from "../controllers/ticket.controller";
 import { authMiddleware, requireClubOwnerOrAdmin } from "../middlewares/authMiddleware";
 import { validateTicketInput } from "../utils/ticketValidators";
-import { createLimiter } from "../middlewares/rateLimiter";
+import { createLimiter, readLimiter } from "../middlewares/rateLimiter";
 
 const router = Router();
 
@@ -21,6 +23,8 @@ router.get("/", getAllTickets);
 router.get("/my-club", authMiddleware, requireClubOwnerOrAdmin, getTicketsForMyClub);
 router.get("/:id", getTicketById);
 router.get("/club/:id", getTicketsByClub);
+router.get("/calendar/:clubId", readLimiter, getAllTicketsForClubCalendar);
+router.get("/available/:clubId/:dateISO", readLimiter, getAvailableTicketsForDate);
 
 // ✅ Authenticated + Role-protected
 router.post("/", createLimiter, authMiddleware, requireClubOwnerOrAdmin, validateTicketInput ,createTicket);

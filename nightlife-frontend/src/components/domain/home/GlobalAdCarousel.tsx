@@ -1,6 +1,9 @@
-import type { ReactNode } from "react";
 import { GlobalAdCarouselClient } from "./GlobalAdCarousel.client";
 
+/**
+ * Keep the ResolvedAd type **here** (the wrapper) and export it.
+ * The client imports this type from here to avoid circular imports.
+ */
 export type ResolvedAd = {
   id: string;
   clubId: string | null;
@@ -16,5 +19,11 @@ export type ResolvedAd = {
 
 export function GlobalAdCarousel({ ads }: { ads: ResolvedAd[] }) {
   if (!ads || ads.length === 0) return null;
-  return <GlobalAdCarouselClient ads={ads} />;
+
+  // Match the club ads container chrome (no heading on homepage)
+  return (
+    <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
+      <GlobalAdCarouselClient ads={ads} />
+    </div>
+  );
 }

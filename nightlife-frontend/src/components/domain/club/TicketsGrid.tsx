@@ -14,6 +14,15 @@ import {
 } from "@/services/cart.service";
 import type { ClubDTO, EventDTO, TicketDTO } from "@/services/clubs.service";
 
+// NEW: type from our server response fetcher
+type AvailableBuckets = {
+  dateHasEvent: boolean;
+  event: { id: string; name: string; availableDate: string; bannerUrl: string | null } | null;
+  eventTickets: TicketDTO[];
+  generalTickets: TicketDTO[];
+  freeTickets: TicketDTO[];
+};
+
 /** ────────────────────────────────────────────────────────────────────────────
  * Local types + guards (keeps UI stable even if backend shape varies)
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -51,7 +60,7 @@ function isFreeGeneralTicket(t: TicketDTO): boolean {
 }
 
 /** ────────────────────────────────────────────────────────────────────────────
- * OPTION A: Robust day normalization + open-day detection
+ * Robust day normalization + open-day detection (client fallback only)
  * Supports English/Spanish, full names and 3-letter abbreviations.
  * Works with club.openDays: string[] and/or club.openHours: { day: string }[]
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -127,8 +136,6 @@ let __warnedMissingOpenDays = false;
 function isClubOpenOnDate(club: ClubDTO, selectedDate: string): boolean {
   const indices = extractOpenDayIndices(club);
   if (indices.size === 0) {
-    // Dev hint: if nobody configured open days/hours,
-    // general tickets will never show on non-event days.
     if (process.env.NODE_ENV !== "production" && !__warnedMissingOpenDays) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -148,12 +155,15 @@ export function TicketsGrid({
   events,
   tickets,
   selectedEventTickets, // optional prefiltered event tickets (SSR/parent-provided)
+  // NEW: server-provided availability buckets
+  available,
 }: {
   club: ClubDTO;
   selectedDate: string | null;
   events: EventDTO[];
   tickets: TicketDTO[];
   selectedEventTickets?: TicketDTO[] | undefined;
+  available?: AvailableBuckets;
 }) {
   const [confirm, setConfirm] = useState<{ title: string; body: string; onConfirm: () => void } | null>(null);
   const [cart, setCart] = useState<LocalCart>({ items: [] });
@@ -166,16 +176,20 @@ export function TicketsGrid({
       .catch(() => setCart({ items: [] }));
   }, []);
 
-  // Map events by date for quick lookup
+  // Map events by date for quick lookup (for banner fallback)
   const eventByDate = useMemo(() => {
     const map = new Map<string, EventDTO>();
     for (const e of events) map.set(e.availableDate, e);
     return map;
   }, [events]);
 
-  const dateHasEvent = selectedDate ? eventByDate.has(selectedDate) : false;
+  // ────────────────────────────────────────────────────────────────────────────
+  // Client-side fallback partition (used only if `available` prop is not passed)
+  // ────────────────────────────────────────────────────────────────────────────
+  const computedDateHasEvent = useMemo(() => {
+    return selectedDate ? eventByDate.has(selectedDate) : false;
+  }, [eventByDate, selectedDate]);
 
-  // Prefer tickets provided for the specific event (from parent), otherwise filter here
   const ticketsForSelectedEvent = useMemo<TicketDTO[]>(() => {
     if (!selectedDate) return [];
     if (selectedEventTickets && selectedEventTickets.length > 0) return selectedEventTickets;
@@ -183,50 +197,63 @@ export function TicketsGrid({
     return tickets.filter((t) => t.category === "event" && t.availableDate === selectedDate);
   }, [selectedDate, selectedEventTickets, tickets]);
 
-  // Partition tickets for the selected date
-  const { eventTickets, generalTickets, freeTickets } = useMemo(() => {
-    const eventTickets: TicketDTO[] = [];
-    const generalTickets: TicketDTO[] = [];
-    const freeTickets: TicketDTO[] = [];
+  const { eventTickets: computedEventTickets, generalTickets: computedGeneralTickets, freeTickets: computedFreeTickets } =
+    useMemo(() => {
+      const eventTickets: TicketDTO[] = [];
+      const generalTickets: TicketDTO[] = [];
+      const freeTickets: TicketDTO[] = [];
 
-    if (!selectedDate) return { eventTickets, generalTickets, freeTickets };
+      if (!selectedDate) return { eventTickets, generalTickets, freeTickets };
 
-    // If there is an event for the date, only show event tickets (events override free/general)
-    if (dateHasEvent) {
-      for (const t of ticketsForSelectedEvent) {
-        if (t.isActive) eventTickets.push(t);
-      }
-    }
-
-    // Otherwise, show non-event tickets (general + free)
-    if (!dateHasEvent) {
-      const openToday = isClubOpenOnDate(club, selectedDate);
-
-      for (const t of tickets) {
-        if (!t.isActive) continue;
-        if (t.category === "event") continue;
-
-        const matchesExplicitDate = t.availableDate != null && t.availableDate === selectedDate;
-        const hasNoDateButOpen = t.availableDate == null && openToday;
-
-        if (isFreeGeneralTicket(t)) {
-          // Free general ticket must have explicit date & quantity > 0
-          if (t.availableDate === selectedDate && (t.quantity ?? 0) > 0) {
-            freeTickets.push(t);
-          }
-        } else {
-          if (matchesExplicitDate || hasNoDateButOpen) generalTickets.push(t);
+      // If there is an event for the date, only show event tickets (events override free/general)
+      if (computedDateHasEvent) {
+        for (const t of ticketsForSelectedEvent) {
+          if (t.isActive) eventTickets.push(t);
         }
       }
-    }
 
-    // Priority: ascending (1 is highest priority)
-    eventTickets.sort((a, b) => a.priority - b.priority);
-    generalTickets.sort((a, b) => a.priority - b.priority);
-    freeTickets.sort((a, b) => a.priority - b.priority);
+      // Otherwise, show non-event tickets (general + free)
+      if (!computedDateHasEvent) {
+        const openToday = isClubOpenOnDate(club, selectedDate);
 
-    return { eventTickets, generalTickets, freeTickets };
-  }, [tickets, selectedDate, club, dateHasEvent, ticketsForSelectedEvent]);
+        for (const t of tickets) {
+          if (!t.isActive) continue;
+          if (t.category === "event") continue;
+
+          const matchesExplicitDate = t.availableDate != null && t.availableDate === selectedDate;
+          const hasNoDateButOpen = t.availableDate == null && openToday;
+
+          if (isFreeGeneralTicket(t)) {
+            // Free general ticket must have explicit date & quantity > 0
+            if (t.availableDate === selectedDate && (t.quantity ?? 0) > 0) {
+              freeTickets.push(t);
+            }
+          } else {
+            if (matchesExplicitDate || hasNoDateButOpen) generalTickets.push(t);
+          }
+        }
+      }
+
+      // Priority: ascending (1 is highest priority)
+      eventTickets.sort((a, b) => a.priority - b.priority);
+      generalTickets.sort((a, b) => a.priority - b.priority);
+      freeTickets.sort((a, b) => a.priority - b.priority);
+
+      return { eventTickets, generalTickets, freeTickets };
+    }, [tickets, selectedDate, club, computedDateHasEvent, ticketsForSelectedEvent]);
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Choose source: server buckets (preferred) or client fallback
+  // ────────────────────────────────────────────────────────────────────────────
+  const effDateHasEvent = available?.dateHasEvent ?? computedDateHasEvent;
+  const effEventTickets = available?.eventTickets ?? computedEventTickets;
+  const effGeneralTickets = available?.generalTickets ?? computedGeneralTickets;
+  const effFreeTickets = available?.freeTickets ?? computedFreeTickets;
+
+  // Banner: prefer server event banner; fallback to local event map
+  const effBannerUrl =
+    available?.event?.bannerUrl ??
+    (selectedDate ? eventByDate.get(selectedDate)?.bannerUrl ?? null : null);
 
   /** Safe lookup against possibly-empty cart */
   const findCartItem = (ticketId: string) => (cart.items ?? []).find((i) => i.ticketId === ticketId);
@@ -315,19 +342,19 @@ export function TicketsGrid({
   }
 
   // Event-day: show event tickets only (includes free event tickets)
-  if (dateHasEvent) {
+  if (effDateHasEvent) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
         <h3 className="text-white font-semibold mb-3">Boletas del evento</h3>
-        {eventTickets.length === 0 ? (
+        {effEventTickets.length === 0 ? (
           <div className="text-white/60">No hay boletas disponibles para esta fecha.</div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
-            {eventTickets.map((t) => (
+            {effEventTickets.map((t) => (
               <TicketCard
                 key={t.id}
                 ticket={t}
-                bannerUrl={eventByDate.get(selectedDate!)?.bannerUrl ?? null}
+                bannerUrl={effBannerUrl}
                 qtyInCart={qtyInCart(t.id)}
                 itemId={itemIdFor(t.id)}
                 onAdd={() => guardAndAdd(t)}
@@ -342,7 +369,7 @@ export function TicketsGrid({
   }
 
   // Non-event day: general + free (general)
-  const noNonEventTickets = generalTickets.length === 0 && freeTickets.length === 0;
+  const noNonEventTickets = effGeneralTickets.length === 0 && effFreeTickets.length === 0;
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -352,11 +379,11 @@ export function TicketsGrid({
 
       {!noNonEventTickets && (
         <div className="grid gap-4">
-          {generalTickets.length > 0 && (
+          {effGeneralTickets.length > 0 && (
             <div>
               <div className="text-white/90 font-semibold mb-2">Generales</div>
               <div className="grid gap-4 sm:grid-cols-2">
-                {generalTickets.map((t) => (
+                {effGeneralTickets.map((t) => (
                   <TicketCard
                     key={t.id}
                     ticket={t}
@@ -371,11 +398,11 @@ export function TicketsGrid({
             </div>
           )}
 
-          {freeTickets.length > 0 && (
+          {effFreeTickets.length > 0 && (
             <div>
               <div className="text-white/90 font-semibold mb-2">Gratis</div>
               <div className="grid gap-4 sm:grid-cols-2">
-                {freeTickets.map((t) => (
+                {effFreeTickets.map((t) => (
                   <TicketCard
                     key={t.id}
                     ticket={t}

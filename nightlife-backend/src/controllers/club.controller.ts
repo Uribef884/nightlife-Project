@@ -13,12 +13,12 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
   const repo = AppDataSource.getRepository(Club);
   const userRepo = AppDataSource.getRepository(User);
 
-  // Sanitize all string inputs
+  // Sanitize all string inputs (without maxLength to allow validation to catch limits)
   const sanitizedBody = sanitizeObject(req.body, [
     'name', 'description', 'address', 'city', 'googleMaps', 
     'musicType', 'instagram', 'whatsapp', 'dressCode', 
     'extraInfo', 'profileImageUrl', 'profileImageBlurhash'
-  ], { maxLength: 1000 });
+  ]);
 
   const {
     name,
@@ -44,6 +44,20 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
 
   // Validate image URLs
   if (profileImageUrl && !validateImageUrlWithResponse(profileImageUrl, res)) {
+    return;
+  }
+
+  // Validate character limits
+  if (description && description.length > 1000) {
+    res.status(400).json({ error: "Description cannot exceed 1000 characters" });
+    return;
+  }
+  if (dressCode && dressCode.length > 500) {
+    res.status(400).json({ error: "Dress code cannot exceed 500 characters" });
+    return;
+  }
+  if (extraInfo && extraInfo.length > 500) {
+    res.status(400).json({ error: "Additional info cannot exceed 500 characters" });
     return;
   }
 
@@ -157,15 +171,29 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
       return;
     }
 
-    // Sanitize all string inputs
+    // Sanitize all string inputs (without maxLength to allow validation to catch limits)
     const sanitizedBody = sanitizeObject(req.body, [
       'name', 'description', 'address', 'city', 'googleMaps', 
       'musicType', 'instagram', 'whatsapp', 'dressCode', 
       'extraInfo', 'profileImageUrl', 'profileImageBlurhash', 'pdfMenuUrl'
-    ], { maxLength: 1000 });
+    ]);
 
     // --- VALIDATION FOR openDays and openHours (if present in update) ---
     const { openDays, openHours, ownerId, profileImageUrl, pdfMenuUrl } = sanitizedBody;
+
+    // Validate character limits
+    if (sanitizedBody.description && sanitizedBody.description.length > 1000) {
+      res.status(400).json({ error: "Description cannot exceed 1000 characters" });
+      return;
+    }
+    if (sanitizedBody.dressCode && sanitizedBody.dressCode.length > 500) {
+      res.status(400).json({ error: "Dress code cannot exceed 500 characters" });
+      return;
+    }
+    if (sanitizedBody.extraInfo && sanitizedBody.extraInfo.length > 500) {
+      res.status(400).json({ error: "Additional info cannot exceed 500 characters" });
+      return;
+    }
 
     // Validate image URLs
     if (profileImageUrl && !validateImageUrlWithResponse(profileImageUrl, res)) {
@@ -301,12 +329,12 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
       return;
     }
 
-    // Sanitize all string inputs
+    // Sanitize all string inputs (without maxLength to allow validation to catch limits)
     const sanitizedBody = sanitizeObject(req.body, [
       'name', 'description', 'address', 'city', 'googleMaps', 
       'musicType', 'instagram', 'whatsapp', 'dressCode', 
       'extraInfo', 'profileImageUrl', 'profileImageBlurhash', 'pdfMenuUrl'
-    ], { maxLength: 1000 });
+    ]);
 
     // --- VALIDATION FOR openDays and openHours (if present in update) ---
     const { openDays, openHours, ownerId, profileImageUrl, pdfMenuUrl, ...allowedUpdates } = sanitizedBody;
@@ -314,6 +342,20 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
     // Prevent club owners from updating ownerId
     if (ownerId !== undefined) {
       res.status(403).json({ error: "Club owners cannot update the ownerId field" });
+      return;
+    }
+
+    // Validate character limits
+    if (sanitizedBody.description && sanitizedBody.description.length > 1000) {
+      res.status(400).json({ error: "Description cannot exceed 1000 characters" });
+      return;
+    }
+    if (sanitizedBody.dressCode && sanitizedBody.dressCode.length > 500) {
+      res.status(400).json({ error: "Dress code cannot exceed 500 characters" });
+      return;
+    }
+    if (sanitizedBody.extraInfo && sanitizedBody.extraInfo.length > 500) {
+      res.status(400).json({ error: "Additional info cannot exceed 500 characters" });
       return;
     }
 

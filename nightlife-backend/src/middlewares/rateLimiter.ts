@@ -36,6 +36,16 @@ export const createLimiter = rateLimit({
   message: "Too many creation requests, please try again later.",
 });
 
+// 🔐 Rate Limiting for Read Operations
+// ✅ Why: Allow browsing but prevent abuse
+export const readLimiter = rateLimit({ 
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 60, // 60 reads per minute (allows browsing through dates)
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many read requests, please try again later.",
+});
+
 // 🔐 Rate Limiting for QR Validation
 // ✅ Why: Prevent abuse of QR validation endpoints
 export const qrValidationLimiter = rateLimit({ 

@@ -9,7 +9,7 @@ import { TicketCategory } from "../entities/Ticket";
 import { TicketIncludedMenuItem } from "../entities/TicketIncludedMenuItem";
 import { MenuItem } from "../entities/MenuItem";
 import { MenuItemVariant } from "../entities/MenuItemVariant";
-import { computeDynamicPrice, computeDynamicEventPrice, getEventTicketDynamicPricingReason } from "../utils/dynamicPricing";
+import { computeDynamicPrice, computeDynamicEventPrice, getEventTicketDynamicPricingReason, getNormalTicketDynamicPricingReason } from "../utils/dynamicPricing";
 import { sanitizeInput, sanitizeObject } from "../utils/sanitizeInput";
 import { MoreThanOrEqual, IsNull } from "typeorm";
 
@@ -1046,3 +1046,304 @@ export const toggleTicketDynamicPricing = async (req: Request, res: Response): P
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+// ✅ GET AVAILABLE TICKETS FOR DATE
+export async function getAvailableTicketsForDate(req: Request, res: Response): Promise<void> {
+  try {
+    const { clubId, dateISO } = req.params;
+    const { includeInactive } = req.query;
+    
+    // Validate clubId is a valid UUID
+    if (!clubId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clubId)) {
+      res.status(400).json({ error: "Invalid clubId format" });
+      return;
+    }
+    
+    // Validate dateISO format
+    if (!dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(dateISO)) {
+      res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD" });
+      return;
+    }
+    
+    // Parse date to avoid timezone drift
+    const [year, month, day] = dateISO.split("-").map(Number);
+    const targetDate = new Date(year, month - 1, day);
+    
+    if (isNaN(targetDate.getTime())) {
+      res.status(400).json({ error: "Invalid date" });
+      return;
+    }
+    
+    // Helper function to safely convert dates
+    const safeDateToString = (date: any): string => {
+      if (date instanceof Date) {
+        return date.toISOString().split('T')[0];
+      }
+      if (typeof date === 'string') {
+        return date.split('T')[0];
+      }
+      // Fallback: try to create a Date object
+      try {
+        return new Date(date).toISOString().split('T')[0];
+      } catch {
+        return dateISO; // fallback to input date
+      }
+    };
+    
+    // Get weekday index (0 = Sunday, 6 = Saturday)
+    const weekdayIndex = targetDate.getDay();
+    
+    // Get weekday name for comparison
+    const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const weekdayName = weekdayNames[weekdayIndex];
+    
+    // Check if user can see inactive items
+    const user = req.user;
+    const canSeeInactive = user && (
+      user.role === "admin" || 
+      (user.role === "clubowner" && includeInactive === "true")
+    );
+    
+    // Find club and validate it exists and is active
+    const clubRepo = AppDataSource.getRepository(Club);
+    const club = await clubRepo.findOne({ 
+      where: { id: clubId, isActive: true },
+      relations: ["owner"]
+    });
+    
+    if (!club) {
+      res.status(404).json({ error: "Club not found or inactive" });
+      return;
+    }
+    
+    // If clubowner, verify they own this club
+    if (user && user.role === "clubowner" && club.ownerId !== user.id) {
+      res.status(403).json({ error: "Forbidden: You can only access your own club" });
+      return;
+    }
+    
+    // Check if club is open on this weekday
+    const isClubOpenOnWeekday = club.openDays && club.openDays.includes(weekdayName);
+    
+    // Check if there's an event on this date
+    const eventRepo = AppDataSource.getRepository(Event);
+    const event = await eventRepo.findOne({
+      where: { 
+        clubId: club.id, 
+        availableDate: targetDate,
+        isActive: true,
+        isDeleted: false
+      },
+      order: { createdAt: "ASC" } // Deterministic selection if multiple events
+    });
+    
+    const dateHasEvent = !!event;
+    
+    // Get tickets based on event status
+    const ticketRepo = AppDataSource.getRepository(Ticket);
+    let tickets: any[] = [];
+    
+    if (dateHasEvent) {
+      // Event day: return only event tickets for this date
+      tickets = await ticketRepo.find({
+        where: {
+          clubId: club.id,
+          category: TicketCategory.EVENT,
+          availableDate: targetDate,
+          isDeleted: false,
+          ...(canSeeInactive ? {} : { isActive: true })
+        },
+        order: { priority: "ASC" }
+      });
+    } else {
+      // Non-event day: return general and free tickets
+      const generalTickets = await ticketRepo.find({
+        where: {
+          clubId: club.id,
+          category: TicketCategory.GENERAL,
+          availableDate: IsNull(), // General covers don't have a specific date
+          isDeleted: false,
+          ...(canSeeInactive ? {} : { isActive: true })
+        },
+        order: { priority: "ASC" }
+      });
+      
+      const freeTickets = await ticketRepo.find({
+        where: {
+          clubId: club.id,
+          category: TicketCategory.FREE,
+          availableDate: targetDate,
+          isDeleted: false,
+          ...(canSeeInactive ? {} : { isActive: true }),
+        },
+        order: { priority: "ASC" }
+      });
+      
+      // Filter free tickets by category only (not price === 0)
+      const validFreeTickets = freeTickets.filter(ticket => 
+        ticket.category === TicketCategory.FREE && 
+        (ticket.quantity === null || (ticket.quantity !== undefined && ticket.quantity > 0))
+      );
+      
+      // Filter general tickets by club open status and 3-week limit
+      const threeWeeksFromNow = new Date();
+      threeWeeksFromNow.setDate(threeWeeksFromNow.getDate() + 21);
+      
+      const validGeneralTickets = generalTickets.filter(ticket => {
+        // Only show if club is open on this weekday
+        if (!isClubOpenOnWeekday) return false;
+        
+        // Optional: reject dates > 3 weeks out for general covers
+        if (targetDate > threeWeeksFromNow) return false;
+        
+        return true;
+      });
+      
+      tickets = [...validGeneralTickets, ...validFreeTickets];
+    }
+    
+    // Process tickets with dynamic pricing
+    const processedTickets = await Promise.all(tickets.map(async (ticket) => {
+      let dynamicPrice = Number(ticket.price);
+      let dynamicPricingReason: string | undefined = undefined;
+      
+      if (ticket.dynamicPricingEnabled) {
+        if (ticket.category === TicketCategory.EVENT) {
+          // Event ticket dynamic pricing
+          if (event) {
+            // Ensure we have a proper Date object for the event
+            const eventDate = event.availableDate instanceof Date 
+              ? event.availableDate 
+              : new Date(event.availableDate);
+            
+            dynamicPrice = computeDynamicEventPrice(Number(ticket.price), eventDate, event.openHours);
+            if (dynamicPrice === -1) {
+              // Event has passed grace period, mark as unavailable
+              dynamicPrice = 0;
+            }
+            dynamicPricingReason = getEventTicketDynamicPricingReason(eventDate, event.openHours);
+          } else {
+            // Fallback for event tickets without event relation
+            dynamicPrice = computeDynamicEventPrice(Number(ticket.price), targetDate);
+            if (dynamicPrice === -1) {
+              dynamicPrice = 0;
+            }
+            dynamicPricingReason = getEventTicketDynamicPricingReason(targetDate);
+          }
+        } else if (ticket.category === TicketCategory.GENERAL) {
+          // General ticket dynamic pricing
+          dynamicPrice = computeDynamicPrice({
+            basePrice: Number(ticket.price),
+            clubOpenDays: club.openDays,
+            openHours: club.openHours,
+            availableDate: targetDate,
+            useDateBasedLogic: false,
+          });
+          dynamicPricingReason = getNormalTicketDynamicPricingReason({
+            basePrice: Number(ticket.price),
+            clubOpenDays: club.openDays,
+            openHours: club.openHours,
+            availableDate: targetDate,
+            useDateBasedLogic: false,
+          });
+        }
+        // Free tickets keep price = 0
+      }
+      
+      return {
+        id: ticket.id,
+        name: ticket.name,
+        description: ticket.description,
+        category: ticket.category,
+        availableDate: ticket.availableDate,
+        quantity: ticket.quantity,
+        maxPerPerson: ticket.maxPerPerson,
+        priority: ticket.priority,
+        price: Number(ticket.price),
+        dynamicPrice,
+        dynamicPricingEnabled: ticket.dynamicPricingEnabled,
+        dynamicPricingReason
+      };
+    }));
+    
+    // Separate tickets by category
+    const eventTickets = processedTickets.filter(t => t.category === TicketCategory.EVENT);
+    const generalTickets = processedTickets.filter(t => t.category === TicketCategory.GENERAL);
+    const freeTickets = processedTickets.filter(t => t.category === TicketCategory.FREE);
+    
+    // Build response
+    const response: any = {
+      clubId: club.id,
+      date: dateISO,
+      dateHasEvent,
+      event: event ? {
+        id: event.id,
+        name: event.name,
+        availableDate: safeDateToString(event.availableDate),
+        bannerUrl: event.bannerUrl
+      } : null,
+      eventTickets,
+      generalTickets,
+      freeTickets
+    };
+    
+    res.json(response);
+    
+  } catch (error) {
+    console.error("❌ Error fetching available tickets for date:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+// ✅ GET ALL TICKETS FOR CLUB (FOR CALENDAR COLORING)
+export async function getAllTicketsForClubCalendar(req: Request, res: Response): Promise<void> {
+  try {
+    const { clubId } = req.params;
+    
+    // Validate clubId
+    if (!clubId || typeof clubId !== 'string') {
+      res.status(400).json({ error: "Invalid clubId" });
+      return;
+    }
+
+    const ticketRepo = AppDataSource.getRepository(Ticket);
+    const clubRepo = AppDataSource.getRepository(Club);
+
+    // Check if club exists and is active
+    const club = await clubRepo.findOne({ 
+      where: { id: clubId, isActive: true, isDeleted: false } 
+    });
+
+    if (!club) {
+      res.status(404).json({ error: "Club not found or inactive" });
+      return;
+    }
+
+    // Get ALL tickets for the club (including free tickets that might be hidden)
+    // This is specifically for calendar coloring, not for display
+    const tickets = await ticketRepo.find({
+      where: {
+        clubId: club.id,
+        isDeleted: false,
+        isActive: true
+      },
+      select: ['id', 'category', 'availableDate', 'quantity', 'isActive'],
+      order: { priority: "ASC" }
+    });
+
+    // Return minimal data needed for calendar coloring
+    const calendarTickets = tickets.map(ticket => ({
+      id: ticket.id,
+      category: ticket.category,
+      availableDate: ticket.availableDate,
+      quantity: ticket.quantity,
+      isActive: ticket.isActive
+    }));
+
+    res.json({ tickets: calendarTickets });
+    
+  } catch (error) {
+    console.error("❌ Error fetching tickets for calendar:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}

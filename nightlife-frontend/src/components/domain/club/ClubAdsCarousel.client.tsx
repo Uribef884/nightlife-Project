@@ -3,14 +3,22 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ResolvedAd } from "./GlobalAdCarousel";
 
-export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
+export type ClubAdClient = {
+  id: string;
+  imageUrl: string;
+  href?: string | null; // normalized/safe link (internal or external) or null
+};
+
+export function ClubAdsCarouselClient({ ads }: { ads: ClubAdClient[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(false);
 
-  // Respect user's reduced-motion preference
+  const n = ads?.length ?? 0;
+  const isSingle = n === 1; // special-case: exactly one ad
+
+  // Respect prefers-reduced-motion
   const reduceMotion = useMemo(
     () =>
       typeof window !== "undefined"
@@ -19,12 +27,9 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
     []
   );
 
-  // ---------- Infinite loop helpers (clone head/tail like stories) ----------
-  const n = ads?.length ?? 0;
-  const isSingle = n === 1; // ✅ single ad => centered, no scroller
+  // Clone head/tail to enable infinite loop (only when we have >1 ad)
   const cloneCount = n > 1 ? Math.min(2, n) : 0;
 
-  // Build: [tail clones] + real ads + [head clones]
   const loopedAds = useMemo(() => {
     if (!ads || n === 0) return [];
     if (cloneCount === 0) return ads;
@@ -40,13 +45,8 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
     const child = container.children.item(displayIndex) as HTMLElement | null;
     if (!child) return;
 
-    // Align child's center with container's center
     const left = child.offsetLeft - (container.clientWidth - child.clientWidth) / 2;
-
-    container.scrollTo({
-      left,
-      behavior: smooth ? "smooth" : ("auto" as ScrollBehavior),
-    });
+    container.scrollTo({ left, behavior: smooth ? "smooth" : ("auto" as ScrollBehavior) });
   }, []);
 
   // Which slide is visually centered now?
@@ -70,23 +70,18 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
     return bestI;
   }, []);
 
-  // If we've snapped onto a clone, instantly relocate to the real twin
+  // If the centered slide is a clone, relocate to its real twin instantly
   const maybeRelocateIfClone = useCallback(() => {
     if (cloneCount === 0) return;
     const i = getNearestDisplayIndex();
     const firstReal = cloneCount;
     const lastReal = cloneCount + n - 1;
 
-    if (i < firstReal) {
-      // In head clones -> jump forward by n
-      centerChildAtIndex(i + n, false);
-    } else if (i > lastReal) {
-      // In tail clones -> jump backward by n
-      centerChildAtIndex(i - n, false);
-    }
+    if (i < firstReal) centerChildAtIndex(i + n, false);
+    else if (i > lastReal) centerChildAtIndex(i - n, false);
   }, [cloneCount, n, centerChildAtIndex, getNearestDisplayIndex]);
 
-  // Advance exactly one centered slide
+  // Advance one slide
   const scrollByOne = useCallback(
     (dir: 1 | -1) => {
       const current = getNearestDisplayIndex();
@@ -95,7 +90,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
     [centerChildAtIndex, getNearestDisplayIndex]
   );
 
-  // Autoplay (10s) — no UI arrows
+  // Autoplay every 10s (disabled when there’s only one ad)
   useEffect(() => {
     if (reduceMotion || n <= 1) return;
     const id = setInterval(() => {
@@ -122,7 +117,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
     };
   }, []);
 
-  // On mount: center the first real slide
+  // Initial center (harmless no-op when single because there’s no scroll)
   useEffect(() => {
     if (!listRef.current || loopedAds.length === 0) return;
     const r = requestAnimationFrame(() => {
@@ -132,7 +127,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
     return () => cancelAnimationFrame(r);
   }, [loopedAds.length, cloneCount, centerChildAtIndex]);
 
-  // After any scroll (user/momentum), normalize if we’re on a clone
+  // Normalize after scroll (only relevant when we have clones)
   useEffect(() => {
     const el = listRef.current;
     if (!el || cloneCount === 0) return;
@@ -140,9 +135,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
     let t: ReturnType<typeof setTimeout> | null = null;
     const onScroll = () => {
       if (t) clearTimeout(t);
-      t = setTimeout(() => {
-        maybeRelocateIfClone();
-      }, 80);
+      t = setTimeout(() => maybeRelocateIfClone(), 80);
     };
 
     el.addEventListener("scroll", onScroll, { passive: true });
@@ -154,53 +147,31 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
 
   if (!ads || n === 0) return null;
 
-  // Sizing presets (mirror club carousel)
+  // Sizing: keep your previous widths for single vs multi
   const singleSizing =
-    // Single ad: centered widths (Option C) + max cap
     "w-[70%] sm:w-[52%] md:w-[42%] lg:w-[34%] xl:w-[28%] 2xl:w-[24%] max-w-[900px]";
   const snapSizing =
-    // Multi ad: snap + width on each slide
     "flex-none snap-center min-w-[70%] sm:min-w-[52%] md:min-w-[42%] lg:min-w-[34%] xl:min-w-[28%] 2xl:min-w-[24%]";
 
-  // Track classes
+  // Track classes:
   const trackClasses = isSingle
-    ? // Centered row, no scroll
-      "relative w-full overflow-hidden flex justify-center px-1 py-1"
-    : // Horizontal scroller with snap
-      "relative w-full overflow-x-auto scrollbar-thin flex gap-4 px-1 py-1 snap-x snap-mandatory";
+    ? "relative w-full overflow-hidden flex justify-center px-1 py-1"
+    : "relative w-full overflow-x-auto scrollbar-thin flex gap-4 px-1 py-1 snap-x snap-mandatory";
+
+  // a11y label: singular vs plural
+  const aria = isSingle ? "Destacado del club" : "Destacados del club";
 
   return (
-    <section aria-label="Anuncios" className="w-full" ref={wrapRef}>
+    <section aria-label={aria} className="w-full" ref={wrapRef}>
       <div className="relative">
-        {/* Scroll container: horizontal flex track; slides are direct children */}
         <div
           ref={listRef}
           role="list"
           className={trackClasses}
-          // Allow first/last real item to center properly
           style={{ scrollPaddingLeft: 16, scrollPaddingRight: 16 }}
         >
           {loopedAds.map((ad, displayIndex) => {
-            const realIndex =
-              cloneCount === 0
-                ? displayIndex
-                : (displayIndex - cloneCount + n) % n;
-
-            const clickable = !!ad.clubId; // only redirect if we know the club
-            const hasImg =
-              typeof ad.imageUrl === "string" && ad.imageUrl.trim().length > 0;
-
-            // Build href to match Club page behavior:
-            // /clubs/:clubId[?date=YYYY-MM-DD]#reservas
-            const base = clickable ? `/clubs/${ad.clubId}` : "#";
-            const href = clickable
-              ? `${base}${ad.resolvedDate ? `?date=${encodeURIComponent(ad.resolvedDate)}` : ""}#reservas`
-              : "#";
-
-            // Card width (depends on single vs multi)
-            const outerSizing = isSingle ? singleSizing : snapSizing;
-
-            // Reusable card (matches Club Ads look)
+            // Shared card visual
             const Card = (
               <div
                 className="
@@ -209,12 +180,16 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
                   hover:scale-[1.01] will-change-transform
                 "
               >
-                {/* IG Stories feel on mobile; keep fixed heights on sm+ */}
+                {/*
+                  📱 Mobile (<sm): IG Stories frame (9:16) with object-cover.
+                  - We cap height to 75vh to avoid overly tall cards.
+                  🖥️ From sm+: keep your original fixed heights (unchanged).
+                */}
                 <div
                   className="
                     relative
-                    aspect-[9/16] max-h-[75vh]   /* mobile: portrait story */
-                    sm:aspect-auto sm:max-h-none /* reset story lock on sm+ */
+                    aspect-[9/16] max-h-[75vh]   /* IG Stories on mobile */
+                    sm:aspect-auto sm:max-h-none  /* reset at sm+ */
                     sm:h-64
                     md:h-72
                     lg:h-80
@@ -222,54 +197,50 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
                   "
                 >
                   <Image
-                    src={hasImg ? ad.imageUrl : "/assets/ad-placeholder.svg"}
-                    alt="Anuncio"
+                    src={ad.imageUrl}
+                    alt="Destacado"
                     fill
                     sizes="(max-width: 640px) 70vw, (max-width: 768px) 52vw, (max-width: 1024px) 42vw, 34vw"
-                    className="object-cover"
+                    className="object-cover"  /* true IG crop */
                     priority={displayIndex === (cloneCount || 0)}
                   />
-
-                  {/* Bottom pill arrow (only when ad has redirect) */}
-                  {clickable && (
-                    <div
-                      className="absolute inset-x-0 bottom-2 flex justify-center"
-                      aria-hidden="true"
-                    >
-                      <div
-                        className="
-                          rounded-full bg-black/60 backdrop-blur px-3 py-1 text-xs
-                          text-white/85 ring-1 ring-white/15
-                          group-hover:bg-black/70 group-hover:text-white
-                        "
-                        title="Ir al anuncio"
-                      >
-                        <span aria-hidden="true">→</span>
-                        <span className="sr-only">Ir al anuncio</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             );
 
-            // IMPORTANT: the direct child of the track carries snap + width
-            return clickable ? (
-              <Link
-                key={`${ad.id}::${displayIndex}`}
-                href={href}
-                role="listitem"
-                data-real-index={realIndex}
-                className={`${outerSizing} block h-full group`}
-              >
-                {Card}
-              </Link>
-            ) : (
+            const outerSizing = isSingle ? singleSizing : snapSizing;
+
+            // Link/unlinked variants
+            if (ad.href) {
+              const isInternal = ad.href.startsWith("/");
+              return isInternal ? (
+                <Link
+                  key={`${ad.id}::${displayIndex}`}
+                  href={ad.href}
+                  role="listitem"
+                  className={`${outerSizing} block h-full group`}
+                >
+                  {Card}
+                </Link>
+              ) : (
+                <a
+                  key={`${ad.id}::${displayIndex}`}
+                  href={ad.href}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  role="listitem"
+                  className={`${outerSizing} block h-full group`}
+                >
+                  {Card}
+                </a>
+              );
+            }
+
+            return (
               <div
                 key={`${ad.id}::${displayIndex}`}
                 role="listitem"
-                data-real-index={realIndex}
-                className={`${outerSizing} block h-full group opacity-90`}
+                className={`${outerSizing} block h-full group`}
               >
                 {Card}
               </div>

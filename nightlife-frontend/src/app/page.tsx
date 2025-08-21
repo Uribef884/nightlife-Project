@@ -60,14 +60,14 @@ async function getResolvedAds(): Promise<ResolvedAd[]> {
 
 /* ------------------------------- Page ------------------------------- */
 type PageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     q?: string;
     city?: string;
     musicType?: string | string[];
     openDays?: string | string[];
     page?: string;
     pageSize?: string;
-  };
+  }>;
 };
 
 export default async function HomePage({ searchParams }: PageProps) {
@@ -86,12 +86,13 @@ export default async function HomePage({ searchParams }: PageProps) {
   }
 
   // 2) Read params for SSR clubs (q, city, page, pageSize, musicType, openDays)
-  const q = searchParams?.q;
-  const city = searchParams?.city;
-  const musicType = searchParams?.musicType;
-  const openDays = searchParams?.openDays;
-  const page = searchParams?.page ? Number(searchParams.page) : undefined;
-  const pageSize = searchParams?.pageSize ? Number(searchParams.pageSize) : undefined;
+  const resolvedParams = await searchParams;
+  const q = resolvedParams?.q;
+  const city = resolvedParams?.city;
+  const musicType = resolvedParams?.musicType;
+  const openDays = resolvedParams?.openDays;
+  const page = resolvedParams?.page ? Number(resolvedParams.page) : undefined;
+  const pageSize = resolvedParams?.pageSize ? Number(resolvedParams.pageSize) : undefined;
 
   // 3) SSR fetch clubs from backend using our server helper
   let clubsSSR;
@@ -105,7 +106,7 @@ export default async function HomePage({ searchParams }: PageProps) {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6 space-y-6">
+    <main className="mx-auto max-w-7xl px-4 space-y-6">
       {/* Client shell (ads + search/filters); renderGrid=false to avoid duplicate client grid */}
       <Suspense fallback={<div className="text-white/60">Cargando…</div>}>
         <ClientHome cities={cities} ads={ads} renderGrid={false} />
