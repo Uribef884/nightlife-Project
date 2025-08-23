@@ -8,6 +8,8 @@ export type ClubListItem = {
   address: string;
   city: string;
   profileImageUrl?: string | null;
+  /** Sort key 1: smaller means higher priority (ASC). Missing = lowest (bottom). */
+  priority?: number | null;
 };
 
 export type ClubListResponse = {
@@ -159,6 +161,11 @@ function toInt(value: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function safePriority(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 // Map a single backend record to the list item we need.
 // Accepts multiple possible field names and simple nesting (location.*).
 function mapBackendRecord(rec: unknown): ClubListItem | null {
@@ -198,12 +205,23 @@ function mapBackendRecord(rec: unknown): ClubListItem | null {
     r.images?.logo ??
     null;
 
+  // Tolerant priority mapping (common field aliases)
+  const priorityRaw =
+    r.priority ??
+    r.rank ??
+    r.order ??
+    r.ordering ??
+    r.sort ??
+    r.weight ??
+    null;
+
   return {
     id: String(idRaw),
     name: String(nameRaw),
     address: addressRaw ? String(addressRaw) : "",
     city: cityRaw ? String(cityRaw) : "",
     profileImageUrl: imgRaw != null ? String(imgRaw) : null,
+    priority: safePriority(priorityRaw), // may be null
   };
 }
 
@@ -221,6 +239,30 @@ function coerceClubListResponse(raw: any): ClubListResponse {
   const items = rows
     .map((r) => mapBackendRecord(r))
     .filter((x): x is ClubListItem => !!x);
+
+  // ── Sorting: priority ASC, then name A→Z, then id A→Z (stable) ────────────
+  // Assumption: smaller numeric priority = more important (shown first).
+  const effPriority = (p?: number | null) =>
+    (typeof p === "number" && Number.isFinite(p)) ? p : Number.POSITIVE_INFINITY;
+
+  const collator = new Intl.Collator(["es", "en"], {
+    sensitivity: "accent",
+    numeric: true,
+  });
+
+  items.sort((a, b) => {
+    // 1) priority ASC
+    const pa = effPriority(a.priority);
+    const pb = effPriority(b.priority);
+    if (pa !== pb) return pa - pb;
+
+    // 2) name ASC (locale-aware)
+    const byName = collator.compare(a.name ?? "", b.name ?? "");
+    if (byName !== 0) return byName;
+
+    // 3) final tie-break: id ASC
+    return String(a.id).localeCompare(String(b.id));
+  });
 
   const page =
     toInt(raw?.page ?? raw?.pagination?.page, 1);
@@ -519,6 +561,10 @@ export type ClubAdDTO = {
   imageUrl: string;
   priority: number;
   link?: string | null;
+  targetType?: "ticket" | "event" | "club";
+  targetId?: string | null;
+  clubId?: string | null;
+  resolvedDate?: string | null;
 };
 
 // SSR: club by id
@@ -560,29 +606,50 @@ export async function getClubAdsCSR(clubId: string): Promise<ClubAdDTO[]> {
       cache: "no-store",
     });
     if (!resp.ok) return [];
-    return await resp.json();
+
+    const json = await resp.json();
+
+    const rows: any[] = Array.isArray(json)
+      ? json
+      : Array.isArray(json?.items) ? json.items
+      : Array.isArray(json?.data) ? json.data
+      : Array.isArray(json?.results) ? json.results
+      : [];
+
+    const filtered = rows.filter((a) => {
+      if (!a) return false;
+      const label = (a.label ?? a.scope ?? a.type ?? "").toString().toLowerCase();
+      if (label === "global") return false;
+      if (a.isGlobal === true) return false;
+      if (a.clubId && String(a.clubId) !== String(clubId)) return false;
+      const img = a.imageUrl ?? a.image_url ?? null;
+      if (!img || String(img).trim() === "") return false;
+      return true;
+    });
+
+    return filtered.map((a) => ({
+      id: String(a.id ?? a._id ?? a.uuid),
+      imageUrl: String(a.imageUrl ?? a.image_url),
+      priority: Number(a.priority ?? 0),
+      link: a.link ?? a.href ?? null,
+    })) as ClubAdDTO[];
   } catch {
     return [];
   }
 }
 
-
 // Always return an array for events
 export async function getEventsForClubCSR(clubId: string): Promise<EventDTO[]> {
   try {
-    const resp = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/events/club/${encodeURIComponent(clubId)}`,
-      {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        credentials: "include",
-        cache: "no-store",
-      }
-    );
+    const url = joinUrl(API_BASE_CSR, `/events/club/${encodeURIComponent(clubId)}`);
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+      cache: "no-store",
+    });
     if (!resp.ok) return [];
     const json = await resp.json();
-
-    // Normalize to EventDTO (preserve tickets if present)
     return Array.isArray(json)
       ? json.map((e: any) => ({
           id: String(e.id),

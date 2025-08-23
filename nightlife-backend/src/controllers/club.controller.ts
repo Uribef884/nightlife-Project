@@ -501,6 +501,7 @@ export async function getAllClubs(req: Request, res: Response): Promise<void> {
       name: club.name,
       description: club.description,
       address: club.address,
+      city: club.city,
       googleMaps: club.googleMaps,
       latitude: club.latitude,
       longitude: club.longitude,

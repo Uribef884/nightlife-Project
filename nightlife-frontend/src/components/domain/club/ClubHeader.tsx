@@ -82,7 +82,9 @@ const DoorIcon = (p: React.SVGProps<SVGSVGElement>) => (
 );
 const MusicIcon = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...p}>
-    <path d="M9 18a3 3 0 110-6 3 3 0 010 6zm6-2V6l5-1v10" stroke="currentColor" strokeWidth="1.5" />
+    <path d="M9 18V5l12-2v13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="6" cy="18" r="3" stroke="currentColor" strokeWidth="2" />
+    <circle cx="18" cy="16" r="3" stroke="currentColor" strokeWidth="2" />
   </svg>
 );
 const CalendarIcon = (p: React.SVGProps<SVGSVGElement>) => (
@@ -269,17 +271,20 @@ export function ClubHeader({ club }: Props) {
       {(music.length || openDays.length || today) && (
         <div className="mt-4 flex flex-wrap gap-2">
           {music.length > 0 && (
-            <span
-              className="
-                inline-grid grid-cols-[1.25rem,1fr] items-start gap-1
-                rounded-full border border-white/10 bg-white/[0.06]
-                px-2 py-1 text-xs text-white/90
-              "
-            >
-              {/* fixed-width icon column */}
-              <MusicIcon className="h-5 w-5 text-nl-accent" />
-              <span className="leading-snug break-words">{music.join(" - ")}</span>
-            </span>
+            <div className="flex flex-wrap gap-1">
+              {music.map((genre, index) => (
+                <span
+                  key={index}
+                  className="
+                    inline-flex items-center
+                    rounded-full border border-white/10 bg-white/[0.06]
+                    px-2 py-1 text-xs text-white/90
+                  "
+                >
+                  <span className="leading-snug">{genre}</span>
+                </span>
+              ))}
+            </div>
           )}
 
           {openDays.length > 0 && (

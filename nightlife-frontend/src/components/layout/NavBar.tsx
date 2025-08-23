@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Globe2, LogIn, ShoppingCart, Menu as MenuIcon, X } from "lucide-react";
+import { LogIn, ShoppingCart, Menu as MenuIcon, X } from "lucide-react";
 import { ClubTabs } from "@/components/domain/club/ClubTabs";
 
 type TabKey = "general" | "reservas" | "carta";
@@ -23,7 +23,6 @@ function resolveTabFromURL(): TabKey {
 }
 
 export default function NavBar() {
-  const [langOpen, setLangOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const pathname = usePathname() || "/";
@@ -71,25 +70,6 @@ export default function NavBar() {
         </Link>
 
         <div className="hidden items-center gap-3 md:flex">
-          <div className="relative">
-            <button
-              className="flex items-center gap-1 rounded-md border border-slate-700/60 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-              onClick={() => setLangOpen((s) => !s)}
-              aria-haspopup="listbox"
-              aria-expanded={langOpen}
-              aria-label="Change language"
-            >
-              <Globe2 className="h-4 w-4" />
-              Español
-            </button>
-            {langOpen && (
-              <div className="absolute right-0 mt-2 w-36 overflow-hidden rounded-md border border-slate-700/60 bg-slate-800 text-sm shadow-lg">
-                <button className="block w-full px-3 py-2 text-left text-slate-200 hover:bg-slate-700">Español</button>
-                <button className="block w-full px-3 py-2 text-left text-slate-200 hover:bg-slate-700">English</button>
-              </div>
-            )}
-          </div>
-
           <button
             aria-label="Abrir carrito"
             className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
@@ -142,11 +122,6 @@ export default function NavBar() {
             </div>
 
             <div className="mt-3 space-y-2">
-              <button className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 px-3 py-2 text-left text-slate-200 hover:bg-slate-800">
-                <Globe2 className="h-4 w-4" />
-                Español
-              </button>
-
               <button className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 px-3 py-2 text-left text-slate-200 hover:bg-slate-800">
                 <ShoppingCart className="h-4 w-4" />
                 Carrito

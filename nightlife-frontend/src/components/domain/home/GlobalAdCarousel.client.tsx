@@ -1,14 +1,20 @@
+// src/components/home/GlobalAdCarousel.client.tsx
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResolvedAd } from "./GlobalAdCarousel";
+// ⬇️ Lightbox used to show the poster + CTA banner
+import AdLightbox, { type AdLike } from "@/components/common/AdLightbox";
 
 export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(false);
+
+  // 🔵 NEW: lightbox state
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState<AdLike | null>(null);
 
   // Respect user's reduced-motion preference
   const reduceMotion = useMemo(
@@ -156,7 +162,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
 
   // Sizing presets (mirror club carousel)
   const singleSizing =
-    // Single ad: centered widths (Option C) + max cap
+    // Single ad: centered widths + max cap
     "w-[70%] sm:w-[52%] md:w-[42%] lg:w-[34%] xl:w-[28%] 2xl:w-[24%] max-w-[900px]";
   const snapSizing =
     // Multi ad: snap + width on each slide
@@ -168,6 +174,22 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
       "relative w-full overflow-hidden flex justify-center px-1 py-1"
     : // Horizontal scroller with snap
       "relative w-full overflow-x-auto scrollbar-thin flex gap-4 px-1 py-1 snap-x snap-mandatory";
+
+  function openLightbox(ad: ResolvedAd) {
+    // We pass everything the resolver may need.
+    const adLike: AdLike = {
+      id: ad.id,
+      imageUrl: ad.imageUrl,
+      targetType: ad.targetType ?? null,
+      targetId: ad.targetId ?? null,
+      clubId: ad.clubId ?? null,
+      resolvedDate: ad.resolvedDate ?? null,
+      // in case backend attaches a plain link (not in the exported type)
+      link: (ad as any).link ?? null,
+    };
+    setCurrent(adLike);
+    setOpen(true);
+  }
 
   return (
     <section aria-label="Anuncios" className="w-full" ref={wrapRef}>
@@ -181,22 +203,6 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
           style={{ scrollPaddingLeft: 16, scrollPaddingRight: 16 }}
         >
           {loopedAds.map((ad, displayIndex) => {
-            const realIndex =
-              cloneCount === 0
-                ? displayIndex
-                : (displayIndex - cloneCount + n) % n;
-
-            const clickable = !!ad.clubId; // only redirect if we know the club
-            const hasImg =
-              typeof ad.imageUrl === "string" && ad.imageUrl.trim().length > 0;
-
-            // Build href to match Club page behavior:
-            // /clubs/:clubId[?date=YYYY-MM-DD]#reservas
-            const base = clickable ? `/clubs/${ad.clubId}` : "#";
-            const href = clickable
-              ? `${base}${ad.resolvedDate ? `?date=${encodeURIComponent(ad.resolvedDate)}` : ""}#reservas`
-              : "#";
-
             // Card width (depends on single vs multi)
             const outerSizing = isSingle ? singleSizing : snapSizing;
 
@@ -209,7 +215,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
                   hover:scale-[1.01] will-change-transform
                 "
               >
-                {/* IG Stories feel on mobile; keep fixed heights on sm+ */}
+                {/* IG Stories feel on mobile; fixed heights on sm+ */}
                 <div
                   className="
                     relative
@@ -222,61 +228,37 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
                   "
                 >
                   <Image
-                    src={hasImg ? ad.imageUrl : "/assets/ad-placeholder.svg"}
+                    src={ad.imageUrl}
                     alt="Anuncio"
                     fill
                     sizes="(max-width: 640px) 70vw, (max-width: 768px) 52vw, (max-width: 1024px) 42vw, 34vw"
                     className="object-cover"
                     priority={displayIndex === (cloneCount || 0)}
                   />
-
-                  {/* Bottom pill arrow (only when ad has redirect) */}
-                  {clickable && (
-                    <div
-                      className="absolute inset-x-0 bottom-2 flex justify-center"
-                      aria-hidden="true"
-                    >
-                      <div
-                        className="
-                          rounded-full bg-black/60 backdrop-blur px-3 py-1 text-xs
-                          text-white/85 ring-1 ring-white/15
-                          group-hover:bg-black/70 group-hover:text-white
-                        "
-                        title="Ir al anuncio"
-                      >
-                        <span aria-hidden="true">→</span>
-                        <span className="sr-only">Ir al anuncio</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             );
 
             // IMPORTANT: the direct child of the track carries snap + width
-            return clickable ? (
-              <Link
+            return (
+              <button
                 key={`${ad.id}::${displayIndex}`}
-                href={href}
+                onClick={() => openLightbox(ad)}
                 role="listitem"
-                data-real-index={realIndex}
-                className={`${outerSizing} block h-full group`}
+                data-real-index={
+                  cloneCount === 0 ? displayIndex : (displayIndex - cloneCount + n) % n
+                }
+                className={`${outerSizing} block h-full group focus:outline-none`}
               >
                 {Card}
-              </Link>
-            ) : (
-              <div
-                key={`${ad.id}::${displayIndex}`}
-                role="listitem"
-                data-real-index={realIndex}
-                className={`${outerSizing} block h-full group opacity-90`}
-              >
-                {Card}
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
+
+      {/* 🔵 Lightbox with conditional CTA banner */}
+      <AdLightbox open={open} onClose={() => setOpen(false)} ad={current} />
     </section>
   );
 }

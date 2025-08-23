@@ -21,6 +21,46 @@ export type AvailableTicketsResponse = {
   freeTickets: TicketDTO[];
 };
 
+/* ───────────────────────── Sorting helpers (priority ASC) ────────────────── */
+/** Accept common aliases for priority so different backends still sort correctly. */
+function priorityOf(t: any): number | null {
+  const candidates = [
+    t?.priority,
+    t?.rank,
+    t?.order,
+    t?.ordering,
+    t?.sort,
+    t?.weight,
+  ];
+  for (const c of candidates) {
+    const n = Number(c);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+const collator = new Intl.Collator(["es", "en"], {
+  sensitivity: "accent",
+  numeric: true,
+});
+
+/** Sort by: priority ASC (missing = bottom), then name A→Z, then id A→Z. */
+function sortTicketsByPriorityThenName(list: TicketDTO[]) {
+  list.sort((a: any, b: any) => {
+    const pa = priorityOf(a);
+    const pb = priorityOf(b);
+    const ap = pa === null ? Number.POSITIVE_INFINITY : pa;
+    const bp = pb === null ? Number.POSITIVE_INFINITY : pb;
+
+    if (ap !== bp) return ap - bp;
+
+    const byName = collator.compare((a.name ?? "") as string, (b.name ?? "") as string);
+    if (byName !== 0) return byName;
+
+    return String((a.id ?? "") as string).localeCompare(String((b.id ?? "") as string));
+  });
+}
+
 /**
  * Fetch tickets available for a club on a given local date (YYYY-MM-DD).
  * - Uses no-store to avoid stale cache while selecting dates
@@ -53,10 +93,15 @@ export async function getAvailableTicketsForDate(
 
   const data = (await res.json()) as AvailableTicketsResponse;
 
-  // Optional: quick sanity normalization for arrays
+  // Normalize arrays defensively
   data.eventTickets = Array.isArray(data.eventTickets) ? data.eventTickets : [];
   data.generalTickets = Array.isArray(data.generalTickets) ? data.generalTickets : [];
   data.freeTickets = Array.isArray(data.freeTickets) ? data.freeTickets : [];
+
+  // Apply sorting: priority ASC, then name, then id
+  sortTicketsByPriorityThenName(data.eventTickets);
+  sortTicketsByPriorityThenName(data.generalTickets);
+  sortTicketsByPriorityThenName(data.freeTickets);
 
   return data;
 }

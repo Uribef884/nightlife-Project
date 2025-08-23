@@ -1,99 +1,135 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { resolveAdCTA } from "@/services/ads.service";
 
-/**
- * Minimal shape for an Ad, based on your JSON example.
- * If your Ad type already exists, replace this with your import.
- */
-export type AdDTO = {
+export type AdLike = {
   id: string;
-  clubId: string | null;     // ads can be global, so this might be null
   imageUrl: string;
-  imageBlurhash?: string | null;
-  priority: number;
-  isVisible: boolean;
-  targetType: "ticket" | "event" | null;
-  targetId: string | null;
-  label?: string | null;
-  link?: string | null;
+  targetType?: "ticket" | "event" | "club" | null;
+  targetId?: string | null;
+  clubId?: string | null;
+  resolvedDate?: string | null;
+  link?: string | null; // optional fallback URL (internal/external)
 };
 
-type CTA = {
-  label: string; // ex: "Ir a Reservas – 2025-09-12"
-  href: string;  // ex: /clubs/<clubId>?tab=reservas&date=YYYY-MM-DD&focusTicket=<id?>
-};
+type CTA = { label: string; href: string };
 
-type Props = {
+function safeHref(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    if (url.startsWith("/")) return url;
+    const u = new URL(url);
+    if (u.protocol === "https:" || u.protocol === "http:") return u.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Shared helper to switch to reservas tab on the SAME page */
+function goToReservasFromHref(href: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    const u = new URL(href, window.location.origin);
+    if (u.pathname !== window.location.pathname) return false;
+
+    const date = u.searchParams.get("date") ?? undefined;
+
+    const url = new URL(window.location.href);
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      url.searchParams.set("date", date);
+    }
+    const next = `${url.pathname}${url.search ? `?${url.searchParams.toString()}` : ""}#reservas`;
+
+    if (next !== window.location.href) {
+      history.pushState({}, "", next);
+    }
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function AdLightbox({
+  open,
+  onClose,
+  ad,
+}: {
   open: boolean;
   onClose: () => void;
-  ad: AdDTO | null;
-};
-
-/**
- * Full-screen lightbox for viewing an ad poster.
- * - Locks background scroll
- * - Closes on X, backdrop, or Esc
- * - If ad has a linked ticket/event, shows a CTA button to go to reservas on the right date
- */
-export default function AdLightbox({ open, onClose, ad }: Props) {
+  ad: AdLike | null;
+}) {
   const router = useRouter();
   const [cta, setCta] = useState<CTA | null>(null);
-  const [loadingCTA, setLoadingCTA] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // Lock scroll while open
+  // Lock body scroll while open
   useEffect(() => {
     if (!open) return;
-    const { overflow } = document.body.style;
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = overflow;
+      document.body.style.overflow = prev;
     };
   }, [open]);
 
   // Close on Esc
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Resolve CTA when ad changes
+  // Resolve CTA whenever we open with a given ad
   useEffect(() => {
-    let cancel = false;
+    let cancelled = false;
     (async () => {
       if (!open || !ad) {
         setCta(null);
         return;
       }
-      setLoadingCTA(true);
+      setLoading(true);
       try {
         const res = await resolveAdCTA(ad);
-        if (!cancel) setCta(res);
+        if (!cancelled) setCta(res);
       } catch {
-        if (!cancel) setCta(null);
+        if (!cancelled) setCta(null);
       } finally {
-        if (!cancel) setLoadingCTA(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancel = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [open, ad]);
 
   if (!open || !ad) return null;
+
+  const fallbackHref = !cta ? safeHref(ad.link) : null;
+  const isInternalFallback = !!fallbackHref && fallbackHref.startsWith("/");
+
+  const handleCta = (href: string) => {
+    // If href points to the same club page, switch tab/date in-place.
+    if (goToReservasFromHref(href)) {
+      onClose();
+      return;
+    }
+    // Otherwise, navigate normally.
+    router.push(href);
+  };
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85"
-      onClick={onClose} // backdrop click closes
+      onClick={onClose}
     >
-      {/* CONTENT WRAPPER: stop propagation so clicks inside don't close */}
       <div
         className="relative w-full h-full max-w-4xl mx-auto"
         onClick={(e) => e.stopPropagation()}
@@ -107,37 +143,54 @@ export default function AdLightbox({ open, onClose, ad }: Props) {
           ×
         </button>
 
-        {/* Image */}
+        {/* Poster image */}
         <div className="w-full h-full flex items-center justify-center p-4">
-          {/* The image scales to fit view without distortion */}
-          {/* Use loading=lazy to avoid layout jank */}
           <img
             src={ad.imageUrl}
-            alt={ad.label ?? "Publicidad"}
+            alt="Anuncio"
             className="max-h-full max-w-full object-contain rounded-xl shadow-2xl"
             loading="lazy"
           />
         </div>
 
-        {/* CTA Banner (conditional) */}
+        {/* CTA zone */}
         {cta ? (
           <div className="absolute bottom-0 left-0 right-0 bg-white/10 backdrop-blur border-t border-white/15 p-4 flex justify-center">
             <button
-              onClick={() => router.push(cta.href)}
+              onClick={() => handleCta(cta.href)}
               className="px-4 py-2 rounded-2xl bg-white text-black font-semibold hover:opacity-90 transition"
             >
               {cta.label}
             </button>
           </div>
-        ) : (
-          // Small status if target exists but still loading resolution
-          ad.targetType && loadingCTA ? (
-            <div className="absolute bottom-0 left-0 right-0 bg-white/5 text-white/80 text-center text-sm py-2">
-              Preparando redirección…
-            </div>
-          ) : null
-        )}
+        ) : fallbackHref ? (
+          <div className="absolute bottom-0 left-0 right-0 bg-white/10 backdrop-blur border-t border-white/15 p-4 flex justify-center">
+            {isInternalFallback ? (
+              <button
+                onClick={() => handleCta(fallbackHref)}
+                className="px-4 py-2 rounded-2xl bg-white text-black font-semibold hover:opacity-90 transition"
+              >
+                Abrir enlace
+              </button>
+            ) : (
+              <a
+                href={fallbackHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-2xl bg-white text-black font-semibold hover:opacity-90 transition"
+              >
+                Abrir enlace
+              </a>
+            )}
+          </div>
+        ) : ad.targetType || ad.link ? (
+          <div className="absolute bottom-0 left-0 right-0 bg-white/5 text-white/80 text-center text-sm py-2">
+            {loading ? "Preparando redirección…" : ""}
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
+
+export default AdLightbox;

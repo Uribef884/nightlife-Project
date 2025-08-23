@@ -2,14 +2,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, type Transition } from "framer-motion";
+
 import { ClubHeader } from "@/components/domain/club/ClubHeader";
 import { ClubAdsCarousel } from "@/components/domain/club/ClubAdsCarousel";
 import { ClubSocials } from "@/components/domain/club/ClubSocials";
-import { MapGoogle } from "@/components/domain/club/MapGoogle.client";
+import MapGoogle from "@/components/domain/club/MapGoogle.client";
 import { ClubCalendar } from "@/components/domain/club/ClubCalendar";
 import { ClubEvents } from "@/components/domain/club/ClubEvents";
 import { TicketsGrid } from "@/components/domain/club/TicketsGrid";
 import { formatDayLong } from "@/lib/formatters";
+
 import {
   getClubAdsCSR,
   getClubByIdCSR,
@@ -25,11 +28,11 @@ import {
   type AvailableTicketsResponse,
 } from "@/services/tickets.service";
 
+// env-safe helpers (no hard-coded URLs)
+import { joinUrl, API_BASE_CSR } from "@/lib/env";
+
 type Props = { clubId: string; clubSSR: ClubDTO };
 type TabKey = "general" | "reservas" | "carta";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "http://localhost:4000";
 
 /** Normalize various event date fields into YYYY-MM-DD */
 function pickEventDate(e: any): string | null {
@@ -46,6 +49,63 @@ function todayLocal(): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Observe in-page URL changes (Next soft navigations) without updating during insertion */
+function installLocationObserver(cb: () => void) {
+  // Debounced scheduler to avoid running inside useInsertionEffect
+  let timer: number | null = null;
+  const schedule = () => {
+    if (timer != null) return;
+    timer = window.setTimeout(() => {
+      timer = null;
+      cb();
+    }, 0); // defer to next macrotask
+  };
+
+  // Bind originals to preserve correct receiver
+  const origPush = history.pushState.bind(history);
+  const origReplace = history.replaceState.bind(history);
+
+  // Patch history methods: call original, then schedule sync
+  (history.pushState as typeof history.pushState) = ((...args: Parameters<typeof history.pushState>) => {
+    const ret = origPush(...args);
+    schedule();
+    return ret;
+  }) as typeof history.pushState;
+
+  (history.replaceState as typeof history.replaceState) = ((...args: Parameters<typeof history.replaceState>) => {
+    const ret = origReplace(...args);
+    schedule();
+    return ret;
+  }) as typeof history.replaceState;
+
+  // Browser events
+  const onPop = () => schedule();
+  const onHash = () => schedule();
+  window.addEventListener("popstate", onPop);
+  window.addEventListener("hashchange", onHash);
+
+  // Cleanup: restore originals and listeners
+  return () => {
+    history.pushState = origPush;
+    history.replaceState = origReplace;
+    window.removeEventListener("popstate", onPop);
+    window.removeEventListener("hashchange", onHash);
+    if (timer != null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+}
+
+/** Shared motion for tab sections (v11-safe easing) */
+const tabTransition: Transition = { duration: 0.18, ease: [0.16, 1, 0.3, 1] };
+const tabMotion = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -10 },
+  transition: tabTransition,
+};
+
 export default function ClubPageClient({ clubId, clubSSR }: Props) {
   const [tab, setTab] = useState<TabKey>("general");
 
@@ -61,70 +121,70 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   const [availError, setAvailError] = useState<string | null>(null);
   const [dateCache, setDateCache] = useState<Record<string, AvailableTicketsResponse>>({});
 
-  // ── Normalize initial URL & state (tab+date) when landing on a club ──
-  useEffect(() => {
+  /** Parse the current URL and sync tab + date. Also canonicalize `?tab=` → `#tab`. */
+  const syncFromLocation = () => {
     const url = new URL(window.location.href);
     const sp = url.searchParams;
 
-    // 1) Determine tab: hash > ?tab= ; default general
+    // 1) Tab: hash > ?tab=
     const hash = (url.hash || "").replace("#", "").toLowerCase();
     let t: TabKey =
       hash === "reservas" || hash === "carta" || hash === "general"
         ? (hash as TabKey)
         : "general";
+
     if (t === "general") {
       const qtab = (sp.get("tab") || "").toLowerCase();
       if (qtab === "reservas" || qtab === "reservations") t = "reservas";
       else if (qtab === "carta" || qtab === "menu") t = "carta";
     }
 
-    // 2) Write canonical hash so NavBar + page stay in sync
-    if (window.location.hash.replace("#", "") !== t) {
-      window.location.hash = t; // will also fire hashchange
-    }
-    setTab(t);
-
-    // 3) Clean URL — drop ?tab= but keep ?date=
+    // Canonicalize: remove ?tab= and keep hash
     if (sp.has("tab")) {
       sp.delete("tab");
-      const clean = `${url.pathname}${sp.toString() ? `?${sp}` : ""}#${t}`;
+      const clean = `${url.pathname}${sp.toString() ? `?${sp}` : ""}${t ? `#${t}` : ""}`;
       history.replaceState({}, "", clean);
     }
 
-    // 4) Date: use ?date=YYYY-MM-DD if valid, otherwise today (local)
+    // 2) Date: use ?date=YYYY-MM-DD if valid, else today
     const qdate = sp.get("date");
-    const date =
-      qdate && /^\d{4}-\d{2}-\d{2}$/.test(qdate) ? qdate : todayLocal();
-    setSelectedDate(date);
+    const date = qdate && /^\d{4}-\d{2}-\d{2}$/.test(qdate) ? qdate : todayLocal();
 
-    // 5) Reset availability/cache
-    setAvailable(null);
-    setAvailError(null);
-    setDateCache({});
-  }, [clubId]);
+    // 3) Apply to state; reset availability cache if date changes
+    setTab((prev) => (prev !== t ? t : prev));
+    setSelectedDate((prev) => {
+      if (prev !== date) {
+        setAvailable(null);
+        setAvailError(null);
+        setDateCache({});
+        return date;
+      }
+      return prev;
+    });
+  };
 
-  // React to hash changes (tabs)
+  // Initial sync + observe subsequent URL changes (works on soft nav, hash, back/forward)
   useEffect(() => {
-    const onHash = () => {
-      const h = window.location.hash.replace("#", "") as TabKey;
-      if (h === "general" || h === "reservas" || h === "carta") setTab(h);
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
+    syncFromLocation();
+    const off = installLocationObserver(syncFromLocation);
+    return () => off();
+  }, [clubId]);
 
   // ── CSR data loads ──
   useEffect(() => {
+    // Club + Ads via services
     getClubByIdCSR(clubId).then((c) => c && setClub(c)).catch(() => {});
     getClubAdsCSR(clubId).then(setAds).catch(() => {});
 
+    // Events (service first, then fallback fetch)
     (async () => {
       try {
         const e = await getEventsForClubCSR(clubId);
         if (Array.isArray(e) && e.length > 0) {
           setEvents(e);
         } else {
-          const res = await fetch(`${API_BASE}/events/club/${encodeURIComponent(clubId)}`, {
+          const url = joinUrl(API_BASE_CSR, `/events/club/${encodeURIComponent(clubId)}`);
+          const res = await fetch(url, {
             method: "GET",
             headers: { "Content-Type": "application/json" },
             cache: "no-store",
@@ -136,7 +196,8 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
         }
       } catch {
         try {
-          const res = await fetch(`${API_BASE}/events/club/${encodeURIComponent(clubId)}`, {
+          const url = joinUrl(API_BASE_CSR, `/events/club/${encodeURIComponent(clubId)}`);
+          const res = await fetch(url, {
             method: "GET",
             headers: { "Content-Type": "application/json" },
             cache: "no-store",
@@ -149,13 +210,17 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       }
     })();
 
+    // Tickets (service first, then fallback fetch)
     (async () => {
       try {
         const t = await getTicketsForClubCSR(clubId);
         if (Array.isArray(t) && t.length > 0) {
           setTickets(t);
         } else {
-          const url = `${API_BASE}/tickets/club/${encodeURIComponent(clubId)}?isActive=true`;
+          const url = joinUrl(
+            API_BASE_CSR,
+            `/tickets/club/${encodeURIComponent(clubId)}?isActive=true`
+          );
           const res = await fetch(url, {
             method: "GET",
             headers: { "Content-Type": "application/json" },
@@ -168,7 +233,10 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
         }
       } catch {
         try {
-          const url = `${API_BASE}/tickets/club/${encodeURIComponent(clubId)}?isActive=true`;
+          const url = joinUrl(
+            API_BASE_CSR,
+            `/tickets/club/${encodeURIComponent(clubId)}?isActive=true`
+          );
           const res = await fetch(url, {
             method: "GET",
             headers: { "Content-Type": "application/json" },
@@ -182,9 +250,10 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       }
     })();
 
+    // Calendar tickets (colors)
     (async () => {
       try {
-        const url = `${API_BASE}/tickets/calendar/${encodeURIComponent(clubId)}`;
+        const url = joinUrl(API_BASE_CSR, `/tickets/calendar/${encodeURIComponent(clubId)}`);
         const res = await fetch(url, {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -205,7 +274,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   const safeTickets: TicketDTO[] = Array.isArray(tickets) ? tickets : [];
   const safeCalendarTickets: TicketDTO[] = Array.isArray(calendarTickets) ? calendarTickets : [];
 
-  // Calendar colors
+  // Calendar colors: Event dates
   const eventDates = useMemo(() => {
     const filtered = safeEvents.filter((e) => {
       const evClub = (e as any)?.clubId;
@@ -215,6 +284,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     return new Set<string>(dates);
   }, [safeEvents, clubId]);
 
+  // Calendar colors: Free ticket dates (with availability + cache)
   const freeDates = useMemo(() => {
     const s = new Set<string>();
 
@@ -315,108 +385,114 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   return (
     <div className="max-w-5xl mx-auto px-4">
       <div className="pt-3 pb-6">
-        {/* GENERAL */}
-        {tab === "general" && (
-          <section className="space-y-6">
-            <ClubHeader club={club} onReservarClick={() => (window.location.hash = "reservas")} />
-            <ClubAdsCarousel ads={ads} />
-
-            <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
-              <h3 className="text-white font-semibold mb-2">¿Cómo llegar?</h3>
-              <MapGoogle
-                latitude={club.latitude}
-                longitude={club.longitude}
-                googleMapsUrl={club.googleMaps}
-                name={club.name}
-              />
-            </div>
-
-            <ClubSocials instagram={club.instagram} whatsapp={club.whatsapp} />
-
-            <div className="pt-2">
-              <button
-                onClick={() => (window.location.hash = "reservas")}
-                className="w-full rounded-full bg-[#7A48D3] hover:bg-[#6B3FA0] text-white py-3 font-semibold shadow"
-              >
-                Reservar
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* RESERVAS */}
-        {tab === "reservas" && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
-              <h3 className="text-white font-semibold mb-3">Selecciona la fecha</h3>
-              <ClubCalendar
-                monthOffset={0}
-                eventDates={eventDates}
-                freeDates={freeDates}
-                openDays={openDays}
-                onSelect={setSelectedDate}
-                selectedDate={selectedDate}
-              />
-              {selectedDate && (
-                <p className="mt-3 text-sm text-white/70">
-                  Fecha seleccionada: <span className="font-semibold">{formatDayLong(selectedDate)}</span>
-                </p>
-              )}
-            </div>
-
-            <ClubEvents
-              events={safeEvents}
-              onChooseDate={(d) => {
-                setSelectedDate(d);
+        <AnimatePresence mode="wait">
+          {tab === "general" && (
+            <motion.section key="tab-general" {...tabMotion} className="space-y-6">
+              <ClubHeader club={club} onReservarClick={() => {
+                window.location.hash = "reservas";
                 window.scrollTo({ top: 0, behavior: "smooth" });
-              }}
-            />
+              }} />
+              <ClubAdsCarousel ads={ads} />
 
-            {availLoading && <div className="text-white/70">Cargando boletas...</div>}
-            {availError && <div className="text-red-300">{availError}</div>}
-
-            <TicketsGrid
-              club={club}
-              selectedDate={selectedDate}
-              events={safeEvents}
-              tickets={safeTickets}
-              selectedEventTickets={selectedEventTickets}
-              available={
-                available
-                  ? {
-                      dateHasEvent: available.dateHasEvent,
-                      event: available.event,
-                      eventTickets: available.eventTickets,
-                      generalTickets: available.generalTickets,
-                      freeTickets: available.freeTickets,
-                    }
-                  : undefined
-              }
-            />
-          </section>
-        )}
-
-        {/* CARTA */}
-        {tab === "carta" && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
-              <h3 className="text-white font-semibold mb-2">Carta</h3>
-              {club.menuType === "pdf" && club.pdfMenuUrl ? (
-                <iframe
-                  src={club.pdfMenuUrl}
-                  className="w-full h-[70vh] rounded-xl bg-black"
-                  title={club.pdfMenuName ?? "Menú"}
+              <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
+                <h3 className="text-white font-semibold mb-2">¿Cómo llegar?</h3>
+                <MapGoogle
+                  latitude={club.latitude}
+                  longitude={club.longitude}
+                  googleMapsUrl={club.googleMaps}
+                  name={club.name}
                 />
-              ) : club.menuType === "structured" ? (
-                <p className="text-white/80">
-                  La carta estructurada se mostrará aquí. (Pendiente endpoint de items/variantes)
-                </p>
-              ) : (
-                <p className="text-white/50">Este club no tiene carta configurada.</p>
-              )}
-            </div>
-          </section>
-        )}
+              </div>
+
+              <ClubSocials instagram={club.instagram} whatsapp={club.whatsapp} />
+
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    window.location.hash = "reservas";
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="w-full rounded-full bg-[#7A48D3] hover:bg-[#6B3FA0] text-white py-3 font-semibold shadow"
+                >
+                  Reservar
+                </button>
+              </div>
+            </motion.section>
+          )}
+
+          {tab === "reservas" && (
+            <motion.section key="tab-reservas" {...tabMotion} className="space-y-6">
+              <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
+                <h3 className="text-white font-semibold mb-3">Selecciona la fecha</h3>
+                <ClubCalendar
+                  monthOffset={0}
+                  eventDates={eventDates}
+                  freeDates={freeDates}
+                  openDays={openDays}
+                  onSelect={setSelectedDate}
+                  selectedDate={selectedDate}
+                />
+                {selectedDate && (
+                  <p className="mt-3 text-sm text-white/70">
+                    Fecha seleccionada:{" "}
+                    <span className="font-semibold">{formatDayLong(selectedDate)}</span>
+                  </p>
+                )}
+              </div>
+
+              <ClubEvents
+                events={safeEvents}
+                onChooseDate={(d) => {
+                  setSelectedDate(d);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              />
+
+              {availLoading && <div className="text-white/70">Cargando boletas...</div>}
+              {availError && <div className="text-red-300">{availError}</div>}
+
+              <TicketsGrid
+                club={club}
+                selectedDate={selectedDate}
+                events={safeEvents}
+                tickets={safeTickets}
+                selectedEventTickets={selectedEventTickets}
+                available={
+                  available
+                    ? {
+                        dateHasEvent: available.dateHasEvent,
+                        event: available.event,
+                        eventTickets: available.eventTickets,
+                        generalTickets: available.generalTickets,
+                        freeTickets: available.freeTickets,
+                      }
+                    : undefined
+                }
+              />
+            </motion.section>
+          )}
+
+          {tab === "carta" && (
+            <motion.section key="tab-carta" {...tabMotion} className="space-y-6">
+              <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
+                <h3 className="text-white font-semibold mb-2">Carta</h3>
+                {club.menuType === "pdf" && club.pdfMenuUrl ? (
+                  <iframe
+                    src={club.pdfMenuUrl}
+                    className="w-full h-[70vh] rounded-xl bg-black"
+                    title={club.pdfMenuName ?? "Menú"}
+                  />
+                ) : club.menuType === "structured" ? (
+                  <p className="text-white/80">
+                    La carta estructurada se mostrará aquí. (Pendiente endpoint de items/variantes)
+                  </p>
+                ) : (
+                  <p className="text-white/50">Este club no tiene carta configurada.</p>
+                )}
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
