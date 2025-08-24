@@ -84,9 +84,13 @@ export function middleware(req: NextRequest) {
 
   // Lock down legacy vectors
   const objectSrc = "'none'";
-  const frameAncestors = "'none'";
+  // Allow same-origin embedding for PDF iframes
+  const frameAncestors = "'self'";
   const baseUri = "'self'";
   const formAction = "'self'";
+  
+  // Allow iframes only from same origin (PDF proxy)
+  const frameSrc = "'self'";
 
   const csp = [
     `default-src ${defaultSrc}`,
@@ -98,6 +102,7 @@ export function middleware(req: NextRequest) {
     `style-src ${styleSrc}`,
     `font-src ${fontSrc}`,
     `object-src ${objectSrc}`,
+    `frame-src ${frameSrc}`,
     `frame-ancestors ${frameAncestors}`,
     `base-uri ${baseUri}`,
     `form-action ${formAction}`,
@@ -107,7 +112,7 @@ export function middleware(req: NextRequest) {
   res.headers.set("Content-Security-Policy", csp);
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   res.headers.set("X-Content-Type-Options", "nosniff");
-  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("X-Frame-Options", "SAMEORIGIN");
   // Keep permissions tight by default; open up explicitly if needed
   res.headers.set(
     "Permissions-Policy",

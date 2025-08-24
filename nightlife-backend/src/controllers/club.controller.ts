@@ -516,6 +516,9 @@ export async function getAllClubs(req: Request, res: Response): Promise<void> {
       profileImageUrl: club.profileImageUrl,
       profileImageBlurhash: club.profileImageBlurhash,
       priority: club.priority,
+      menuType: club.menuType,
+      pdfMenuUrl: club.pdfMenuUrl,
+      pdfMenuName: club.pdfMenuName,
     }));
 
     res.json(publicClubs);
@@ -569,6 +572,9 @@ export async function getClubById(req: AuthenticatedRequest, res: Response): Pro
         profileImageUrl: club.profileImageUrl,
         profileImageBlurhash: club.profileImageBlurhash,
         priority: club.priority,
+        menuType: club.menuType,
+        pdfMenuUrl: club.pdfMenuUrl,
+        pdfMenuName: club.pdfMenuName,
       };
       res.status(200).json(publicFields);
     }
@@ -662,6 +668,9 @@ export async function getFilteredClubs(req: Request, res: Response): Promise<voi
       profileImageUrl: club.profileImageUrl,
       profileImageBlurhash: club.profileImageBlurhash,
       priority: club.priority,
+      menuType: club.menuType,
+      pdfMenuUrl: club.pdfMenuUrl,
+      pdfMenuName: club.pdfMenuName,
     }));
 
     res.json(publicClubs);
