@@ -32,12 +32,20 @@ export async function GET(request: Request) {
     const cleanHeaders = new Headers();
     cleanHeaders.set("Content-Type", "application/pdf");
     cleanHeaders.set("Content-Disposition", "inline");
+    
+    // Forward performance headers if present
+    if (response.headers.has("Content-Length")) {
+      cleanHeaders.set("Content-Length", response.headers.get("Content-Length")!);
+    }
+    if (response.headers.has("Accept-Ranges")) {
+      cleanHeaders.set("Accept-Ranges", response.headers.get("Accept-Ranges")!);
+    }
+    
     // Add cache-busting to prevent stale PDFs
     cleanHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate");
     cleanHeaders.set("Pragma", "no-cache");
     cleanHeaders.set("Expires", "0");
     cleanHeaders.set("Access-Control-Allow-Origin", "*");
-    cleanHeaders.set("X-Frame-Options", "SAMEORIGIN");
     
     // Stream the response for better performance
     return new NextResponse(response.body, {

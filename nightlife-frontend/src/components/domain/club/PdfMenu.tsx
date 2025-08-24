@@ -4,11 +4,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
- * PDF viewer with direct iframe rendering and fallback options
- * - Zoom controls (-, +, 100%)
- * - Fullscreen support
- * - Refresh functionality
- * - Multiple rendering approaches for compatibility
+ * PDF viewer with enhanced iframe rendering for all devices
+ * - Uses iframe with PDF proxy for consistent behavior
+ * - Zoom controls work through URL parameters
+ * - Fallback options for compatibility
+ * - Mobile-optimized rendering
  */
 export function PdfMenu({
   url,
@@ -61,16 +61,6 @@ export function PdfMenu({
   function fitPercent100() {
     setZoom(100);
   }
-  
-  function toggleFullscreen() {
-    const el = wrapperRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else {
-      el.requestFullscreen().catch(() => {});
-    }
-  }
 
   function refreshPdf() {
     setIsLoading(true);
@@ -97,26 +87,25 @@ export function PdfMenu({
     return height;
   }, [height]);
 
-  // Build viewer URL with hidden native toolbar
+  // Build viewer URL for iframe (all devices)
   const iframeSrc = useMemo(() => {
     if (!safeUrl) return "";
 
-    // Use our PDF proxy to avoid CSP issues
+    // Use our PDF proxy to avoid CSP issues - must be same-origin
     const proxyUrl = `/api/pdf-proxy?url=${encodeURIComponent(safeUrl)}`;
-
-    // Use minimal hash parameters that work on all devices
-    const hash = `#toolbar=0&navpanes=0&scrollbar=1`;
-
-    // Avoid duplicating existing hash — strip and append ours
-    const base = proxyUrl.split("#")[0];
-    const finalUrl = `${base}${hash}`;
-
+    
+    // Add hash parameters to hide browser's native PDF toolbar and apply zoom
+    const hash = `#toolbar=0&navpanes=0&scrollbar=0&statusbar=0&messages=0&view=FitH&zoom=${zoom}`;
+    
+    // Combine proxy URL with hash parameters
+    const finalUrl = `${proxyUrl}${hash}`;
+    
     // Ensure absolute URL to avoid relative resolution issues
     if (typeof window !== "undefined") {
       return new URL(finalUrl, window.location.origin).href;
     }
     return finalUrl;
-  }, [safeUrl]);
+  }, [safeUrl, zoom]);
 
   if (!safeUrl) {
     return (
@@ -156,21 +145,12 @@ export function PdfMenu({
         </button>
         <button
           type="button"
-          className="h-9 rounded-md bg-white/10 px-3 text-white hover:bg-white/15"
+          className="h-9 min-w-9 rounded-md bg-white/10 px-3 text-white hover:bg-white/15"
           onClick={fitPercent100}
           aria-label="Ajustar a 100%"
           title="Ajustar a 100%"
         >
           100%
-        </button>
-        <button
-          type="button"
-          className="h-9 rounded-md bg-white/10 px-3 text-white hover:bg-white/15"
-          onClick={toggleFullscreen}
-          aria-label="Pantalla completa"
-          title="Pantalla completa"
-        >
-          ⤢
         </button>
         <button
           type="button"
@@ -194,7 +174,7 @@ export function PdfMenu({
           </div>
         )}
         
-        {/* Iframe Renderer */}
+        {/* Iframe Renderer (All Devices) */}
         {renderMode === "iframe" && (
           <iframe
             key={refreshKey}
@@ -202,7 +182,7 @@ export function PdfMenu({
             title={filename ?? "Menú PDF"}
             style={{ width: "100%", height: computedHeight }}
             referrerPolicy="no-referrer"
-            className="bg-black/70"
+            className="bg-white"
             allow="fullscreen"
             onLoad={() => {
               setIsLoading(false);
@@ -248,23 +228,42 @@ export function PdfMenu({
           />
         )}
 
-        {/* Error State */}
+        {/* Error State with Download Link */}
         {renderError && (
           <div className="flex flex-col items-center justify-center p-8 text-white/70">
             <div className="text-6xl mb-4">📄</div>
             <div className="text-lg mb-2">No se pudo cargar el PDF</div>
-            <div className="text-sm mb-4 text-white/50">
-              El navegador no puede mostrar este PDF
+            <div className="text-sm mb-4 text-white/50 text-center">
+              El navegador no puede mostrar este PDF en la vista previa.
+              <br />
+              Puedes abrirlo en una nueva pestaña o descargarlo.
             </div>
-            <button
-              onClick={() => {
-                setRenderError(false);
-                refreshPdf();
-              }}
-              className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-md"
-            >
-              Intentar de nuevo
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setRenderError(false);
+                  refreshPdf();
+                }}
+                className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-md"
+              >
+                Intentar de nuevo
+              </button>
+              <a
+                href={safeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white"
+              >
+                🔗 Abrir en nueva pestaña
+              </a>
+              <a
+                href={iframeSrc}
+                download={filename || "menu.pdf"}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md text-white"
+              >
+                📥 Descargar PDF
+              </a>
+            </div>
           </div>
         )}
       </div>
