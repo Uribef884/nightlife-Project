@@ -85,6 +85,12 @@ export class Club {
   @Column({ nullable: true })
   pdfMenuName?: string;
 
+  @Column({ nullable: true })
+  pdfMenuId?: string;
+
+  @Column({ type: "text", nullable: true })
+  pdfMenuManifest?: string;
+
   @ManyToOne(() => User)
   owner!: User;
 

@@ -600,11 +600,36 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                 const isStructured = menuMeta.type === "structured";
 
                 if (hasPdf) {
+                  // Generate a fallback menuId if the new field doesn't exist yet
+                  let fallbackMenuId = (club as any)?.pdfMenuId ?? (clubSSR as any)?.pdfMenuId;
+                  
+                  if (!fallbackMenuId) {
+                    // Extract menuId from existing PDF URL or filename
+                    const pdfUrl = menuMeta.pdf as string;
+                    const pdfName = (club as any)?.pdfMenuName ?? (clubSSR as any)?.pdfMenuName;
+                    
+                    if (pdfUrl && pdfUrl.includes('/menu/')) {
+                      // Extract from URL: .../menu/menu-1234567890.pdf
+                      const urlMatch = pdfUrl.match(/\/menu\/([^\/]+)\.pdf/);
+                      if (urlMatch) {
+                        fallbackMenuId = urlMatch[1]; // menu-1234567890
+                      }
+                    } else if (pdfName && pdfName.startsWith('menu-')) {
+                      // Extract from filename: menu-1234567890.pdf
+                      fallbackMenuId = pdfName.replace('.pdf', '');
+                    } else {
+                      // Last resort: generate from timestamp
+                      fallbackMenuId = `menu-${Date.now()}`;
+                    }
+                  }
+                  
                   return (
                     <PdfMenu
                       url={menuMeta.pdf as string}
                       filename={(club as any)?.pdfMenuName ?? (clubSSR as any)?.pdfMenuName ?? "Menú"}
                       height="70vh"
+                      clubId={clubId}
+                      menuId={fallbackMenuId}
                     />
                   );
                 }

@@ -8,6 +8,7 @@ import { MenuItem } from '../entities/MenuItem';
 import { Event } from '../entities/Event';
 import { Ad } from "../entities/Ad";
 import { validateImageUrlWithResponse } from '../utils/validateImageUrl';
+import PDFService from "../services/pdfService";
 
 // Upload menu PDF
 export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -69,6 +70,10 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
 
     // Store reference to old PDF for deletion after successful upload
     const oldPdfUrl = club.pdfMenuUrl;
+    const oldMenuId = club.pdfMenuId;
+
+    // Generate new menu ID
+    const newMenuId = `menu-${Date.now()}`;
 
     // Upload new PDF
     const key = S3Service.generateKey(clubId, 'menu-pdf');
@@ -79,13 +84,32 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
       key
     );
 
-    // Update club with new PDF URL
+    // Convert PDF to images and generate manifest
+    const pdfService = new PDFService();
+    let manifest = null;
+    
+    try {
+      manifest = await pdfService.convertPDFToImages(
+        file.buffer,
+        clubId,
+        newMenuId
+      );
+      console.log(`✅ PDF converted to ${manifest.pageCount} images`);
+    } catch (conversionError) {
+      console.error('⚠️ Warning: PDF conversion failed:', conversionError);
+      // Don't fail the request - PDF is uploaded, just conversion failed
+    }
+
+    // Update club with new PDF URL and menu ID
     club.pdfMenuUrl = uploadResult.url;
-    club.pdfMenuName = `menu-${Date.now()}.pdf`; // Generate our own filename
+    club.pdfMenuName = `menu-${Date.now()}.pdf`;
+    club.pdfMenuId = newMenuId;
+    if (manifest) {
+      club.pdfMenuManifest = JSON.stringify(manifest);
+    }
     await clubRepo.save(club);
 
-    // Delete old PDF from S3 if upload and DB update were successful
-    // Skip deletion if old and new URLs are the same (same S3 key, file was overwritten)
+    // Delete old PDF and images from S3 if upload and DB update were successful
     if (oldPdfUrl && oldPdfUrl !== uploadResult.url) {
       try {
         // Parse the S3 URL to extract the key
@@ -93,8 +117,13 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
         const oldKey = url.pathname.substring(1); // Remove leading slash
         
         await S3Service.deleteFile(oldKey);
+        
+        // Also clean up old images if they exist
+        if (oldMenuId) {
+          await pdfService.cleanupOldVersionedPages(clubId, oldMenuId);
+        }
       } catch (deleteError) {
-        console.error('⚠️ Warning: Failed to delete old PDF from S3:', deleteError);
+        console.error('⚠️ Warning: Failed to delete old PDF/images from S3:', deleteError);
         // Don't fail the request - new PDF is already uploaded successfully
       }
     } else if (oldPdfUrl === uploadResult.url) {
@@ -105,7 +134,14 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
       message: 'PDF menu uploaded successfully',
       pdfMenuUrl: uploadResult.url,
       pdfMenuName: club.pdfMenuName,
-      size: uploadResult.size
+      pdfMenuId: newMenuId,
+      size: uploadResult.size,
+      manifest: manifest ? {
+        pageCount: manifest.pageCount,
+        format: manifest.format,
+        width: manifest.width,
+        height: manifest.height
+      } : null
     });
   } catch (error) {
     console.error('Error uploading PDF:', error);
@@ -537,5 +573,7 @@ export const uploadAdImage = async (req: AuthenticatedRequest, res: Response): P
     res.status(500).json({ error: 'Failed to upload ad image' });
   }
 };
+
+
 
  

@@ -4,10 +4,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { detectDevice } from "@/lib/deviceDetection";
 
+interface PageImage {
+  url: string;
+  w: number;
+  h: number;
+  bytes: number;
+}
+
+interface Thumbnail {
+  url: string;
+  w: number;
+  h: number;
+}
+
+interface MenuManifest {
+  pageCount: number;
+  format: 'webp';
+  width: number;
+  height: number;
+  pages: PageImage[];
+  thumbs: Thumbnail[];
+  createdAt: string;
+}
+
 /**
  * Enhanced PDF viewer with device-specific rendering strategies
- * - Desktop: Iframe with minimal hash parameters for zoom control
- * - Mobile: Iframe with fallback to download/open options if rendering fails
+ * - Desktop: Iframe with PDF proxy for zoom control
+ * - Mobile: Image-based rendering using converted PDF pages
  * - No duplicate controls, proper zoom functionality
  */
 export function PdfMenu({
@@ -15,11 +38,15 @@ export function PdfMenu({
   filename,
   height = "70vh",
   className = "",
+  clubId,
+  menuId,
 }: {
   url: string;
   filename?: string | null;
   height?: number | string;
   className?: string;
+  clubId?: string;
+  menuId?: string;
 }) {
   // Only allow http/https URLs to avoid javascript: or data: injections
   const safeUrl = useMemo(() => {
@@ -40,6 +67,11 @@ export function PdfMenu({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [renderError, setRenderError] = useState<boolean>(false);
 
+  // Mobile image-based states
+  const [manifest, setManifest] = useState<MenuManifest | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [manifestError, setManifestError] = useState<boolean>(false);
+
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   
@@ -55,6 +87,11 @@ export function PdfMenu({
     // Re-detect device
     const newDeviceInfo = detectDevice();
     setDeviceInfo(newDeviceInfo);
+    
+    // Reset mobile states
+    setManifest(null);
+    setCurrentPage(1);
+    setManifestError(false);
   }, [url]);
 
   // Update device info on window resize
@@ -66,6 +103,43 @@ export function PdfMenu({
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Load manifest for mobile devices
+  useEffect(() => {
+    if (deviceInfo.isMobile && clubId && menuId && !manifest && !manifestError) {
+      // Add timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        setManifestError(true);
+        setIsLoading(false);
+      }, 10000); // 10 second timeout
+
+      loadManifest().finally(() => {
+        clearTimeout(timeoutId);
+      });
+    } else if (deviceInfo.isMobile && (!clubId || !menuId)) {
+      setManifestError(true);
+      setIsLoading(false);
+    }
+  }, [deviceInfo.isMobile, clubId, menuId, manifest, manifestError]);
+
+  const loadManifest = async () => {
+    try {
+      const response = await fetch(`/api/menu-manifest?clubId=${clubId}&menuId=${menuId}`);
+
+      if (response.ok) {
+        const manifestData = await response.json();
+        setManifest(manifestData);
+        setIsLoading(false);
+      } else {
+        const errorText = await response.text();
+        setManifestError(true);
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setManifestError(true);
+      setIsLoading(false);
+    }
+  };
 
   function applyZoom(next: number) {
     const clamped = Math.max(50, Math.min(200, Math.round(next)));
@@ -93,7 +167,22 @@ export function PdfMenu({
     setIsLoading(true);
     setRenderError(false);
     setRefreshKey(prev => prev + 1);
+    
+    // Reset mobile states
+    setManifest(null);
+    setCurrentPage(1);
+    setManifestError(false);
   }
+
+  // Mobile page navigation
+  const goToPage = (pageNum: number) => {
+    if (manifest && pageNum >= 1 && pageNum <= manifest.pageCount) {
+      setCurrentPage(pageNum);
+    }
+  };
+
+  const nextPage = () => goToPage(currentPage + 1);
+  const prevPage = () => goToPage(currentPage - 1);
 
   // Compute the viewer height
   const computedHeight: number | string = useMemo(() => {
@@ -101,7 +190,7 @@ export function PdfMenu({
     return height;
   }, [height]);
 
-  // Build viewer URL for iframe
+  // Build viewer URL for iframe (desktop only)
   const iframeSrc = useMemo(() => {
     if (!safeUrl) return "";
 
@@ -139,11 +228,16 @@ export function PdfMenu({
         {/* Left side - Device indicator */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-white/50 px-2 py-1 bg-white/5 rounded">
-            {deviceInfo.isMobile ? "📱 Mobile" : "🖥️ Desktop"}
+            {deviceInfo.isMobile ? "📱 Mobile (Images)" : "🖥️ Desktop (PDF)"}
           </span>
           {deviceInfo.isMobile && (
-            <span className="text-xs text-yellow-400 px-2 py-1 bg-yellow-400/10 rounded">
-              Mobile PDF viewing may be limited
+            <span className="text-xs text-green-400 px-2 py-1 bg-green-400/10 rounded">
+              Using image-based rendering
+            </span>
+          )}
+          {deviceInfo.isDesktop && (
+            <span className="text-xs text-blue-400 px-2 py-1 bg-blue-400/10 rounded">
+              Using PDF iframe
             </span>
           )}
         </div>
@@ -203,27 +297,122 @@ export function PdfMenu({
           </div>
         )}
         
-        {/* Iframe Renderer for both platforms */}
-        <iframe
-          ref={iframeRef}
-          key={refreshKey}
-          src={iframeSrc}
-          title={filename ?? "Menú PDF"}
-          style={{ width: "100%", height: "100%" }}
-          referrerPolicy="no-referrer"
-          className="bg-white"
-          allow="fullscreen"
-          onLoad={() => {
-            setIsLoading(false);
-          }}
-          onError={() => {
-            setRenderError(true);
-            setIsLoading(false);
-          }}
-        />
+        {/* Desktop: Iframe Renderer */}
+        {deviceInfo.isDesktop && (
+          <iframe
+            ref={iframeRef}
+            key={refreshKey}
+            src={iframeSrc}
+            title={filename ?? "Menú PDF"}
+            style={{ width: "100%", height: "100%" }}
+            referrerPolicy="no-referrer"
+            className="bg-white"
+            allow="fullscreen"
+            onLoad={() => {
+              setIsLoading(false);
+            }}
+            onError={() => {
+              setRenderError(true);
+              setIsLoading(false);
+            }}
+          />
+        )}
 
-        {/* Error State with Download Link */}
-        {renderError && (
+        {/* Mobile: Image-based Renderer */}
+        {deviceInfo.isMobile && (
+          <div className="flex flex-col h-full">
+            {manifest ? (
+              <>
+                {/* Page Navigation */}
+                {manifest.pageCount > 1 && (
+                  <div className="flex items-center justify-center gap-2 p-2 border-b border-white/10">
+                    <button
+                      onClick={prevPage}
+                      disabled={currentPage <= 1}
+                      className="px-3 py-1 bg-white/10 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                    >
+                      ←
+                    </button>
+                    <span className="text-white/80 text-sm">
+                      Page {currentPage} of {manifest.pageCount}
+                    </span>
+                    <button
+                      onClick={nextPage}
+                      disabled={currentPage >= manifest.pageCount}
+                      className="px-3 py-1 bg-white/10 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed rounded"
+                    >
+                      →
+                    </button>
+                  </div>
+                )}
+
+                {/* PDF Page Image */}
+                <div className="flex-1 flex items-center justify-center overflow-auto p-4">
+                  <img
+                    src={manifest.pages[currentPage - 1].url}
+                    alt={`Page ${currentPage} of ${filename || "PDF Menu"}`}
+                    className="max-w-full max-h-full object-contain"
+                    style={{
+                      transform: `scale(${zoom / 100})`,
+                      transformOrigin: 'center center'
+                    }}
+                  />
+                </div>
+              </>
+            ) : manifestError ? (
+              <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                <div className="text-6xl mb-4">📄</div>
+                <div className="text-lg mb-2">Menú disponible como PDF</div>
+                <div className="text-sm mb-4 text-white/50 text-center">
+                  Este menú aún no está disponible en formato de imágenes.
+                  <br />
+                  Puedes abrirlo en una nueva pestaña o descargarlo.
+                  <br />
+                  <span className="text-yellow-400">Nota: La conversión a imágenes ocurre automáticamente en futuras actualizaciones.</span>
+                </div>
+                <div className="flex gap-3 flex-wrap justify-center">
+                  <button
+                    onClick={() => {
+                      setManifestError(false);
+                      refreshPdf();
+                    }}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-md"
+                  >
+                    Intentar de nuevo
+                  </button>
+                  <a
+                    href={safeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white"
+                  >
+                    🔗 Abrir en nueva pestaña
+                  </a>
+                  <a
+                    href={safeUrl}
+                    download={filename || "menu.pdf"}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md text-white"
+                  >
+                    📥 Descargar PDF
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-white/70 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                  <div>Cargando menú...</div>
+                  <div className="text-xs text-white/50 mt-2">
+                    {clubId && menuId ? `Club: ${clubId}, Menu: ${menuId}` : 'Missing club or menu ID'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Error State with Download Link (desktop only) */}
+        {renderError && deviceInfo.isDesktop && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-white/70 bg-black/90">
             <div className="text-6xl mb-4">📄</div>
             <div className="text-lg mb-2">No se pudo cargar el PDF</div>
