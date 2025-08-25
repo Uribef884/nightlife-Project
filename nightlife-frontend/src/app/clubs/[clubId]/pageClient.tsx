@@ -190,6 +190,79 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   // Merged/normalized menu meta (CSR→SSR fallback)
   const menuMeta = useMemo(() => normalizeMenuMeta(club, clubSSR), [club, clubSSR]);
 
+  // Helper function to scroll to tickets section
+  const scrollToTickets = () => {
+    // Try multiple times with increasing delays to ensure DOM is ready
+    const attemptScroll = (attempt: number = 1) => {
+      const maxAttempts = 5;
+      const delay = attempt * 100; // 100ms, 200ms, 300ms, 400ms, 500ms
+      
+      setTimeout(() => {
+        // Try to find the tickets section first (most specific target)
+        const ticketsSection = document.getElementById('tickets-section');
+        if (ticketsSection) {
+          try {
+            ticketsSection.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'start' 
+            });
+          } catch (e) {
+            // Fallback: scroll to the element's position
+            const rect = ticketsSection.getBoundingClientRect();
+            window.scrollTo({
+              top: window.pageYOffset + rect.top - 100, // 100px offset from top
+              behavior: 'smooth'
+            });
+          }
+          return;
+        }
+        
+        // If no tickets section, try to find events section
+        const eventsSection = document.getElementById('events-section');
+        if (eventsSection) {
+          try {
+            eventsSection.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'start' 
+            });
+          } catch (e) {
+            const rect = eventsSection.getBoundingClientRect();
+            window.scrollTo({
+              top: window.pageYOffset + rect.top - 100,
+              behavior: 'smooth'
+            });
+          }
+          return;
+        }
+        
+        // Fallback to the entire reservas tab
+        const reservasTab = document.querySelector('[data-tab="reservas"]');
+        if (reservasTab) {
+          try {
+            reservasTab.scrollIntoView({ 
+              behavior: 'smooth', 
+              block: 'start' 
+            });
+          } catch (e) {
+            const rect = reservasTab.getBoundingClientRect();
+            window.scrollTo({
+              top: window.pageYOffset + rect.top - 100,
+              behavior: 'smooth'
+            });
+          }
+          return;
+        }
+        
+        // If still not found and we haven't exceeded max attempts, try again
+        if (attempt < maxAttempts) {
+          attemptScroll(attempt + 1);
+        }
+      }, delay);
+    };
+    
+    attemptScroll();
+  };
+
   /* NEW: publish the effective menu type for global consumers (e.g., ClubTabs)
      We show Carta ONLY when data-club-menu="structured" or "pdf". */
   useEffect(() => {
@@ -219,6 +292,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
     const rawHash = url.hash;
     const hash = (url.hash || "").replace("#", "").toLowerCase();
+    
     let t: TabKey =
       hash === "reservas" || hash === "carta" || hash === "general"
         ? (hash as TabKey)
@@ -245,8 +319,8 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     const qdate = sp.get("date");
     const date = qdate && /^\d{4}-\d{2}-\d{2}$/.test(qdate) ? qdate : todayLocal();
 
-
-
+    const prevTab = tab;
+    
     setTab((prev) => (prev !== t ? t : prev));
     setSelectedDate((prev) => {
       if (prev !== date) {
@@ -257,6 +331,11 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       }
       return prev;
     });
+
+    // Auto-scroll to tickets section when switching to reservas tab
+    if (t === "reservas" && prevTab !== "reservas") {
+      scrollToTickets();
+    }
   };
 
   useEffect(() => {
@@ -264,6 +343,24 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     const off = installLocationObserver(syncFromLocation);
     return () => off();
   }, [clubId, clubSSR]); // IMPORTANT: removed menuMeta dependency to avoid racey re-runs
+
+  // Auto-scroll when reservas tab becomes active
+  useEffect(() => {
+    if (tab === "reservas") {
+      scrollToTickets();
+    }
+  }, [tab]); // This will trigger whenever the tab changes
+
+  // Test scroll function on mount when coming from ad
+  useEffect(() => {
+    // Check if we're coming from an ad (has #reservas hash)
+    if (typeof window !== "undefined" && window.location.hash === "#reservas") {
+      // Wait a bit for the DOM to be ready, then test scroll
+      setTimeout(() => {
+        scrollToTickets();
+      }, 500);
+    }
+  }, []); // Only run once on mount
 
   // ── CSR data loads ──
   useEffect(() => {
@@ -477,12 +574,12 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       <div className="pt-3 pb-6">
         <AnimatePresence mode="wait">
           {tab === "general" && (
-            <motion.section key="tab-general" {...tabMotion} className="space-y-6">
+            <motion.section key="tab-general" data-tab="general" {...tabMotion} className="space-y-6">
               <ClubHeader
                 club={club}
                 onReservarClick={() => {
                   window.location.hash = "reservas";
-                  window.scrollTo({ top: 0, behavior: "smooth" });
+                  scrollToTickets();
                 }}
               />
 
@@ -504,7 +601,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                 <button
                   onClick={() => {
                     window.location.hash = "reservas";
-                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    scrollToTickets();
                   }}
                   className="w-full rounded-full bg-[#7A48D3] hover:bg-[#6B3FA0] text-white py-3 font-semibold shadow"
                 >
@@ -515,7 +612,12 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
           )}
 
           {tab === "reservas" && (
-            <motion.section key="tab-reservas" {...tabMotion} className="space-y-6">
+            <motion.section 
+              key="tab-reservas" 
+              data-tab="reservas"
+              {...tabMotion} 
+              className="space-y-6"
+            >
               <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
                 <h3 className="text-white font-semibold mb-3">Selecciona la fecha</h3>
 
@@ -549,52 +651,56 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
               </div>
 
               {/* Events list; expands the selected event card on event days */}
-              <ClubEvents
-                events={safeEvents}
-                selectedDate={selectedDate}
-                available={
-                  available
-                    ? {
-                        dateHasEvent: available.dateHasEvent,
-                        event: available.event,
-                        eventTickets: available.eventTickets,
-                      }
-                    : undefined
-                }
-                onChooseDate={(d) => {
-                  setSelectedDate(d);
-                }}
-              />
-
-              {availLoading && <div className="text-white/70">Cargando boletas...</div>}
-              {availError && <div className="text-red-300">{availError}</div>}
-
-              {/* Tickets grid — only when it is NOT an event day */}
-              {!isEventDay && (
-                <TicketsGrid
-                  club={club}
-                  selectedDate={selectedDate}
+              <div id="events-section">
+                <ClubEvents
                   events={safeEvents}
-                  tickets={safeTickets}
-                  selectedEventTickets={selectedEventTickets}
+                  selectedDate={selectedDate}
                   available={
                     available
                       ? {
                           dateHasEvent: available.dateHasEvent,
                           event: available.event,
                           eventTickets: available.eventTickets,
-                          generalTickets: (available as any).generalTickets,
-                          freeTickets: (available as any).freeTickets,
                         }
                       : undefined
                   }
+                  onChooseDate={(d) => {
+                    setSelectedDate(d);
+                  }}
                 />
+              </div>
+
+              {availLoading && <div className="text-white/70">Cargando boletas...</div>}
+              {availError && <div className="text-red-300">{availError}</div>}
+
+              {/* Tickets grid — only when it is NOT an event day */}
+              {!isEventDay && (
+                <div data-tickets-content id="tickets-section">
+                  <TicketsGrid
+                    club={club}
+                    selectedDate={selectedDate}
+                    events={safeEvents}
+                    tickets={safeTickets}
+                    selectedEventTickets={selectedEventTickets}
+                    available={
+                      available
+                        ? {
+                            dateHasEvent: available.dateHasEvent,
+                            event: available.event,
+                            eventTickets: available.eventTickets,
+                            generalTickets: (available as any).generalTickets,
+                            freeTickets: (available as any).freeTickets,
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
               )}
             </motion.section>
           )}
 
           {tab === "carta" && (
-            <motion.section key="tab-carta" {...tabMotion} className="space-y-6">
+            <motion.section key="tab-carta" data-tab="carta" {...tabMotion} className="space-y-6">
               {(() => {
                 const hasPdf = menuMeta.type === "pdf" && Boolean(menuMeta.pdf);
                 const isStructured = menuMeta.type === "structured";

@@ -11,6 +11,7 @@ import { validateTicketInput } from "../../utils/ticketValidators";
 import { sanitizeInput, sanitizeObject } from "../../utils/sanitizeInput";
 import { TicketPurchase } from "../../entities/TicketPurchase";
 import { computeDynamicPrice, computeDynamicEventPrice } from "../../utils/dynamicPricing";
+import { cleanupTicketAds } from "../../utils/cleanupAds";
 
 // Admin function to get tickets by club ID
 export const getTicketsByClubAdmin = async (req: Request, res: Response): Promise<void> => {
@@ -667,6 +668,9 @@ export const deleteTicketAdmin = async (req: Request, res: Response): Promise<vo
     // Check if there are associated purchases
     const associatedPurchases = await purchaseRepo.count({ where: { ticketId: ticketId } });
 
+    // Clean up associated ads automatically
+    const adCleanupResult = await cleanupTicketAds(ticketId);
+
     if (associatedPurchases > 0) {
       // Soft delete - mark as deleted but keep the record
       ticket.isDeleted = true;
@@ -678,14 +682,16 @@ export const deleteTicketAdmin = async (req: Request, res: Response): Promise<vo
         message: "Ticket soft deleted successfully", 
         deletedAt: ticket.deletedAt,
         associatedPurchases,
-        note: "Ticket marked as deleted but preserved due to existing purchases"
+        adCleanupResult,
+        note: "Ticket marked as deleted but preserved due to existing purchases. Associated ads have been deactivated."
       });
     } else {
       // Hard delete - no associated purchases, safe to completely remove
       await ticketRepo.remove(ticket);
       res.status(200).json({ 
         message: "Ticket permanently deleted successfully",
-        note: "No associated purchases found, ticket completely removed"
+        adCleanupResult,
+        note: "No associated purchases found, ticket completely removed. Associated ads have been deactivated."
       });
     }
   } catch (error) {

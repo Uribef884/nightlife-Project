@@ -1,25 +1,46 @@
 // src/components/domain/club/PdfMenu.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { detectDevice } from "@/lib/deviceDetection";
+/**
+ * Desktop  → IFRAME (native PDF controls), keeps `height` prop.
+ * Mobile   → IMAGES (manifest) with swipe + pinch-to-zoom + double-tap zoom.
+ *            No black letterboxing: image is width: 100%, height: auto.
+ *            Bottom pill (← 1 / N →) + dots BELOW the image (not overlay).
+ *            When zoomed (>1.02), page-swipe is disabled and user can pan.
+ *
+ * Deps:
+ *  - detectDevice() from "@/lib/deviceDetection"
+ *  - useSwipe() from "@/components/common/useSwipe"
+ *  - usePinchZoom() from "@/components/common/usePinchZoom"
+ */
 
+import * as React from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { detectDevice } from "@/lib/deviceDetection";
+import { useSwipe } from "@/components/common/useSwipe";
+import { usePinchZoom } from "@/components/common/usePinchZoom";
+
+// ---------------- Types ----------------
 interface PageImage {
   url: string;
   w: number;
   h: number;
   bytes: number;
 }
-
 interface Thumbnail {
   url: string;
   w: number;
   h: number;
 }
-
 interface MenuManifest {
   pageCount: number;
-  format: 'webp';
+  format: "webp";
   width: number;
   height: number;
   pages: PageImage[];
@@ -27,12 +48,7 @@ interface MenuManifest {
   createdAt: string;
 }
 
-/**
- * Enhanced PDF viewer with device-specific rendering strategies
- * - Desktop: Iframe with PDF proxy for zoom control
- * - Mobile: Image-based rendering using converted PDF pages
- * - No duplicate controls, proper zoom functionality
- */
+// ---------------- Component ----------------
 export function PdfMenu({
   url,
   filename,
@@ -48,408 +64,494 @@ export function PdfMenu({
   clubId?: string;
   menuId?: string;
 }) {
-  // Only allow http/https URLs to avoid javascript: or data: injections
+  // Security: allow only http/https schemes
   const safeUrl = useMemo(() => {
     try {
       const u = new URL(url);
       if (u.protocol === "http:" || u.protocol === "https:") return u.toString();
     } catch {}
-    return ""; // invalid
+    return "";
   }, [url]);
 
-  // Device detection
+  // Device flags
   const [deviceInfo, setDeviceInfo] = useState(() => detectDevice());
-  
-  // Zoom percentage mode (50–200) - used on both platforms
-  const [zoom, setZoom] = useState<number>(100);
-  
-  // Loading state for better UX
+  const isMobile = deviceInfo.isMobile;
+  const isDesktop = !isMobile;
+
+  // Common loading
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [renderError, setRenderError] = useState<boolean>(false);
 
-  // Mobile image-based states
-  const [manifest, setManifest] = useState<MenuManifest | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [manifestError, setManifestError] = useState<boolean>(false);
-
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  // ---------- Desktop iframe controls ----------
+  const [renderError, setRenderError] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  
-  // Force refresh when URL changes
-  const [refreshKey, setRefreshKey] = useState<number>(0);
+  const [zoomDesktop, setZoomDesktop] = useState(100);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Reset when URL changes
+  // ---------- Mobile image viewer state ----------
+  const [manifest, setManifest] = useState<MenuManifest | null>(null);
+  const [manifestError, setManifestError] = useState(false);
+  const [page, setPage] = useState(0); // 0-based index
+  const [slideDir, setSlideDir] = useState<"left" | "right" | null>(null);
+  const [enterKey, setEnterKey] = useState(0);
+  const pageCount = manifest?.pageCount ?? 0;
+
+  // Re-detect on resize (helps with orientation change)
   useEffect(() => {
-    setIsLoading(true);
-    setRenderError(false);
-    setRefreshKey(prev => prev + 1);
-    
-    // Re-detect device
-    const newDeviceInfo = detectDevice();
-    setDeviceInfo(newDeviceInfo);
-    
-    // Reset mobile states
-    setManifest(null);
-    setCurrentPage(1);
-    setManifestError(false);
-  }, [url]);
-
-  // Update device info on window resize
-  useEffect(() => {
-    const handleResize = () => {
-      setDeviceInfo(detectDevice());
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const fn = () => setDeviceInfo(detectDevice());
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
   }, []);
 
-  // Load manifest for mobile devices
+  // ---------- Load manifest ONLY on mobile ----------
   useEffect(() => {
-    if (deviceInfo.isMobile && clubId && menuId && !manifest && !manifestError) {
-      // Add timeout to prevent infinite loading
-      const timeoutId = setTimeout(() => {
-        setManifestError(true);
-        setIsLoading(false);
-      }, 10000); // 10 second timeout
+    let cancelled = false;
 
-      loadManifest().finally(() => {
-        clearTimeout(timeoutId);
-      });
-    } else if (deviceInfo.isMobile && (!clubId || !menuId)) {
-      setManifestError(true);
-      setIsLoading(false);
-    }
-  }, [deviceInfo.isMobile, clubId, menuId, manifest, manifestError]);
-
-  const loadManifest = async () => {
-    try {
-      const response = await fetch(`/api/menu-manifest?clubId=${clubId}&menuId=${menuId}`);
-
-      if (response.ok) {
-        const manifestData = await response.json();
-        setManifest(manifestData);
+    const load = async () => {
+      if (!isMobile) {
+        // Desktop: show iframe only
         setIsLoading(false);
-      } else {
-        const errorText = await response.text();
-        setManifestError(true);
-        setIsLoading(false);
+        setManifest(null);
+        setManifestError(false);
+        return;
       }
-    } catch (error) {
-      setManifestError(true);
-      setIsLoading(false);
-    }
+
+      setIsLoading(true);
+      setManifest(null);
+      setManifestError(false);
+      setPage(0);
+
+      if (!clubId || !menuId) {
+        setManifestError(true);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const resp = await fetch(
+          `/api/menu-manifest?clubId=${encodeURIComponent(
+            clubId
+          )}&menuId=${encodeURIComponent(menuId)}`
+        );
+        if (!resp.ok) {
+          if (!cancelled) {
+            setManifestError(true);
+            setIsLoading(false);
+          }
+          return;
+        }
+        const data: MenuManifest = await resp.json();
+        if (cancelled) return;
+
+        setManifest(data);
+        setIsLoading(false);
+        queueMicrotask(() => preloadNeighbors(0, data));
+      } catch {
+        if (!cancelled) {
+          setManifestError(true);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [isMobile, clubId, menuId]);
+
+  // ---------- Desktop: Ctrl/Cmd + wheel zoom (updates iframe hash) ----------
+  useEffect(() => {
+    if (!isDesktop) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const delta = -Math.sign(e.deltaY) * 10;
+        const nz = Math.max(50, Math.min(200, zoomDesktop + delta));
+        setZoomDesktop(nz);
+
+        if (iframeRef.current) {
+          const currentSrc = iframeRef.current.src;
+          const baseUrl = currentSrc.split("#")[0];
+          iframeRef.current.src = `${baseUrl}#zoom=${nz}`;
+        }
+      }
+    };
+
+    document.addEventListener("wheel", onWheel, { passive: false });
+    return () => document.removeEventListener("wheel", onWheel); // cleanup
+  }, [isDesktop, zoomDesktop]);
+
+  // ---------- Mobile interactions: pinch + swipe ----------
+  // Pinch-to-zoom (two fingers) + pan (one finger while zoomed)
+  const {
+    bind: pinchBind,
+    scale,
+    offset,
+    setScale,
+    reset: resetPinch,
+  } = usePinchZoom({ minScale: 1, maxScale: 2.5 });
+
+  // Enable page swipe only when not zoomed-in
+  const swipeEnabled = scale <= 1.02;
+
+  const {
+    bind: swipeBind,
+    dragX,
+    reset: resetSwipe,
+  } = useSwipe({
+    onSwipeLeft: () => swipeEnabled && goNext("left"),
+    onSwipeRight: () => swipeEnabled && goPrev("right"),
+    minDistance: 48,
+    maxAngleDeg: 35,
+  });
+
+  // Compose pointer handlers so pinch + swipe can coexist
+  const composedHandlers = {
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+      pinchBind.onPointerDown?.(e);
+      if (swipeEnabled) swipeBind.onPointerDown?.(e);
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
+      pinchBind.onPointerMove?.(e);
+      if (swipeEnabled) swipeBind.onPointerMove?.(e);
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => {
+      pinchBind.onPointerUp?.(e);
+      if (swipeEnabled) swipeBind.onPointerUp?.(e);
+    },
+    onPointerCancel: (e: React.PointerEvent<HTMLDivElement>) => {
+      // pinch supports cancel; swipe doesn't need it
+      pinchBind.onPointerCancel?.(e);
+    },
   };
 
-  function applyZoom(next: number) {
-    const clamped = Math.max(50, Math.min(200, Math.round(next)));
-    setZoom(clamped);
-    
-    // Reload iframe with new zoom parameter
-    if (iframeRef.current) {
-      const currentSrc = iframeRef.current.src;
-      const baseUrl = currentSrc.split('#')[0];
-      const newSrc = `${baseUrl}#zoom=${clamped}`;
-      iframeRef.current.src = newSrc;
-    }
-  }
-  
-  function fitPercent100() {
-    setZoom(100);
-    if (iframeRef.current) {
-      const currentSrc = iframeRef.current.src;
-      const baseUrl = currentSrc.split('#')[0];
-      iframeRef.current.src = `${baseUrl}#zoom=100`;
-    }
+  // ---------- Helpers ----------
+  function preloadNeighbors(index: number, man: MenuManifest = manifest!) {
+    const urls: string[] = [];
+    if (index + 1 < man.pageCount) urls.push(man.pages[index + 1].url);
+    if (index - 1 >= 0) urls.push(man.pages[index - 1].url);
+    urls.forEach((u) => {
+      const img = new Image();
+      img.src = u;
+    });
   }
 
-  function refreshPdf() {
-    setIsLoading(true);
-    setRenderError(false);
-    setRefreshKey(prev => prev + 1);
-    
-    // Reset mobile states
-    setManifest(null);
-    setCurrentPage(1);
-    setManifestError(false);
-  }
+  const goTo = useCallback(
+    (nextIndex: number, dir: "left" | "right" | null = null) => {
+      if (!manifest) return;
 
-  // Mobile page navigation
-  const goToPage = (pageNum: number) => {
-    if (manifest && pageNum >= 1 && pageNum <= manifest.pageCount) {
-      setCurrentPage(pageNum);
+      // Out of bounds → small pulse on current page
+      if (nextIndex < 0 || nextIndex >= manifest.pageCount) {
+        setSlideDir(null);
+        setEnterKey((k) => k + 1);
+        return;
+      }
+
+      setSlideDir(dir);
+      setPage(nextIndex);
+      setEnterKey((k) => k + 1);
+      preloadNeighbors(nextIndex);
+
+      // Reset gestures between pages
+      resetSwipe();
+      resetPinch();
+    },
+    [manifest, resetSwipe, resetPinch]
+  );
+
+  const goNext = useCallback(
+    (dir: "left" | null = "left") => goTo(page + 1, dir ?? "left"),
+    [page, goTo]
+  );
+  const goPrev = useCallback(
+    (dir: "right" | null = "right") => goTo(page - 1, dir ?? "right"),
+    [page, goTo]
+  );
+
+  // Mobile: double-tap to toggle zoom (center area) when not zoomed
+  const lastTap = useRef<number>(0);
+  const onMobileClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!swipeEnabled) return; // ignore while zoomed (user is panning)
+
+    const bounds = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - bounds.left;
+
+    // Edge taps (25%) navigate pages
+    if (x < bounds.width * 0.25) {
+      goPrev();
+      return;
     }
+    if (x > bounds.width * 0.75) {
+      goNext();
+      return;
+    }
+
+    // Double-tap toggle 1x/1.5x
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      setScale(scale === 1 ? 1.5 : 1);
+    }
+    lastTap.current = now;
   };
 
-  const nextPage = () => goToPage(currentPage + 1);
-  const prevPage = () => goToPage(currentPage - 1);
-
-  // Compute the viewer height
-  const computedHeight: number | string = useMemo(() => {
-    if (height !== "70vh") return height;
-    return height;
-  }, [height]);
-
-  // Build viewer URL for iframe (desktop only)
+  // Desktop iframe URL
   const iframeSrc = useMemo(() => {
     if (!safeUrl) return "";
-
-    // Use our PDF proxy with iframe strategy
-    const proxyUrl = `/api/pdf-proxy?url=${encodeURIComponent(safeUrl)}&strategy=iframe`;
-    
-    // Add only zoom parameter - remove problematic parameters that cause mobile issues
-    const hash = `#zoom=${zoom}`;
-    
-    // Combine proxy URL with hash parameters
-    const finalUrl = `${proxyUrl}${hash}`;
-    
-    // Ensure absolute URL to avoid relative resolution issues
+    const proxy = `/api/pdf-proxy?url=${encodeURIComponent(
+      safeUrl
+    )}&strategy=iframe`;
+    const hash = `#zoom=${zoomDesktop}`;
     if (typeof window !== "undefined") {
-      return new URL(finalUrl, window.location.origin).href;
+      return new URL(`${proxy}${hash}`, window.location.origin).href;
     }
-    return finalUrl;
-  }, [safeUrl, zoom]);
+    return `${proxy}${hash}`;
+  }, [safeUrl, zoomDesktop]);
 
+  // Guard
   if (!safeUrl) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-white/70">
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/70">
         No se pudo cargar el PDF del menú.
       </div>
     );
   }
 
+  // Height policy: desktop uses provided height, mobile auto
+  const computedHeight: number | string = useMemo(() => height, [height]);
+  const showMobileImages = isMobile && !!manifest && !manifestError;
+
+  // ---------------- Render ----------------
   return (
     <div
-      ref={wrapperRef}
-      className={["rounded-xl border border-white/10 bg-white/5", className].join(" ")}
+      className={[
+        "relative rounded-2xl border border-white/10 bg-white/5 shadow-lg",
+        className,
+      ].join(" ")}
+      style={{ height: isDesktop ? computedHeight : undefined }}
     >
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 p-2 border-b border-white/10 justify-between">
-        {/* Left side - Device indicator */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-white/50 px-2 py-1 bg-white/5 rounded">
-            {deviceInfo.isMobile ? "📱 Mobile (Images)" : "🖥️ Desktop (PDF)"}
-          </span>
-          {deviceInfo.isMobile && (
-            <span className="text-xs text-green-400 px-2 py-1 bg-green-400/10 rounded">
-              Using image-based rendering
-            </span>
-          )}
-          {deviceInfo.isDesktop && (
-            <span className="text-xs text-blue-400 px-2 py-1 bg-blue-400/10 rounded">
-              Using PDF iframe
-            </span>
-          )}
-        </div>
-
-        {/* Right side - Zoom controls */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="h-9 min-w-9 rounded-md bg-white/10 px-3 text-white hover:bg-white/15"
-            onClick={() => applyZoom(zoom - 10)}
-            aria-label="Disminuir zoom"
-            title="Disminuir zoom"
-          >
-            −
-          </button>
-          <div className="w-14 text-center text-white/80 text-sm tabular-nums">
-            {zoom}%
-          </div>
-          <button
-            type="button"
-            className="h-9 min-w-9 rounded-md bg-white/10 px-3 text-white hover:bg-white/15"
-            onClick={() => applyZoom(zoom + 10)}
-            aria-label="Aumentar zoom"
-            title="Aumentar zoom"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            className="h-9 min-w-9 rounded-md bg-white/10 px-3 text-white hover:bg-white/15"
-            onClick={fitPercent100}
-            aria-label="Ajustar a 100%"
-            title="Ajustar a 100%"
-          >
-            100%
-          </button>
-          <button
-            type="button"
-            className="h-9 rounded-md bg-white/10 px-3 text-white hover:bg-white/15"
-            onClick={refreshPdf}
-            aria-label="Recargar PDF"
-            title="Recargar PDF"
-          >
-            ↻
-          </button>
-        </div>
-      </div>
-
-      {/* Viewer */}
-      <div className="overflow-hidden rounded-b-xl relative" style={{ height: computedHeight }}>
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-10">
-            <div className="text-white/70 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-              <div>Cargando PDF...</div>
+      {/* ======= DESKTOP (native PDF iframe) ======= */}
+      {isDesktop && (
+        <div className="h-full w-full overflow-hidden rounded-2xl">
+          {isLoading && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70">
+              <div className="text-center text-white/70">
+                <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-white" />
+                <div>Cargando PDF...</div>
+              </div>
             </div>
-          </div>
-        )}
-        
-        {/* Desktop: Iframe Renderer */}
-        {deviceInfo.isDesktop && (
+          )}
+
           <iframe
             ref={iframeRef}
             key={refreshKey}
             src={iframeSrc}
             title={filename ?? "Menú PDF"}
-            style={{ width: "100%", height: "100%" }}
+            className="h-full w-full bg-white"
             referrerPolicy="no-referrer"
-            className="bg-white"
             allow="fullscreen"
-            onLoad={() => {
-              setIsLoading(false);
-            }}
+            onLoad={() => setIsLoading(false)}
             onError={() => {
               setRenderError(true);
               setIsLoading(false);
             }}
           />
-        )}
 
-        {/* Mobile: Image-based Renderer */}
-        {deviceInfo.isMobile && (
-          <div className="flex flex-col h-full">
-            {manifest ? (
-              <>
-                {/* Page Navigation */}
-                {manifest.pageCount > 1 && (
-                  <div className="flex items-center justify-center gap-2 p-2 border-b border-white/10">
-                    <button
-                      onClick={prevPage}
-                      disabled={currentPage <= 1}
-                      className="px-3 py-1 bg-white/10 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed rounded"
-                    >
-                      ←
-                    </button>
-                    <span className="text-white/80 text-sm">
-                      Page {currentPage} of {manifest.pageCount}
-                    </span>
-                    <button
-                      onClick={nextPage}
-                      disabled={currentPage >= manifest.pageCount}
-                      className="px-3 py-1 bg-white/10 hover:bg-white/15 disabled:opacity-50 disabled:cursor-not-allowed rounded"
-                    >
-                      →
-                    </button>
-                  </div>
-                )}
+          {renderError && (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/90 p-8 text-white/70">
+              <div className="mb-4 text-6xl">📄</div>
+              <div className="mb-2 text-lg">No se pudo cargar el PDF</div>
+              <div className="mb-4 text-center text-sm text-white/50">
+                El navegador no puede mostrar este PDF en la vista previa.
+                <br />
+                Puedes abrirlo en una nueva pestaña o descargarlo.
+              </div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button
+                  onClick={() => {
+                    setRenderError(false);
+                    setRefreshKey((k) => k + 1);
+                  }}
+                  className="rounded-md bg-white/10 px-4 py-2 hover:bg-white/15"
+                >
+                  Intentar de nuevo
+                </button>
+                <a
+                  href={safeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                >
+                  🔗 Abrir en nueva pestaña
+                </a>
+                <a
+                  href={safeUrl}
+                  download={filename || "menu.pdf"}
+                  className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+                >
+                  📥 Descargar PDF
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
-                {/* PDF Page Image */}
-                <div className="flex-1 flex items-center justify-center overflow-auto p-4">
-                  <img
-                    src={manifest.pages[currentPage - 1].url}
-                    alt={`Page ${currentPage} of ${filename || "PDF Menu"}`}
-                    className="max-w-full max-h-full object-contain"
-                    style={{
-                      transform: `scale(${zoom / 100})`,
-                      transformOrigin: 'center center'
-                    }}
-                  />
-                </div>
-              </>
-            ) : manifestError ? (
-              <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                <div className="text-6xl mb-4">📄</div>
-                <div className="text-lg mb-2">Menú disponible como PDF</div>
-                <div className="text-sm mb-4 text-white/50 text-center">
-                  Este menú aún no está disponible en formato de imágenes.
-                  <br />
-                  Puedes abrirlo en una nueva pestaña o descargarlo.
-                  <br />
-                  <span className="text-yellow-400">Nota: La conversión a imágenes ocurre automáticamente en futuras actualizaciones.</span>
-                </div>
-                <div className="flex gap-3 flex-wrap justify-center">
-                  <button
-                    onClick={() => {
-                      setManifestError(false);
-                      refreshPdf();
-                    }}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-md"
-                  >
-                    Intentar de nuevo
-                  </button>
-                  <a
-                    href={safeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white"
-                  >
-                    🔗 Abrir en nueva pestaña
-                  </a>
-                  <a
-                    href={safeUrl}
-                    download={filename || "menu.pdf"}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md text-white"
-                  >
-                    📥 Descargar PDF
-                  </a>
+      {/* ======= MOBILE (images with swipe + pinch) ======= */}
+      {isMobile && (
+        <div className="w-full">
+          {/* Viewer: no fixed height, no letterboxing; handlers composed for pinch+swipe */}
+          <div
+            className="relative w-full overflow-hidden rounded-2xl bg-transparent"
+            style={{ touchAction: "none" as const }}
+            onClick={onMobileClick}
+            onPointerDown={composedHandlers.onPointerDown}
+            onPointerMove={composedHandlers.onPointerMove}
+            onPointerUp={composedHandlers.onPointerUp}
+            onPointerCancel={composedHandlers.onPointerCancel}
+          >
+            {isLoading && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50">
+                <div className="text-center text-white/80">
+                  <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-b-2 border-white" />
+                  <div>Cargando menú...</div>
                 </div>
               </div>
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-white/70 text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                  <div>Cargando menú...</div>
-                  <div className="text-xs text-white/50 mt-2">
-                    {clubId && menuId ? `Club: ${clubId}, Menu: ${menuId}` : 'Missing club or menu ID'}
+            )}
+
+            {/* Success: render current page */}
+            {showMobileImages && (
+              <AnimatedMobilePage
+                key={enterKey}
+                src={manifest!.pages[page].url}
+                alt={`Página ${page + 1} de ${filename || "Menú"}`}
+                // Combine transforms: swipe drag (when unzoomed) + pinch pan + pinch scale
+                tx={(swipeEnabled ? dragX : 0) + offset.x}
+                ty={offset.y}
+                scale={scale}
+                slideDir={slideDir}
+              />
+            )}
+
+            {/* Fallback (no manifest on mobile) */}
+            {!isLoading && !showMobileImages && (
+              <div className="flex aspect-[3/4] w-full items-center justify-center rounded-2xl bg-black/30 p-6 text-center text-white/80">
+                <div>
+                  <div className="mb-2 text-lg">Menú disponible como PDF</div>
+                  <div className="mb-4 text-sm text-white/60">
+                    Aún no hay imágenes del menú. Puedes abrir o descargar el PDF.
+                  </div>
+                  <div className="flex justify-center gap-3">
+                    <a
+                      href={safeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                    >
+                      🔗 Abrir PDF
+                    </a>
+                    <a
+                      href={safeUrl}
+                      download={filename || "menu.pdf"}
+                      className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+                    >
+                      📥 Descargar
+                    </a>
                   </div>
                 </div>
               </div>
             )}
           </div>
-        )}
 
-        {/* Error State with Download Link (desktop only) */}
-        {renderError && deviceInfo.isDesktop && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-white/70 bg-black/90">
-            <div className="text-6xl mb-4">📄</div>
-            <div className="text-lg mb-2">No se pudo cargar el PDF</div>
-            <div className="text-sm mb-4 text-white/50 text-center">
-              El navegador no puede mostrar este PDF en la vista previa.
-              <br />
-              Puedes abrirlo en una nueva pestaña o descargarlo.
+          {/* Pill + dots BELOW the image */}
+          {manifest && pageCount > 0 && (
+            <div className="mt-2 flex w-full flex-col items-center justify-center gap-1">
+              <div className="flex items-center gap-4 rounded-full bg-black/60 px-4 py-1.5 text-white backdrop-blur">
+                <button
+                  onClick={() => goPrev()}
+                  className="rounded-md px-1.5 py-0.5 text-base hover:bg-white/10 disabled:opacity-40"
+                  aria-label="Anterior"
+                  disabled={page === 0}
+                >
+                  ←
+                </button>
+                <div className="select-none text-sm tabular-nums">
+                  {page + 1} / {pageCount}
+                </div>
+                <button
+                  onClick={() => goNext()}
+                  className="rounded-md px-1.5 py-0.5 text-base hover:bg-white/10 disabled:opacity-40"
+                  aria-label="Siguiente"
+                  disabled={page === pageCount - 1}
+                >
+                  →
+                </button>
+              </div>
+
+              {pageCount > 1 && (
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: pageCount }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={[
+                        "h-1.5 w-1.5 rounded-full transition-opacity",
+                        i === page
+                          ? "bg-white opacity-100"
+                          : "bg-white/50 opacity-60",
+                      ].join(" ")}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="flex gap-3 flex-wrap justify-center">
-              <button
-                onClick={() => {
-                  setRenderError(false);
-                  refreshPdf();
-                }}
-                className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-md"
-              >
-                Intentar de nuevo
-              </button>
-              <a
-                href={safeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-white"
-              >
-                🔗 Abrir en nueva pestaña
-              </a>
-              <a
-                href={safeUrl}
-                download={filename || "menu.pdf"}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-md text-white"
-              >
-                📥 Descargar PDF
-              </a>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+// --------------- Mobile page (animated) ---------------
+function AnimatedMobilePage({
+  src,
+  alt,
+  tx,
+  ty,
+  scale,
+  slideDir,
+}: {
+  src: string;
+  alt: string;
+  tx: number;
+  ty: number;
+  scale: number;
+  slideDir: "left" | "right" | null;
+}) {
+  const [enterOffset, setEnterOffset] = useState(0);
+
+  useEffect(() => {
+    // Subtle slide-in animation when page changes
+    if (slideDir === "left") setEnterOffset(24);
+    else if (slideDir === "right") setEnterOffset(-24);
+    else setEnterOffset(0);
+
+    const id = requestAnimationFrame(() => setEnterOffset(0));
+    return () => cancelAnimationFrame(id);
+  }, [slideDir]);
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      // Natural height → no letterboxing; rounded is inherited from parent
+      className="w-full select-none object-contain transition-transform duration-200 ease-out"
+      style={{
+        transform: `translate3d(${tx + enterOffset}px, ${ty}px, 0) scale(${scale})`,
+        transformOrigin: "center center",
+        willChange: "transform",
+        userSelect: "none",
+      }}
+      draggable={false}
+    />
   );
 }

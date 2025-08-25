@@ -6,6 +6,7 @@ import { validateImageUrlWithResponse } from "../../utils/validateImageUrl";
 import { sanitizeInput, sanitizeObject } from "../../utils/sanitizeInput";
 import { S3Service } from "../../services/s3Service";
 import { ImageService } from "../../services/imageService";
+import { cleanupMenuItemS3Files } from "../../utils/s3Cleanup";
 
 // Admin function to get menu for a specific club
 export const getMenuForClubAdmin = async (req: Request, res: Response): Promise<void> => {
@@ -164,130 +165,64 @@ export const createMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
 // Admin function to update menu item
 export const updateMenuItemAdmin = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const menuItemId = req.params.id;
+    const { id } = req.params;
     const menuItemRepo = AppDataSource.getRepository(MenuItem);
 
-    const menuItem = await menuItemRepo.findOne({ where: { id: menuItemId } });
+    const menuItem = await menuItemRepo.findOne({ where: { id } });
     if (!menuItem) {
       res.status(404).json({ error: "Menu item not found" });
       return;
     }
 
-    // ❌ Validate that menu item belongs to the expected club
-    const expectedClubId = req.params.clubId;
-    if (menuItem.clubId !== expectedClubId) {
-      res.status(403).json({ 
-        error: `Menu item '${menuItem.name}' does not belong to the specified club` 
-      });
-      return;
-    }
-
-    // Sanitize inputs
+    // Sanitize all string inputs
     const sanitizedBody = sanitizeObject(req.body, [
       'name', 'description', 'imageUrl'
-    ], { maxLength: 500 });
+    ], { maxLength: 1000 });
+    
+    const { name, description, imageUrl, isActive, hasVariants, dynamicPricingEnabled, maxPerPerson } = sanitizedBody;
 
-    const {
-      name,
-      description,
-      imageUrl,
-      price,
-      maxPerPerson,
-      hasVariants,
-      dynamicPricingEnabled
-    } = sanitizedBody;
-
-    // Validate image URL if provided
-    if (imageUrl && !validateImageUrlWithResponse(imageUrl, res)) {
-      return;
-    }
-
-    if (typeof hasVariants === "boolean" && hasVariants !== menuItem.hasVariants) {
-      res.status(400).json({ error: "Cannot change hasVariants after item creation" });
-      return;
-    }
-
-    if (typeof name === "string") {
-      const sanitizedName = sanitizeInput(name);
-      if (!sanitizedName) {
+    if (name !== undefined) {
+      if (!name) {
         res.status(400).json({ error: "Name is required" });
         return;
       }
-      menuItem.name = sanitizedName;
+      menuItem.name = name;
     }
 
-    if (typeof description === "string") {
-      menuItem.description = sanitizeInput(description) ?? undefined;
+    if (description !== undefined) {
+      menuItem.description = description;
     }
 
-    if (typeof imageUrl === "string") {
+    if (imageUrl !== undefined) {
+      if (imageUrl && !validateImageUrlWithResponse(imageUrl, res)) {
+        return;
+      }
       menuItem.imageUrl = imageUrl;
     }
 
-    // Parse boolean values from form data for validation
-    const hasVariantsBool = menuItem.hasVariants;
-    const priceNum = price && price !== "" ? Number(price) : undefined;
-    const maxPerPersonNum = maxPerPerson && maxPerPerson !== "" ? Number(maxPerPerson) : undefined;
-
-    // Only validate price if it's provided in the request
-    if (price !== undefined) {
-      if (hasVariantsBool && priceNum !== null && priceNum !== undefined) {
-        res.status(400).json({ error: "Price must be null when hasVariants is true" });
-        return;
-      }
-
-      if (!hasVariantsBool && (typeof priceNum !== "number" || priceNum <= 0)) {
-        res.status(400).json({ error: "Price must be a positive number (greater than 0) if hasVariants is false" });
-        return;
-      }
-
-      // Validate minimum cost for menu items (no free items allowed)
-      if (!hasVariantsBool && priceNum !== undefined && priceNum < 1500) {
-        res.status(400).json({ error: "Price must be at least 1500 COP for menu items." });
-        return;
-      }
+    if (typeof isActive === "boolean") {
+      menuItem.isActive = isActive;
     }
 
-    // Only validate maxPerPerson if it's provided in the request
+    if (typeof hasVariants === "boolean") {
+      menuItem.hasVariants = hasVariants;
+    }
+
+    if (typeof dynamicPricingEnabled === "boolean") {
+      menuItem.dynamicPricingEnabled = dynamicPricingEnabled;
+    }
+
     if (maxPerPerson !== undefined) {
-      if (hasVariantsBool && maxPerPersonNum !== null && maxPerPersonNum !== undefined) {
-        res.status(400).json({ error: "maxPerPerson must be null when hasVariants is true" });
-        return;
-      }
-
-      if (!hasVariantsBool && (typeof maxPerPersonNum !== "number" || maxPerPersonNum <= 0)) {
-        res.status(400).json({ error: "maxPerPerson must be a positive number if hasVariants is false" });
-        return;
-      }
-    }
-
-    // Update price if provided and valid
-    if (price !== undefined) {
-      if (hasVariantsBool) {
-        menuItem.price = undefined;
-      } else {
-        menuItem.price = priceNum;
-      }
-    }
-
-    // Update maxPerPerson if provided and valid
-    if (maxPerPerson !== undefined) {
-      if (hasVariantsBool) {
+      if (maxPerPerson === null) {
         menuItem.maxPerPerson = undefined;
       } else {
-        menuItem.maxPerPerson = maxPerPersonNum;
+        const parsedMaxPerPerson = parseInt(maxPerPerson);
+        if (isNaN(parsedMaxPerPerson) || parsedMaxPerPerson <= 0) {
+          res.status(400).json({ error: "Max per person must be a positive integer" });
+          return;
+        }
+        menuItem.maxPerPerson = parsedMaxPerPerson;
       }
-    }
-
-    if (dynamicPricingEnabled !== undefined) {
-      // Enforce that parent menu items with variants cannot have dynamic pricing enabled
-      if (menuItem.hasVariants && dynamicPricingEnabled) {
-        res.status(400).json({ 
-          error: "Parent menu items with variants cannot have dynamic pricing enabled. Dynamic pricing should be configured on individual variants instead." 
-        });
-        return;
-      }
-      menuItem.dynamicPricingEnabled = !!dynamicPricingEnabled;
     }
 
     await menuItemRepo.save(menuItem);
@@ -310,19 +245,17 @@ export const deleteMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
       return;
     }
 
-    // ❌ Validate that menu item belongs to the expected club
-    const expectedClubId = req.params.clubId;
-    if (menuItem.clubId !== expectedClubId) {
-      res.status(403).json({ 
-        error: `Menu item '${menuItem.name}' does not belong to the specified club` 
-      });
-      return;
-    }
+    // Clean up S3 image
+    const s3CleanupResult = await cleanupMenuItemS3Files(menuItem);
 
     menuItem.isDeleted = true;
     await menuItemRepo.save(menuItem);
 
-    res.status(200).json({ message: "Menu item deleted successfully" });
+    res.status(200).json({ 
+      message: "Menu item deleted successfully",
+      s3CleanupResult,
+      note: "S3 image has been cleaned up"
+    });
   } catch (error) {
     console.error("❌ Error deleting menu item:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -338,15 +271,6 @@ export const toggleMenuItemDynamicPricingAdmin = async (req: Request, res: Respo
     const menuItem = await menuItemRepo.findOne({ where: { id: menuItemId } });
     if (!menuItem) {
       res.status(404).json({ error: "Menu item not found" });
-      return;
-    }
-
-    // ❌ Validate that menu item belongs to the expected club
-    const expectedClubId = req.params.clubId;
-    if (menuItem.clubId !== expectedClubId) {
-      res.status(403).json({ 
-        error: `Menu item '${menuItem.name}' does not belong to the specified club` 
-      });
       return;
     }
 
@@ -383,58 +307,37 @@ export const updateMenuItemImageAdmin = async (req: AuthenticatedRequest, res: R
       return;
     }
 
-    // ❌ Validate that menu item belongs to the expected club
-    const expectedClubId = req.params.clubId;
-    if (item.clubId !== expectedClubId) {
-      res.status(403).json({ 
-        error: `Menu item '${item.name}' does not belong to the specified club` 
-      });
-      return;
-    }
+    // Process and upload the new image
+    const { ImageService } = await import("../../services/imageService");
+    const processed = await ImageService.processImage(file.buffer, 800, 600, 80);
 
-    // Store reference to old image for deletion after successful upload
+    // Upload to S3
+    const { S3Service } = await import("../../services/s3Service");
+    const key = `clubs/${item.clubId}/menu/items/${id}/image-${Date.now()}.webp`;
+    const uploadResult = await S3Service.uploadFile(processed.buffer, 'image/webp', key);
+
+    // Update the menu item with the new image URL
     const oldImageUrl = item.imageUrl;
-
-    // Process image
-    const processed = await ImageService.processImage(file.buffer);
-    
-    // Generate unique key with timestamp to ensure new URL
-    const timestamp = Date.now();
-    const key = S3Service.generateKey(item.clubId, 'menu-item-image', `${id}-${timestamp}`);
-    const uploadResult = await S3Service.uploadFile(
-      processed.buffer,
-      'image/jpeg',
-      key
-    );
-
-    // Update menu item
     item.imageUrl = uploadResult.url;
-    item.imageBlurhash = processed.blurhash;
     await itemRepo.save(item);
 
-    // Delete old image from S3 if upload and DB update were successful
-    // Only delete if the URLs are different (same key = same URL = no deletion needed)
+    // Clean up the old image if it exists
     if (oldImageUrl && oldImageUrl !== uploadResult.url) {
       try {
-        // Parse the S3 URL to extract the key
         const url = new URL(oldImageUrl);
-        const oldKey = url.pathname.substring(1); // Remove leading slash
-        
+        const oldKey = url.pathname.substring(1);
         await S3Service.deleteFile(oldKey);
       } catch (deleteError) {
         console.error('⚠️ Warning: Failed to delete old menu item image from S3:', deleteError);
-        // Don't fail the request - new image is already uploaded successfully
       }
     }
 
-    res.json({
-      message: 'Menu item image uploaded successfully',
-      imageUrl: uploadResult.url,
-      blurhash: processed.blurhash,
-      itemId: item.id
+    res.status(200).json({
+      message: 'Menu item image updated successfully',
+      imageUrl: uploadResult.url
     });
   } catch (error) {
-    console.error('Error uploading menu item image:', error);
-    res.status(500).json({ error: 'Failed to upload image' });
+    console.error("❌ Error updating menu item image:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 }; 

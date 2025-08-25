@@ -120,7 +120,7 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
         
         // Also clean up old images if they exist
         if (oldMenuId) {
-          await pdfService.cleanupOldVersionedPages(clubId, oldMenuId);
+          await pdfService.cleanupOldMenuAssets(clubId, oldMenuId);
         }
       } catch (deleteError) {
         console.error('⚠️ Warning: Failed to delete old PDF/images from S3:', deleteError);

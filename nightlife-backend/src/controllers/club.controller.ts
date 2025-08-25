@@ -7,6 +7,7 @@ import { TicketPurchase } from "../entities/TicketPurchase";
 import { MenuPurchase } from "../entities/MenuPurchase";
 import { validateImageUrlWithResponse } from "../utils/validateImageUrl";
 import { sanitizeInput, sanitizeObject } from "../utils/sanitizeInput";
+import { cleanupClubS3Files } from "../utils/s3Cleanup";
 
 // CREATE CLUB
 export async function createClub(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -467,19 +468,27 @@ export async function deleteClub(req: AuthenticatedRequest, res: Response): Prom
       club.isActive = false; // Also deactivate to prevent new usage
       await repo.save(club);
 
+      // Clean up S3 files even for soft delete (since they're no longer needed)
+      const s3CleanupResult = await cleanupClubS3Files(club);
+
       res.json({ 
         message: "Club soft deleted successfully", 
         deletedAt: club.deletedAt,
         ticketPurchaseCount,
         menuPurchaseCount,
-        note: "Club marked as deleted but preserved due to existing purchases"
+        s3CleanupResult,
+        note: "Club marked as deleted but preserved due to existing purchases. S3 files have been cleaned up."
       });
     } else {
       // Hard delete - no associated purchases, safe to completely remove
+      // Clean up S3 files
+      const s3CleanupResult = await cleanupClubS3Files(club);
+      
       await repo.remove(club);
       res.json({ 
         message: "Club permanently deleted successfully",
-        note: "No associated purchases found, club completely removed"
+        s3CleanupResult,
+        note: "No associated purchases found, club completely removed. S3 files have been cleaned up."
       });
     }
   } catch (error) {

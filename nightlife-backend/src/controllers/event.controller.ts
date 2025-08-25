@@ -8,6 +8,8 @@ import { computeDynamicPrice, computeDynamicEventPrice, getEventTicketDynamicPri
 import { validateImageUrlWithResponse } from "../utils/validateImageUrl";
 import { sanitizeInput, sanitizeObject } from "../utils/sanitizeInput";
 import { MoreThanOrEqual } from "typeorm";
+import { cleanupEventAndTicketAds } from "../utils/cleanupAds";
+import { cleanupEventS3Files } from "../utils/s3Cleanup";
 
 // Utility function to get today's date in a timezone-safe way
 const getTodayDate = (): Date => {
@@ -412,8 +414,10 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response) => {
       hasPurchases = existingPurchases > 0;
     }
 
-    const bannerUrl = event.bannerUrl;
     const ticketRepo = AppDataSource.getRepository(Ticket);
+
+    // Clean up all associated ads (event ads + ticket ads)
+    const adCleanupResult = await cleanupEventAndTicketAds(eventId, ticketIds);
 
     if (hasPurchases) {
       // Soft delete event
@@ -421,6 +425,7 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response) => {
       event.deletedAt = new Date();
       event.isActive = false;
       await eventRepo.save(event);
+      
       // Soft delete all related tickets
       if (event.tickets && event.tickets.length > 0) {
         for (const ticket of event.tickets) {
@@ -430,26 +435,31 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response) => {
           await ticketRepo.save(ticket);
         }
       }
-      res.status(200).json({ message: "Event and related tickets soft deleted due to existing purchases" });
+      
+      // Clean up S3 banner even for soft delete (since it's no longer needed)
+      const s3CleanupResult = await cleanupEventS3Files(event);
+      
+      res.status(200).json({ 
+        message: "Event and related tickets soft deleted due to existing purchases",
+        adCleanupResult,
+        s3CleanupResult,
+        note: "Associated ads have been automatically deactivated. S3 banner has been cleaned up."
+      });
       return;
     }
 
     // Hard delete (no purchases)
+    // Clean up S3 banner
+    const s3CleanupResult = await cleanupEventS3Files(event);
+    
     await eventRepo.remove(event);
 
-    // Delete banner from S3 if it exists
-    if (bannerUrl) {
-      try {
-        const { S3Service } = await import("../services/s3Service");
-        const url = new URL(bannerUrl);
-        const key = url.pathname.substring(1);
-        await S3Service.deleteFile(key);
-      } catch (deleteError) {
-        console.error('⚠️ Warning: Failed to delete event banner from S3:', deleteError);
-      }
-    }
-
-    res.status(200).json({ message: "Event and associated tickets deleted successfully" });
+    res.status(200).json({ 
+      message: "Event and associated tickets deleted successfully",
+      adCleanupResult,
+      s3CleanupResult,
+      note: "Associated ads have been automatically deactivated. S3 banner has been cleaned up."
+    });
   } catch (err) {
     console.error("❌ Failed to delete event:", err);
     res.status(500).json({ error: "Internal server error" });

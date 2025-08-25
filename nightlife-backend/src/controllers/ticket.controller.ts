@@ -12,6 +12,7 @@ import { MenuItemVariant } from "../entities/MenuItemVariant";
 import { computeDynamicPrice, computeDynamicEventPrice, getEventTicketDynamicPricingReason, getNormalTicketDynamicPricingReason } from "../utils/dynamicPricing";
 import { sanitizeInput, sanitizeObject } from "../utils/sanitizeInput";
 import { MoreThanOrEqual, IsNull } from "typeorm";
+import { cleanupTicketAds } from "../utils/cleanupAds";
 
 // Utility function to get today's date in a timezone-safe way
 const getTodayDate = (): Date => {
@@ -937,6 +938,9 @@ export async function deleteTicket(req: Request, res: Response): Promise<void> {
     // Check if there are associated purchases
     const associatedPurchases = await purchaseRepo.count({ where: { ticketId: id } });
 
+    // Clean up associated ads automatically
+    const adCleanupResult = await cleanupTicketAds(id);
+
     if (associatedPurchases > 0) {
       // Soft delete - mark as deleted but keep the record
       ticket.isDeleted = true;
@@ -948,14 +952,16 @@ export async function deleteTicket(req: Request, res: Response): Promise<void> {
         message: "Ticket soft deleted successfully", 
         deletedAt: ticket.deletedAt,
         associatedPurchases,
-        note: "Ticket marked as deleted but preserved due to existing purchases"
+        adCleanupResult,
+        note: "Ticket marked as deleted but preserved due to existing purchases. Associated ads have been deactivated."
       });
     } else {
       // Hard delete - no associated purchases, safe to completely remove
       await ticketRepo.remove(ticket);
       res.json({ 
         message: "Ticket permanently deleted successfully",
-        note: "No associated purchases found, ticket completely removed"
+        adCleanupResult,
+        note: "No associated purchases found, ticket completely removed. Associated ads have been deactivated."
       });
     }
   } catch (error) {

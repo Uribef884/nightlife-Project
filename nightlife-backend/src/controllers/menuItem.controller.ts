@@ -12,6 +12,7 @@ import { computeDynamicPrice } from "../utils/dynamicPricing";
 import { validateImageUrlWithResponse } from "../utils/validateImageUrl";
 import { S3Service } from "../services/s3Service";
 import { ImageService } from "../services/imageService";
+import { cleanupMenuItemS3Files } from "../utils/s3Cleanup";
 
 export const createMenuItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -464,21 +465,29 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
         await variantRepo.save(variant);
       }
 
+      // Clean up S3 image even for soft delete (since it's no longer needed)
+      const s3CleanupResult = await cleanupMenuItemS3Files(item);
+
       res.json({ 
         message: "Menu item soft deleted successfully", 
         deletedAt: item.deletedAt,
         includedInTickets,
         existingPurchases,
-        note: "Menu item marked as deleted but preserved due to existing purchases or ticket bundles"
+        s3CleanupResult,
+        note: "Menu item marked as deleted but preserved due to existing purchases or ticket bundles. S3 image has been cleaned up."
       });
     } else {
       // Hard delete - no associated ticket bundles, safe to completely remove
+      // Clean up S3 image
+      const s3CleanupResult = await cleanupMenuItemS3Files(item);
+      
       await variantRepo.delete({ menuItemId: id });
       await itemRepo.remove(item);
 
       res.json({ 
         message: "Menu item permanently deleted successfully",
-        note: "No associated ticket bundles found, menu item completely removed"
+        s3CleanupResult,
+        note: "No associated ticket bundles found, menu item completely removed. S3 image has been cleaned up."
       });
     }
   } catch (err) {

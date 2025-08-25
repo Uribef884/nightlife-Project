@@ -5,6 +5,8 @@ import { Ticket } from "../../entities/Ticket";
 import { AuthenticatedRequest } from "../../types/express";
 import { validateImageUrlWithResponse } from "../../utils/validateImageUrl";
 import { sanitizeInput, sanitizeObject } from "../../utils/sanitizeInput";
+import { cleanupEventAndTicketAds } from "../../utils/cleanupAds";
+import { cleanupEventS3Files } from "../../utils/s3Cleanup";
 
 // Admin function to get events by club ID
 export const getEventsByClubIdAdmin = async (req: Request, res: Response) => {
@@ -311,19 +313,80 @@ export const toggleEventVisibilityAdmin = async (req: AuthenticatedRequest, res:
 
 
 // Admin function to delete event
-export const deleteEventAdmin = async (req: AuthenticatedRequest, res: Response) => {
+export const deleteEventAdmin = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const eventId = req.params.id;
     const eventRepo = AppDataSource.getRepository(Event);
 
-    const event = await eventRepo.findOne({ where: { id: eventId } });
+    const event = await eventRepo.findOne({ 
+      where: { id: eventId },
+      relations: ["tickets"]
+    });
+    
     if (!event) {
       res.status(404).json({ error: "Event not found" });
       return;
     }
 
-    await eventRepo.remove(event);
-    res.status(200).json({ message: "Event deleted successfully" });
+    // Get ticket IDs for cleanup
+    const ticketIds = event.tickets ? event.tickets.map(ticket => ticket.id) : [];
+
+    // Clean up all associated ads (event ads + ticket ads)
+    const adCleanupResult = await cleanupEventAndTicketAds(eventId, ticketIds);
+
+    // Check if event has purchased tickets
+    let hasPurchases = false;
+    if (ticketIds.length > 0) {
+      const { TicketPurchase } = await import("../../entities/TicketPurchase");
+      const purchaseRepo = AppDataSource.getRepository(TicketPurchase);
+      const existingPurchases = await purchaseRepo
+        .createQueryBuilder("purchase")
+        .where("purchase.ticketId IN (:...ticketIds)", { ticketIds })
+        .getCount();
+      hasPurchases = existingPurchases > 0;
+    }
+
+    if (hasPurchases) {
+      // Soft delete event
+      event.isDeleted = true;
+      event.deletedAt = new Date();
+      event.isActive = false;
+      await eventRepo.save(event);
+      
+      // Soft delete all related tickets
+      if (event.tickets && event.tickets.length > 0) {
+        const ticketRepo = AppDataSource.getRepository(Ticket);
+        for (const ticket of event.tickets) {
+          ticket.isDeleted = true;
+          ticket.deletedAt = new Date();
+          ticket.isActive = false;
+          await ticketRepo.save(ticket);
+        }
+      }
+      
+      // Clean up S3 banner even for soft delete
+      const s3CleanupResult = await cleanupEventS3Files(event);
+      
+      res.status(200).json({ 
+        message: "Event and related tickets soft deleted due to existing purchases",
+        adCleanupResult,
+        s3CleanupResult,
+        note: "Associated ads have been automatically deactivated. S3 banner has been cleaned up."
+      });
+    } else {
+      // Hard delete (no purchases)
+      // Clean up S3 banner
+      const s3CleanupResult = await cleanupEventS3Files(event);
+      
+      await eventRepo.remove(event);
+      
+      res.status(200).json({ 
+        message: "Event and associated tickets deleted successfully",
+        adCleanupResult,
+        s3CleanupResult,
+        note: "Associated ads have been automatically deactivated. S3 banner has been cleaned up."
+      });
+    }
   } catch (err) {
     console.error("❌ Failed to delete event:", err);
     res.status(500).json({ error: "Internal server error" });

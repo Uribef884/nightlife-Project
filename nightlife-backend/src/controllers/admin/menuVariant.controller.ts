@@ -28,57 +28,31 @@ export const getVariantsByMenuItemIdAdmin = async (req: Request, res: Response):
 // Admin function to create menu item variant
 export const createMenuItemVariantAdmin = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    // Sanitize all string inputs
-    const sanitizedBody = sanitizeObject(req.body, [
-      'name'
-    ], { maxLength: 100 });
-    
-    const { menuItemId, name, price, dynamicPricingEnabled, maxPerPerson } = sanitizedBody;
+    const { menuItemId } = req.params;
+    const { name, price, dynamicPricingEnabled, maxPerPerson } = req.body;
+    const variantRepo = AppDataSource.getRepository(MenuItemVariant);
+    const itemRepo = AppDataSource.getRepository(MenuItem);
 
-    // Validate required fields
-    if (!menuItemId) {
-      res.status(400).json({ error: "menuItemId is required" });
+    if (!name || !price) {
+      res.status(400).json({ error: "Name and price are required" });
       return;
     }
 
-    if (!name) {
-      res.status(400).json({ error: "Variant name is required" });
-      return;
-    }
-
-    if (typeof price !== "number" || price <= 0) {
+    const parsedPrice = parseFloat(price);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
       res.status(400).json({ error: "Price must be a positive number (greater than 0)" });
       return;
     }
 
     // Validate minimum cost for variants (no free variants allowed)
-    if (price < 1500) {
+    if (parsedPrice < 1500) {
       res.status(400).json({ error: "Price must be at least 1500 COP for variants." });
       return;
     }
 
-    if (maxPerPerson !== undefined && maxPerPerson !== null) {
-      if (typeof maxPerPerson !== "number" || maxPerPerson <= 0) {
-        res.status(400).json({ error: "maxPerPerson must be a positive number" });
-        return;
-      }
-    }
-
-    const itemRepo = AppDataSource.getRepository(MenuItem);
-    const variantRepo = AppDataSource.getRepository(MenuItemVariant);
-
     const menuItem = await itemRepo.findOneBy({ id: menuItemId });
     if (!menuItem) {
       res.status(404).json({ error: "Menu item not found" });
-      return;
-    }
-
-    // ❌ Validate that menu item belongs to the expected club
-    const expectedClubId = req.params.clubId;
-    if (menuItem.clubId !== expectedClubId) {
-      res.status(403).json({ 
-        error: `Menu item '${menuItem.name}' does not belong to the specified club` 
-      });
       return;
     }
 
@@ -117,15 +91,6 @@ export const updateMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
     });
     if (!variant) {
       res.status(404).json({ error: "Variant not found" });
-      return;
-    }
-
-    // ❌ Validate that variant's menu item belongs to the expected club
-    const expectedClubId = req.params.clubId;
-    if (variant.menuItem.clubId !== expectedClubId) {
-      res.status(403).json({ 
-        error: `Variant '${variant.name}' does not belong to the specified club` 
-      });
       return;
     }
 
@@ -174,15 +139,20 @@ export const updateMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
     }
 
     if (maxPerPerson !== undefined) {
-      if (maxPerPerson !== null && (typeof maxPerPerson !== "number" || maxPerPerson <= 0)) {
-        res.status(400).json({ error: "maxPerPerson must be a positive number or null" });
-        return;
+      if (maxPerPerson === null) {
+        variant.maxPerPerson = undefined;
+      } else {
+        const parsedMaxPerPerson = parseInt(maxPerPerson);
+        if (isNaN(parsedMaxPerPerson) || parsedMaxPerPerson <= 0) {
+          res.status(400).json({ error: "Max per person must be a positive integer" });
+          return;
+        }
+        variant.maxPerPerson = parsedMaxPerPerson;
       }
-      variant.maxPerPerson = maxPerPerson;
     }
 
     await variantRepo.save(variant);
-    res.json(variant);
+    res.status(200).json(variant);
   } catch (error) {
     console.error("❌ Error updating menu item variant:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -203,15 +173,6 @@ export const deleteMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
     });
     if (!variant) {
       res.status(404).json({ error: "Variant not found" });
-      return;
-    }
-
-    // ❌ Validate that variant's menu item belongs to the expected club
-    const expectedClubId = req.params.clubId;
-    if (variant.menuItem.clubId !== expectedClubId) {
-      res.status(403).json({ 
-        error: `Variant '${variant.name}' does not belong to the specified club` 
-      });
       return;
     }
 

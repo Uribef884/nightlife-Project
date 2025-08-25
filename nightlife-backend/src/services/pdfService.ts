@@ -46,8 +46,9 @@ export class PDFService {
   }
 
   /**
-   * Convert PDF to images using PDF.js + skia-canvas
+   * Convert PDF to images using PDF.js + canvas
    * Implements atomic swap pattern for safe PDF replacement
+   * Ensures PDF content fills the entire canvas without white borders
    */
   async convertPDFToImages(
     pdfBuffer: Buffer,
@@ -65,19 +66,26 @@ export class PDFService {
 
       // Get first page dimensions for reference
       const firstPage = await pdfDoc.getPage(1);
-      const viewport = firstPage.getViewport({ scale: 1.0 });
+      const firstPageViewport = firstPage.getViewport({ scale: 1.0 });
       
-      // Calculate target dimensions (1440px width, maintain aspect ratio)
+      // Calculate target dimensions to ensure full canvas coverage
+      // Use the larger scale to ensure the PDF fills the entire target area
       const targetWidth = 1440;
-      const scale = targetWidth / viewport.width;
-      const targetHeight = Math.round(viewport.height * scale);
+      const scaleX = targetWidth / firstPageViewport.width;
+      const targetHeight = Math.round(firstPageViewport.height * scaleX);
+      
+      // Ensure minimum height for consistency
+      const minHeight = 800;
+      const finalHeight = Math.max(targetHeight, minHeight);
       
       // Generate version timestamp for atomic swap
       const version = `v-${Date.now()}`;
       const versionedPrefix = `clubs/${clubId}/menu/${menuId}/pages/${version}`;
       
       // Clean up old versioned folders first
-      await this.cleanupOldVersionedPages(clubId, menuId);
+      console.log(`🔄 Starting cleanup of old menu assets for club: ${clubId}, menu: ${menuId}`);
+      await this.cleanupOldMenuAssets(clubId, menuId);
+      console.log(`✅ Cleanup completed, proceeding with new PDF conversion`);
       
       const pages: PageImage[] = [];
       const thumbs: Thumbnail[] = [];
@@ -91,14 +99,14 @@ export class PDFService {
         const pageImage = await this.convertPageToImage(
           pdfDoc,
           pageNum,
-          scale,
+          scaleX, // Use the calculated scaleX
           targetWidth,
-          targetHeight
+          finalHeight // Use the calculated finalHeight
         );
         
         // Create thumbnail (1/3 size)
         const thumbImage = await sharp(pageImage)
-          .resize(Math.round(targetWidth / 3), Math.round(targetHeight / 3), {
+          .resize(Math.round(targetWidth / 3), Math.round(finalHeight / 3), {
             fit: 'inside',
             withoutEnlargement: true
           })
@@ -120,14 +128,14 @@ export class PDFService {
         pages.push({
           url: pageUrl,
           w: targetWidth,
-          h: targetHeight,
+          h: finalHeight,
           bytes: pageBytes
         });
         
         thumbs.push({
           url: thumbUrl,
           w: Math.round(targetWidth / 3),
-          h: Math.round(targetHeight / 3)
+          h: Math.round(finalHeight / 3)
         });
       }
       
@@ -136,7 +144,7 @@ export class PDFService {
         pageCount,
         format: 'webp',
         width: targetWidth,
-        height: targetHeight,
+        height: finalHeight,
         pages,
         thumbs,
         createdAt: new Date().toISOString(),
@@ -171,7 +179,7 @@ export class PDFService {
   }
 
   /**
-   * Convert a single PDF page to image using PDF.js + skia-canvas
+   * Convert a single PDF page to image using PDF.js + canvas
    * This creates actual images from the PDF content, not placeholders
    */
   private async convertPageToImage(
@@ -185,10 +193,14 @@ export class PDFService {
       // Get the page
       const page = await pdfDoc.getPage(pageNum);
       
-      // Create viewport with target scale
-      const viewport = page.getViewport({ scale });
+      // Create viewport that fills the entire target canvas
+      // Use the target dimensions directly to ensure full coverage
+      const viewport = page.getViewport({ 
+        scale: Math.max(targetWidth / page.getViewport({ scale: 1.0 }).width, 
+                       targetHeight / page.getViewport({ scale: 1.0 }).height)
+      });
       
-      // Create skia canvas
+      // Create canvas
       const canvas = createCanvas(targetWidth, targetHeight);
       const context = canvas.getContext('2d') as any; // Type assertion for compatibility
       
@@ -196,15 +208,19 @@ export class PDFService {
       canvas.width = targetWidth;
       canvas.height = targetHeight;
       
-      // Clear canvas with white background
-      context.fillStyle = '#FFFFFF';
-      context.fillRect(0, 0, targetWidth, targetHeight);
+      // Clear canvas with transparent background (no white fill)
+      context.clearRect(0, 0, targetWidth, targetHeight);
       
-      // Render PDF page to canvas
+      // Calculate centering offsets to center the PDF content on the canvas
+      const offsetX = (targetWidth - viewport.width) / 2;
+      const offsetY = (targetHeight - viewport.height) / 2;
+      
+      // Render PDF page to canvas with proper positioning
       const renderContext = {
         canvasContext: context,
         viewport: viewport,
-        canvas: canvas as any // Type assertion to bypass PDF.js type requirements
+        canvas: canvas as any, // Type assertion to bypass PDF.js type requirements
+        transform: [1, 0, 0, 1, offsetX, offsetY] // Center the content
       };
       
       await page.render(renderContext as any).promise;
@@ -260,21 +276,27 @@ export class PDFService {
 
   /**
    * Clean up old versioned pages when replacing a menu
+   * This removes ALL old menu assets to prevent accumulation of orphaned files
    */
-  async cleanupOldVersionedPages(clubId: string, menuId: string): Promise<void> {
+  async cleanupOldMenuAssets(clubId: string, menuId: string): Promise<void> {
     try {
-      const prefix = `clubs/${clubId}/menu/${menuId}/pages/`;
+      // Clean up the entire menu folder structure, not just pages
+      const menuPrefix = `clubs/${clubId}/menu/${menuId}/`;
       
-      // List all objects with this prefix
+      console.log(`🧹 Cleaning up old menu assets for: ${menuPrefix}`);
+      
+      // List all objects with this menu prefix
       const listParams = {
         Bucket: this.bucketName,
-        Prefix: prefix
+        Prefix: menuPrefix
       };
       
       const listResult = await this.s3.listObjectsV2(listParams).promise();
       
       if (listResult.Contents && listResult.Contents.length > 0) {
-        // Delete all objects
+        console.log(`🗑️ Found ${listResult.Contents.length} old objects to delete`);
+        
+        // Delete all objects in the menu folder
         const deleteParams = {
           Bucket: this.bucketName,
           Delete: {
@@ -283,10 +305,14 @@ export class PDFService {
         };
         
         await this.s3.deleteObjects(deleteParams).promise();
+        console.log(`✅ Successfully deleted ${listResult.Contents.length} old menu objects`);
+      } else {
+        console.log(`ℹ️ No old menu objects found to clean up`);
       }
     } catch (error) {
-      console.error('Error cleaning up old versioned pages:', error);
+      console.error('❌ Error cleaning up old menu assets:', error);
       // Don't throw - cleanup failure shouldn't stop the main process
+      // But log it so we can investigate
     }
   }
 

@@ -8,6 +8,7 @@ import { AuthenticatedRequest } from "../types/express";
 import { IsNull, In } from "typeorm";
 import { TicketPurchase } from "../entities/TicketPurchase";
 import { validateImageUrlWithResponse } from "../utils/validateImageUrl";
+import { cleanupAdS3Files } from "../utils/s3Cleanup";
 
 function buildAdLink(ad: Ad): string | null {
   if (ad.targetType === "event" && ad.targetId) {
@@ -286,55 +287,33 @@ export const updateAd = async (req: AuthenticatedRequest, res: Response): Promis
   }
 };
 
-// --- DELETE AD ---
-export const deleteAd = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+// DELETE /ads/:id — admin only
+export const deleteAd = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const adRepo = AppDataSource.getRepository(Ad);
-    const ad = await adRepo.findOne({ where: { id, isActive: true, isDeleted: false } });
+    const purchaseRepo = AppDataSource.getRepository(TicketPurchase);
+
+    const ad = await adRepo.findOne({ where: { id } });
     if (!ad) {
-      res.status(404).json({ error: "Ad not found." });
+      res.status(404).json({ error: "Ad not found" });
       return;
-    }
-    // Permission check based on label and clubId
-    if (ad.label === "global" && req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only admins can delete global ads." });
-      return;
-    }
-    if (ad.label === "club") {
-      if (req.user?.role === "clubowner" && req.user.clubId !== ad.clubId) {
-        res.status(403).json({ error: "Only the club owner can delete this ad." });
-        return;
-      }
-      if (req.user?.role !== "clubowner" && req.user?.role !== "admin") {
-        res.status(403).json({ error: "Only club owners and admins can delete club ads." });
-        return;
-      }
     }
 
-    // Check if ad has any related purchases (tickets or events)
+    // Check if ad has related purchases
     let hasRelatedPurchases = false;
-    
     if (ad.targetType === "ticket" && ad.targetId) {
-      // Check if the targeted ticket has purchases
-      const ticketPurchaseRepo = AppDataSource.getRepository(TicketPurchase);
-      const purchaseCount = await ticketPurchaseRepo.count({
-        where: { ticketId: ad.targetId }
-      });
-      hasRelatedPurchases = purchaseCount > 0;
+      const existingPurchases = await purchaseRepo.count({ where: { ticketId: ad.targetId } });
+      hasRelatedPurchases = existingPurchases > 0;
     } else if (ad.targetType === "event" && ad.targetId) {
-      // Check if the targeted event has tickets with purchases
+      // For events, check if any tickets have purchases
+      const { Ticket } = await import("../entities/Ticket");
       const ticketRepo = AppDataSource.getRepository(Ticket);
-      const ticketPurchaseRepo = AppDataSource.getRepository(TicketPurchase);
-      
       const eventTickets = await ticketRepo.find({ where: { eventId: ad.targetId } });
-      const ticketIds = eventTickets.map(ticket => ticket.id);
-      
-      if (ticketIds.length > 0) {
-        const purchaseCount = await ticketPurchaseRepo.count({
-          where: { ticketId: In(ticketIds) }
-        });
-        hasRelatedPurchases = purchaseCount > 0;
+      if (eventTickets.length > 0) {
+        const ticketIds = eventTickets.map(t => t.id);
+        const existingPurchases = await purchaseRepo.count({ where: { ticketId: In(ticketIds) } });
+        hasRelatedPurchases = existingPurchases > 0;
       }
     }
 
@@ -342,27 +321,30 @@ export const deleteAd = async (req: AuthenticatedRequest, res: Response): Promis
       // Soft delete - mark as deleted but keep the record
       ad.isDeleted = true;
       ad.deletedAt = new Date();
-      ad.isActive = false; // Also deactivate to prevent new usage
+      ad.isActive = false;
+      ad.isVisible = false;
       await adRepo.save(ad);
-
+      
+      // Clean up S3 image even for soft delete (since it's no longer needed)
+      const s3CleanupResult = await cleanupAdS3Files(ad);
+      
       res.json({ 
         message: "Ad soft deleted successfully", 
         deletedAt: ad.deletedAt,
         hasRelatedPurchases,
-        note: "Ad marked as deleted but preserved due to existing purchases"
+        s3CleanupResult,
+        note: "Ad marked as deleted but preserved due to existing purchases. S3 image has been cleaned up."
       });
     } else {
       // Hard delete - no related purchases, safe to completely remove
-      // Delete image from S3
-      try {
-        await S3Service.deleteFileByUrl(ad.imageUrl);
-      } catch (err) {
-        console.error("Error deleting ad image from S3:", err);
-      }
+      // Clean up S3 image
+      const s3CleanupResult = await cleanupAdS3Files(ad);
+      
       // Delete ad from DB
       await adRepo.remove(ad);
       res.json({ 
         message: "Ad permanently deleted successfully",
+        s3CleanupResult,
         note: "No related purchases found, ad completely removed"
       });
     }
