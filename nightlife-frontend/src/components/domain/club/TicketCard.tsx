@@ -16,6 +16,7 @@ export type TicketCardProps = {
   /** NEW — compact layout & description clamp toggle */
   compact?: boolean;                        // render in compact mode (smaller paddings/typography)
   showDescription?: boolean;                // whether to show (clamped) description snippet
+  isFree?: boolean;                         // whether this is a free ticket (for yellow highlighting)
 };
 
 /** Defensive pickers — no hardcoding to a single field name. */
@@ -87,6 +88,7 @@ export default function TicketCard({
   onChangeQty,
   compact = true,
   showDescription = true,
+  isFree = false,
 }: TicketCardProps) {
   const title = getTitle(ticket);
   const desc = getDescription(ticket);
@@ -113,7 +115,8 @@ export default function TicketCard({
   return (
     <div
       className={[
-        "rounded-xl border border-white/10 bg-white/5",
+        "rounded-xl border",
+        isFree ? "border-yellow-400/50 bg-yellow-500/10" : "border-white/10 bg-white/5",
         compact ? "p-3" : "p-4",
       ].join(" ")}
     >

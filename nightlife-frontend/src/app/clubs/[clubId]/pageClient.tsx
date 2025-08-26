@@ -332,10 +332,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       return prev;
     });
 
-    // Auto-scroll to tickets section when switching to reservas tab
-    if (t === "reservas" && prevTab !== "reservas") {
-      scrollToTickets();
-    }
+
   };
 
   useEffect(() => {
@@ -344,12 +341,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     return () => off();
   }, [clubId, clubSSR]); // IMPORTANT: removed menuMeta dependency to avoid racey re-runs
 
-  // Auto-scroll when reservas tab becomes active
-  useEffect(() => {
-    if (tab === "reservas") {
-      scrollToTickets();
-    }
-  }, [tab]); // This will trigger whenever the tab changes
+
 
   // Test scroll function on mount when coming from ad
   useEffect(() => {
@@ -642,12 +634,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                   }}
                   selectedDate={selectedDate}
                 />
-                {selectedDate && (
-                  <p className="mt-3 text-sm text-white/70">
-                    Fecha seleccionada:{" "}
-                    <span className="font-semibold">{formatDayLong(selectedDate)}</span>
-                  </p>
-                )}
+
               </div>
 
               {/* Events list; expands the selected event card on event days */}

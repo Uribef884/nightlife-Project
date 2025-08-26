@@ -133,10 +133,8 @@ export function TicketsGrid({
         <div className="text-white/60">No hay reservas disponibles para esta fecha.</div>
       ) : (
         <div className="space-y-6">
-          {/* Generales */}
           {hasAnyGeneral && (
             <div>
-              <div className="text-white/80 font-semibold mb-2">Generales</div>
               <div className="grid gap-4 sm:grid-cols-2">
                 {effGeneralTickets.map((t) => {
                   const inCart = qtyByTicketId.get((t as any).id);
@@ -163,22 +161,23 @@ export function TicketsGrid({
             <div>
               <div className="text-white/80 font-semibold mb-2">Gratis</div>
               <div className="grid gap-4 sm:grid-cols-2">
-                {effFreeTickets.map((t) => {
-                  const inCart = qtyByTicketId.get((t as any).id);
-                  return (
-                    <TicketCard
-                      key={(t as any).id}
-                      ticket={t}
-                      bannerUrl={null}
-                      qtyInCart={inCart?.qty ?? 0}
-                      itemId={inCart?.itemId ?? ""}
-                      onAdd={() => handleAdd(t)}
-                      onChangeQty={handleChangeQty}
-                      compact
-                      showDescription
-                    />
-                  );
-                })}
+                                 {effFreeTickets.map((t) => {
+                   const inCart = qtyByTicketId.get((t as any).id);
+                   return (
+                     <TicketCard
+                       key={(t as any).id}
+                       ticket={t}
+                       bannerUrl={null}
+                       qtyInCart={inCart?.qty ?? 0}
+                       itemId={inCart?.itemId ?? ""}
+                       onAdd={() => handleAdd(t)}
+                       onChangeQty={handleChangeQty}
+                       compact
+                       showDescription
+                       isFree={true}
+                     />
+                   );
+                 })}
               </div>
             </div>
           )}
