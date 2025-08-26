@@ -2,6 +2,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { TicketDTO } from "@/services/clubs.service";
 
 /** Public props for TicketCard (exported for clarity/use in other files) */
@@ -144,17 +145,42 @@ export default function TicketCard({
         </div>
       </div>
 
-      {/* Description (2-line clamp with chevron to expand) */}
+      {/* Description (2-line clamp with chevron to expand) with animation */}
       {showDescription && desc && (
         <div className="mt-2">
-          <p
-            className={[
-              "text-white/80 text-sm leading-5",
-              expanded ? "" : "max-h-[2.5rem] overflow-hidden", // ~2 lines with leading-5
-            ].join(" ")}
-          >
-            {desc}
-          </p>
+          <AnimatePresence initial={false}>
+            {expanded ? (
+              <motion.p
+                key="expanded"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ 
+                  duration: 0.2, 
+                  ease: [0.16, 1, 0.3, 1],
+                  height: { duration: 0.25 }
+                }}
+                className="text-white/80 text-sm leading-5 overflow-hidden"
+              >
+                {desc}
+              </motion.p>
+            ) : (
+              <motion.p
+                key="collapsed"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "2.5rem" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ 
+                  duration: 0.2, 
+                  ease: [0.16, 1, 0.3, 1],
+                  height: { duration: 0.25 }
+                }}
+                className="text-white/80 text-sm leading-5 overflow-hidden"
+              >
+                {desc}
+              </motion.p>
+            )}
+          </AnimatePresence>
           {isLongDesc && (
             <button
               type="button"

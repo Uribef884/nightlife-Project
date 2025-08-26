@@ -1,7 +1,7 @@
 // src/components/domain/club/ClubTabs.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Tab = "general" | "reservas" | "carta";
 
@@ -26,12 +26,51 @@ function readTabFromUrl(allowCarta: boolean): Tab {
   return !allowCarta && raw === "carta" ? "general" : raw;
 }
 
+/** Parse a CSS var like "56px" -> 56 (fallback if not set). */
+function readPxVar(root: HTMLElement, name: string, fallback = 56): number {
+  try {
+    const v = getComputedStyle(root).getPropertyValue(name).trim();
+    const n = parseFloat(v.replace("px", ""));
+    return Number.isFinite(n) ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function ClubTabs({ current, onChange, showCarta }: Props) {
   // Auto-detected allowance based on <html data-club-menu>; default to true.
   const [autoAllowCarta, setAutoAllowCarta] = useState<boolean>(true);
-  
-  // Final decision: explicit prop wins; otherwise use auto-detect
   const allowCarta = showCarta ?? autoAllowCarta;
+
+  // 🔧 measure this nav height and publish --nl-sticky-top on :root
+  const navRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!navRef.current || typeof window === "undefined") return;
+    const root = document.documentElement;
+
+    const apply = () => {
+      const navbarH = readPxVar(root, "--nl-navbar-h", 56);
+      const tabsH = navRef.current?.offsetHeight ?? 0;
+
+      // ⬇️ CHANGE: remove extra 8px padding so the category bar sits flush
+      const stickyTop = Math.max(0, navbarH + tabsH);
+
+      root.style.setProperty("--nl-sticky-top", `${stickyTop}px`);
+      // Keep a tiny cushion for section headings only (does NOT affect the gap)
+      root.style.setProperty("--nl-sticky-scroll-margin", `${stickyTop + 8}px`);
+    };
+
+    apply();
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(navRef.current);
+    const onResize = () => apply();
+    window.addEventListener("resize", onResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
 
   // Auto-detect from <html data-club-menu="...">
   useEffect(() => {
@@ -39,12 +78,9 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
     if (typeof document === "undefined") return;
 
     const root = document.documentElement;
-
     const compute = () => {
       const mt = (root.getAttribute("data-club-menu") || "unknown").toLowerCase();
-      // Show ONLY when menuType is "structured" or "pdf"
-      const allow = mt === "structured" || mt === "pdf";
-      return allow;
+      return mt === "structured" || mt === "pdf";
     };
 
     setAutoAllowCarta(compute()); // initial
@@ -89,14 +125,10 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
 
   const handleChange = (t: Tab) => {
     if (!allowCarta && t === "carta") t = "general";
-
     if (typeof window !== "undefined" && window.location.hash !== `#${t}`) {
       window.location.hash = t;
     }
-
     onChange?.(t);
-
-    // In controlled mode, parent will update `current`. Otherwise update internal state.
     if (current !== undefined) setActive(t);
   };
 
@@ -111,6 +143,7 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
 
   return (
     <nav
+      ref={navRef}
       className="w-full p-0 flex items-center justify-center gap-6"
       role="tablist"
       aria-orientation="horizontal"
@@ -123,7 +156,7 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
           aria-selected={active === t.key}
           tabIndex={active === t.key ? 0 : -1}
           onClick={() => handleChange(t.key)}
-          className={`pb-3 text-sm font-semibold ${
+          className={`pb-2 text-sm font-semibold ${
             active === t.key
               ? "text-white border-b-2 border-white"
               : "text-white/70 hover:text-white"
@@ -139,7 +172,7 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
           aria-selected={active === "carta"}
           tabIndex={active === "carta" ? 0 : -1}
           onClick={() => handleChange("carta")}
-          className={`pb-3 text-sm font-semibold ${
+          className={`pb-2 text-sm font-semibold ${
             active === "carta"
               ? "text-white border-b-2 border-white"
               : "text-white/70 hover:text-white"

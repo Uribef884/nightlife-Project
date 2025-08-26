@@ -214,17 +214,42 @@ export function ClubEvents({
                     <div className="text-white font-semibold">{(ev as any).name}</div>
                     {evDate && <div className="text-white/60 text-sm">{formatDateLabel(evDate)}</div>}
 
-                    {/* Description 3-line clamp + chevron */}
+                    {/* Description 3-line clamp + chevron with animation */}
                     {desc ? (
                       <div className="mt-2">
-                        <p
-                          className={[
-                            "text-white/75 text-sm leading-5",
-                            expanded ? "" : "max-h-[3.75rem] overflow-hidden", // ~3 lines
-                          ].join(" ")}
-                        >
-                          {desc}
-                        </p>
+                        <AnimatePresence initial={false}>
+                          {expanded ? (
+                            <motion.p
+                              key="expanded"
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ 
+                                duration: 0.2, 
+                                ease: [0.16, 1, 0.3, 1],
+                                height: { duration: 0.25 }
+                              }}
+                              className="text-white/75 text-sm leading-5 overflow-hidden"
+                            >
+                              {desc}
+                            </motion.p>
+                          ) : (
+                            <motion.p
+                              key="collapsed"
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "3.75rem" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ 
+                                duration: 0.2, 
+                                ease: [0.16, 1, 0.3, 1],
+                                height: { duration: 0.25 }
+                              }}
+                              className="text-white/75 text-sm leading-5 overflow-hidden"
+                            >
+                              {desc}
+                            </motion.p>
+                          )}
+                        </AnimatePresence>
                         {looksLong && (
                           <button
                             type="button"
