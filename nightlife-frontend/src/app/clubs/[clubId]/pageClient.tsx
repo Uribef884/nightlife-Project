@@ -10,7 +10,7 @@ import { ClubSocials } from "@/components/domain/club/ClubSocials";
 import MapGoogle from "@/components/domain/club/MapGoogle.client";
 import { ClubCalendar } from "@/components/domain/club/ClubCalendar";
 import { ClubEvents } from "@/components/domain/club/ClubEvents";
-import { TicketsGrid } from "@/components/domain/club/TicketsGrid";
+import TicketsGrid from "@/components/domain/club/TicketsGrid";
 import { PdfMenu } from "@/components/domain/club/PdfMenu";
 import { StructuredMenu } from "@/components/domain/club/menu/StructuredMenu";
 import { formatDayLong } from "@/lib/formatters";
@@ -19,7 +19,7 @@ import {
   getClubAdsCSR,
   getClubByIdCSR,
   getEventsForClubCSR,
-  getTicketsForClubCSR,
+  // Removed getTicketsForClubCSR import - no longer needed
   type ClubDTO,
   type EventDTO,
   type TicketDTO,
@@ -178,7 +178,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
   const [ads, setAds] = useState<ClubAdDTO[]>([]);
   const [events, setEvents] = useState<EventDTO[]>([]);
-  const [tickets, setTickets] = useState<TicketDTO[]>([]);
+  // Removed tickets state - no longer needed since we only use getAvailableTicketsForDate
   const [calendarTickets, setCalendarTickets] = useState<TicketDTO[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -398,16 +398,8 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       }
     })();
 
-            (async () => {
-          try {
-            const t = await getTicketsForClubCSR(clubId);
-            if (Array.isArray(t) && t.length > 0) {
-              setTickets(t);
-            }
-          } catch (err) {
-            // Silently handle errors
-          }
-        })();
+            // Removed getTicketsForClubCSR call - it was interfering with dynamic pricing
+        // Calendar coloring now only uses getAvailableTicketsForDate and calendar endpoint
 
     (async () => {
       try {
@@ -430,7 +422,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
   // Safety: coerce arrays
   const safeEvents: EventDTO[] = Array.isArray(events) ? events : [];
-  const safeTickets: TicketDTO[] = Array.isArray(tickets) ? tickets : [];
+  // Removed safeTickets - no longer needed
   const safeCalendarTickets: TicketDTO[] = Array.isArray(calendarTickets) ? calendarTickets : [];
 
   // Calendar colors: Event dates
@@ -656,7 +648,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                     club={club}
                     selectedDate={selectedDate}
                     events={safeEvents}
-                    tickets={safeTickets}
+                    tickets={[]}
                     available={
                       available
                         ? {
@@ -716,7 +708,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                 }
 
                 if (isStructured) {
-                  return <StructuredMenu clubId={String((club as any).id)} />;
+                  return <StructuredMenu clubId={String((club as any).id)} selectedDate={selectedDate || undefined} />;
                 }
 
                 // Empty state (no redirect): friendly message for deep links or missing menu

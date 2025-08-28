@@ -1,4 +1,4 @@
-// src/components/domain/club/ClubEvents.tsx
+// nightlife-frontend/src/components/domain/club/ClubEvents.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -11,17 +11,20 @@ import {
   getTicketCartSummary,
   updateTicketQty,
   removeTicketItem,
-  clearMenuCart, // ← used to clear the OTHER cart (menu) when adding tickets
+  clearMenuCart,
 } from "@/services/cart.service";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
+/* ---------------- small helpers ---------------- */
 type AvailableForDay = {
   dateHasEvent: boolean;
   event: { id: string; name: string; bannerUrl: string | null; availableDate: string } | null;
   eventTickets: TicketDTO[];
 };
-
-// Defensive helpers
+const isCombo = (t: TicketDTO) => {
+  const anyT = t as any;
+  return anyT?.includesMenuItem === true || (Array.isArray(anyT?.includedMenuItems) && anyT.includedMenuItems.length > 0);
+};
 function normalizeISO(raw?: string | null): string | null {
   if (!raw) return null;
   const m = raw.match(/^\d{4}-\d{2}-\d{2}/);
@@ -45,7 +48,230 @@ function getEventDate(e: any): string | null {
 function getEventDesc(e: any): string {
   return e?.description ?? e?.details ?? e?.about ?? e?.summary ?? "";
 }
+function smoothScrollTo(el: HTMLElement, offset = 80) {
+  try {
+    const rect = el.getBoundingClientRect();
+    window.scrollTo({ top: window.scrollY + rect.top - offset, behavior: "smooth" });
+  } catch {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
 
+/* ---- Child component that renders chips + grouped tickets for ONE event ---- */
+function ExpandedEventTickets({
+  evKey,
+  tickets,
+  qtyByTicketId,
+  onAdd,
+  onChangeQty,
+}: {
+  evKey: string;
+  tickets: TicketDTO[];
+  qtyByTicketId: Map<string, { qty: number; itemId: string }>;
+  onAdd: (t: TicketDTO) => void;
+  onChangeQty: (itemId: string, nextQty: number) => void;
+}) {
+  // Use the same categorization logic as TicketsGrid
+  const combos = useMemo(() => tickets.filter(isCombo), [tickets]);
+  const general = useMemo(() => tickets.filter((t) => {
+    if (isCombo(t)) return false;
+    // Use the same price logic as getPrice function
+    const dynamic = Number(t.dynamicPrice);
+    const base = Number(t.price);
+    const price = (t.dynamicPricingEnabled && !isNaN(dynamic) ? dynamic : base);
+    return price > 0;
+  }), [tickets]);
+  const gratis = useMemo(() => tickets.filter((t) => {
+    if (isCombo(t)) return false;
+    // Use the same price logic as getPrice function
+    const dynamic = Number(t.dynamicPrice);
+    const base = Number(t.price);
+    const price = (t.dynamicPricingEnabled && !isNaN(dynamic) ? dynamic : base);
+    return price === 0;
+  }), [tickets]);
+
+  const secRefs = {
+    combos: useRef<HTMLDivElement | null>(null),
+    general: useRef<HTMLDivElement | null>(null),
+    gratis: useRef<HTMLDivElement | null>(null),
+  };
+  const chips = useMemo(
+    () =>
+      [
+        { key: "combos" as const, label: "Combos", ref: secRefs.combos, count: combos.length, id: `event-sec-combos-${evKey}` },
+        { key: "general" as const, label: "General", ref: secRefs.general, count: general.length, id: `event-sec-general-${evKey}` },
+        { key: "gratis" as const, label: "Gratis", ref: secRefs.gratis, count: gratis.length, id: `event-sec-gratis-${evKey}` },
+      ].filter((c) => c.count > 0),
+    [combos.length, general.length, gratis.length, evKey]
+  );
+
+  const [activeChip, setActiveChip] = useState<"combos" | "general" | "gratis" | null>(chips[0]?.key ?? null);
+
+  useEffect(() => {
+    setActiveChip(chips[0]?.key ?? null);
+  }, [chips]);
+
+  // Observe to auto-highlight
+  useEffect(() => {
+    if (chips.length === 0) return;
+    const entriesMap = new Map<Element, { key: "combos" | "general" | "gratis"; ratio: number }>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const info = entriesMap.get(e.target);
+          if (info) info.ratio = e.intersectionRatio;
+        }
+        let best: { key: "combos" | "general" | "gratis"; ratio: number } | null = null;
+        for (const v of entriesMap.values()) {
+          if (!best || v.ratio > best.ratio) best = v;
+        }
+        if (best && best.ratio > 0) setActiveChip(best.key);
+      },
+      { root: null, threshold: [0.15, 0.35, 0.55, 0.75], rootMargin: "-40px 0px -40% 0px" }
+    );
+
+    chips.forEach((c) => {
+      const el = c.ref.current;
+      if (el) {
+        entriesMap.set(el, { key: c.key, ratio: 0 });
+        observer.observe(el);
+      }
+    });
+
+    return () => observer.disconnect();
+  }, [chips]);
+
+  /* segmented control look (same as grid) */
+  const chipBase =
+    "relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors";
+  const chipActive =
+    "bg-[#7A48D3] text-white";
+  const chipInactive = "bg-white/5 text-white/70 hover:text-white hover:bg-white/10";
+  const chipBadge =
+    "ml-1 inline-flex min-w-[18px] h-[18px] px-1.5 rounded-full justify-center items-center text-[10px] font-bold";
+
+  // Section shell (ref type = React.Ref<HTMLDivElement>)
+  function Section({
+    id,
+    title,
+    count,
+    innerRef,
+    children,
+  }: {
+    id: string;
+    title: string;
+    count: number;
+    innerRef: React.Ref<HTMLDivElement>;
+    children: React.ReactNode;
+  }) {
+    if (count === 0) return null;
+    return (
+      <div ref={innerRef} id={id} className="mb-4 scroll-mt-24">
+        <div className="mb-2">
+          <h5 className="text-white/90 text-sm font-semibold">{title}</h5>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">{children}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-1">
+      {/* Chip nav for event tickets */}
+      {chips.length > 0 && (
+        <div className="mb-3 flex items-center gap-2 overflow-x-auto">
+          {chips.map((c) => {
+            const active = activeChip === c.key;
+            return (
+              <button
+                key={c.key}
+                type="button"
+                className={[chipBase, active ? chipActive : chipInactive].join(" ")}
+                onClick={() => {
+                  setActiveChip(c.key);
+                  const el = c.ref.current;
+                  if (el) smoothScrollTo(el, 80);
+                }}
+                aria-pressed={active}
+              >
+                {c.label}
+                <span
+                  className={[
+                    chipBadge,
+                    active ? "bg-white text-[#7A48D3]" : "bg-white/10 text-white/70",
+                  ].join(" ")}
+                >
+                  {c.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Sections */}
+      <Section id={`event-sec-combos-${evKey}`} title="Combos:" count={combos.length} innerRef={secRefs.combos}>
+        {combos.map((t) => {
+          const inCart = qtyByTicketId.get((t as any).id);
+          return (
+            <TicketCard
+              key={(t as any).id}
+              ticket={t}
+              bannerUrl={null}
+              qtyInCart={inCart?.qty ?? 0}
+              itemId={inCart?.itemId ?? ""}
+              onAdd={() => onAdd(t)}
+              onChangeQty={onChangeQty}
+              compact
+              showDescription
+            />
+          );
+        })}
+      </Section>
+
+      <Section id={`event-sec-general-${evKey}`} title="General:" count={general.length} innerRef={secRefs.general}>
+        {general.map((t) => {
+          const inCart = qtyByTicketId.get((t as any).id);
+          return (
+            <TicketCard
+              key={(t as any).id}
+              ticket={t}
+              bannerUrl={null}
+              qtyInCart={inCart?.qty ?? 0}
+              itemId={inCart?.itemId ?? ""}
+              onAdd={() => onAdd(t)}
+              onChangeQty={onChangeQty}
+              compact
+              showDescription
+            />
+          );
+        })}
+      </Section>
+
+      <Section id={`event-sec-gratis-${evKey}`} title="Gratis:" count={gratis.length} innerRef={secRefs.gratis}>
+        {gratis.map((t) => {
+          const inCart = qtyByTicketId.get((t as any).id);
+          return (
+            <TicketCard
+              key={(t as any).id}
+              ticket={t}
+              bannerUrl={null}
+              qtyInCart={inCart?.qty ?? 0}
+              itemId={inCart?.itemId ?? ""}
+              onAdd={() => onAdd(t)}
+              onChangeQty={onChangeQty}
+              compact
+              showDescription
+              isFree
+            />
+          );
+        })}
+      </Section>
+    </div>
+  );
+}
+
+/* ----------------------------- Parent component ----------------------------- */
 export function ClubEvents({
   events,
   selectedDate,
@@ -58,10 +284,7 @@ export function ClubEvents({
   onChooseDate: (d: string) => void;
 }) {
   // Local lightbox (no redirect)
-  const [lightbox, setLightbox] = useState<{ open: boolean; url: string | null }>({
-    open: false,
-    url: null,
-  });
+  const [lightbox, setLightbox] = useState<{ open: boolean; url: string | null }>({ open: false, url: null });
 
   // Smooth scroll to the expanded tickets of the selected event
   const ticketsRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -70,10 +293,8 @@ export function ClubEvents({
   // Per-event "show full description" state
   const [descExpanded, setDescExpanded] = useState<Record<string, boolean>>({});
 
-  // Cart state for steppers inside expanded event panel
-  const [ticketCart, setTicketCart] = useState<{ items: { id: string; ticketId: string; quantity: number }[] } | null>(
-    null
-  );
+  // Cart state
+  const [ticketCart, setTicketCart] = useState<{ items: { id: string; ticketId: string; quantity: number }[] } | null>(null);
   const [menuCart, setMenuCart] = useState<{ items: any[] } | null>(null);
 
   // Modal when user tries to add while menu cart has items
@@ -91,9 +312,7 @@ export function ClubEvents({
 
   const qtyByTicketId = useMemo(() => {
     const map = new Map<string, { qty: number; itemId: string }>();
-    for (const it of ticketCart?.items ?? []) {
-      map.set(it.ticketId, { qty: it.quantity, itemId: it.id });
-    }
+    for (const it of ticketCart?.items ?? []) map.set(it.ticketId, { qty: it.quantity, itemId: it.id });
     return map;
   }, [ticketCart]);
 
@@ -131,14 +350,13 @@ export function ClubEvents({
       } finally {
         setPendingScrollToId(null);
       }
-    }, 280); // ~0.25s + slack
+    }, 280);
     return () => window.clearTimeout(timer);
   }, [pendingScrollToId, selectedDate]);
 
-  // Add from expanded tickets
+  // Add / change qty
   async function handleAdd(ticket: TicketDTO) {
     if ((menuCart?.items?.length ?? 0) > 0) {
-      // Other cart (menu) has items → ask first
       setPendingTicket(ticket);
       setShowConfirmClearMenu(true);
       return;
@@ -146,21 +364,14 @@ export function ClubEvents({
     await addTicketToCart({ ticketId: (ticket as any).id, quantity: 1, date: selectedDate! });
     await refreshCarts();
   }
-
-  // Stepper changes
   async function handleChangeQty(itemId: string, nextQty: number) {
-    if (nextQty <= 0) {
-      await removeTicketItem(itemId);
-    } else {
-      await updateTicketQty({ id: itemId, quantity: nextQty });
-    }
+    if (nextQty <= 0) await removeTicketItem(itemId);
+    else await updateTicketQty({ id: itemId, quantity: nextQty });
     await refreshCarts();
   }
-
-  // Confirm "Vaciar y continuar"
   async function confirmClearMenuAndAdd() {
     try {
-      await clearMenuCart(); // clear OTHER cart (menu)
+      await clearMenuCart();
       if (pendingTicket && selectedDate) {
         await addTicketToCart({ ticketId: (pendingTicket as any).id, quantity: 1, date: selectedDate });
       }
@@ -171,7 +382,6 @@ export function ClubEvents({
     }
   }
 
-  /* Hide entire section when there are no events */
   if (!events || events.length === 0) {
     return null;
   }
@@ -184,37 +394,30 @@ export function ClubEvents({
         {events.map((ev) => {
           const evId = String((ev as any).id);
           const evDate = getEventDate(ev);
-          const isSelected =
-            !!selectedEvent && evDate && getEventDate(selectedEvent as any) === evDate;
-
+          const isSelected = !!selectedEvent && evDate && getEventDate(selectedEvent as any) === evDate;
           const desc = getEventDesc(ev);
           const looksLong = (desc?.length ?? 0) > 180;
           const expanded = !!descExpanded[evId];
 
           return (
             <div key={evId} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-              {/* Header row with small square thumbnail + content */}
+              {/* Header row with image + content */}
               <div className="p-3">
                 <div className="flex items-start gap-3">
-                  {/* Square thumbnail; opens lightbox (no redirect) */}
                   <button
                     type="button"
                     onClick={() => (ev as any).bannerUrl && setLightbox({ open: true, url: (ev as any).bannerUrl })}
                     className="relative h-24 w-24 overflow-hidden rounded-lg shrink-0 ring-1 ring-white/10"
                     aria-label={`Ver imagen del evento ${(ev as any).name ?? ""}`}
                   >
-                    <img
-                      src={(ev as any).bannerUrl ?? ""}
-                      alt={(ev as any).name ?? ""}
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
+                    <img src={(ev as any).bannerUrl ?? ""} alt={(ev as any).name ?? ""} className="absolute inset-0 h-full w-full object-cover" />
                   </button>
 
                   <div className="flex-1 min-w-0">
                     <div className="text-white font-semibold">{(ev as any).name}</div>
                     {evDate && <div className="text-white/60 text-sm">{formatDateLabel(evDate)}</div>}
 
-                    {/* Description 3-line clamp + chevron with animation */}
+                    {/* Description (animated clamp) */}
                     {desc ? (
                       <div className="mt-2">
                         <AnimatePresence initial={false}>
@@ -224,11 +427,7 @@ export function ClubEvents({
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: "auto" }}
                               exit={{ opacity: 0, height: 0 }}
-                              transition={{ 
-                                duration: 0.2, 
-                                ease: [0.16, 1, 0.3, 1],
-                                height: { duration: 0.25 }
-                              }}
+                              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1], height: { duration: 0.25 } }}
                               className="text-white/75 text-sm leading-5 overflow-hidden"
                             >
                               {desc}
@@ -239,11 +438,7 @@ export function ClubEvents({
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: "3.75rem" }}
                               exit={{ opacity: 0, height: 0 }}
-                              transition={{ 
-                                duration: 0.2, 
-                                ease: [0.16, 1, 0.3, 1],
-                                height: { duration: 0.25 }
-                              }}
+                              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1], height: { duration: 0.25 } }}
                               className="text-white/75 text-sm leading-5 overflow-hidden"
                             >
                               {desc}
@@ -253,18 +448,12 @@ export function ClubEvents({
                         {looksLong && (
                           <button
                             type="button"
-                            onClick={() =>
-                              setDescExpanded((m) => ({ ...m, [evId]: !m[evId] }))
-                            }
+                            onClick={() => setDescExpanded((m) => ({ ...m, [evId]: !m[evId] }))}
                             className="mt-1 inline-flex items-center gap-1 text-xs text-white/70 hover:text-white/90"
                             aria-expanded={expanded}
                           >
                             <span>{expanded ? "Ver menos" : "Ver más"}</span>
-                            <svg
-                              className={["h-3 w-3 transition-transform", expanded ? "rotate-180" : ""].join(" ")}
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
+                            <svg className={["h-3 w-3 transition-transform", expanded ? "rotate-180" : ""].join(" ")} viewBox="0 0 20 20" fill="currentColor">
                               <path d="M10 12.5l-5-5h10l-5 5z" />
                             </svg>
                           </button>
@@ -272,10 +461,9 @@ export function ClubEvents({
                       </div>
                     ) : null}
 
-                    {/* CTA (hidden when this event's date is selected) */}
                     {!isSelected && (
                       <button
-                        className="mt-3 w-full rounded-full bg-violet-600 hover:bg-violet-500 text-white py-2 font-semibold"
+                        className="mt-3 w-full rounded-full bg-violet-600 hover:bg-violet-500 text-white py-2 text-sm font-semibold"
                         onClick={() => {
                           if (!evDate) return;
                           setPendingScrollToId(evId);
@@ -289,7 +477,7 @@ export function ClubEvents({
                 </div>
               </div>
 
-              {/* Expanded tickets for the selected event */}
+              {/* Expanded tickets with chip nav + sections */}
               <AnimatePresence initial={false}>
                 {isSelected && (
                   <motion.div
@@ -303,35 +491,27 @@ export function ClubEvents({
                       ticketsRefs.current[evId] = el;
                     }}
                   >
-                    {/* Borderless simplified block */}
                     <div className="mt-1">
                       <div className="flex items-center gap-3 mb-3">
                         <span className="text-white/90 font-semibold">Reservas del evento</span>
                         <div className="h-px bg-white/10 flex-1" />
                       </div>
 
-                      {eventTickets?.length ? (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {eventTickets.map((t) => {
-                            const inCart = qtyByTicketId.get((t as any).id);
-                            return (
-                              <TicketCard
-                                key={(t as any).id}
-                                ticket={t}
-                                bannerUrl={null} // no images in event tickets
-                                qtyInCart={inCart?.qty ?? 0}
-                                itemId={inCart?.itemId ?? ""}
-                                onAdd={() => handleAdd(t)}
-                                onChangeQty={handleChangeQty}
-                                compact
-                                showDescription
-                              />
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-white/60">No hay reservas disponibles para esta fecha.</div>
-                      )}
+                      {(() => {
+                        const combos = eventTickets.filter(isCombo);
+                        const hasAny = eventTickets.length > 0;
+                        return hasAny ? (
+                          <ExpandedEventTickets
+                            evKey={evId}
+                            tickets={eventTickets}
+                            qtyByTicketId={qtyByTicketId}
+                            onAdd={handleAdd}
+                            onChangeQty={handleChangeQty}
+                          />
+                        ) : (
+                          <div className="text-white/60">No hay reservas disponibles para esta fecha.</div>
+                        );
+                      })()}
                     </div>
                   </motion.div>
                 )}
@@ -361,7 +541,15 @@ export function ClubEvents({
             setShowConfirmClearMenu(false);
             setPendingTicket(null);
           }}
-          onConfirm={confirmClearMenuAndAdd}
+          onConfirm={async () => {
+            await clearMenuCart();
+            if (pendingTicket && selectedDate) {
+              await addTicketToCart({ ticketId: (pendingTicket as any).id, quantity: 1, date: selectedDate });
+            }
+            setPendingTicket(null);
+            setShowConfirmClearMenu(false);
+            await refreshCarts();
+          }}
         />
       )}
     </section>

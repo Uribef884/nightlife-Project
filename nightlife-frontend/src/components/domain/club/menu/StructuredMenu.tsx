@@ -18,7 +18,7 @@ import { MenuItemCard } from "./MenuItemCard";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 /** Sticky category pill nav + sections + animated variants */
-export function StructuredMenu({ clubId }: { clubId: string }) {
+export function StructuredMenu({ clubId, selectedDate }: { clubId: string; selectedDate?: string }) {
   const [items, setItems] = useState<MenuItemDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +39,7 @@ export function StructuredMenu({ clubId }: { clubId: string }) {
       try {
         setLoading(true);
         const [data, m, t] = await Promise.all([
-          getMenuItemsForClubCSR(clubId),
+          getMenuItemsForClubCSR(clubId, selectedDate),
           getMenuCartSummaryCSR(),
           getTicketCartSummary(),
         ]);
@@ -54,7 +54,7 @@ export function StructuredMenu({ clubId }: { clubId: string }) {
     return () => {
       alive = false;
     };
-  }, [clubId]);
+  }, [clubId, selectedDate]);
 
   async function refreshCarts() {
     const [m, t] = await Promise.all([getMenuCartSummaryCSR(), getTicketCartSummary()]);
@@ -107,9 +107,17 @@ export function StructuredMenu({ clubId }: { clubId: string }) {
   function scrollToCategory(catId: string) {
     const el = sectionRefs.current[catId];
     if (!el) return;
-    const stickyTop = readStickyTop();
-    const y = window.scrollY + el.getBoundingClientRect().top - stickyTop; // flush under tabs
-    window.scrollTo({ top: y, behavior: "smooth" });
+    
+    try {
+      const stickyTop = readStickyTop();
+      // Fix: Use offsetTop instead of getBoundingClientRect for more reliable positioning
+      const y = el.offsetTop - stickyTop - 20; // Add 20px buffer for better visual
+      window.scrollTo({ top: y, behavior: "smooth" });
+    } catch (error) {
+      // Fallback: simple scroll to element
+      console.warn('Smooth scroll failed, using fallback:', error);
+      el.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }
   }
 
   // Show a confirm modal if tickets cart has items, then run `proceed` on confirm
@@ -281,7 +289,7 @@ export function StructuredMenu({ clubId }: { clubId: string }) {
                   key={c.id}
                   onClick={() => scrollToCategory(c.id)}
                   className={[
-                    "shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
+                    "shrink-0 rounded-full px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold transition-colors",
                     isActive
                       ? "bg-[#7A48D3] text-white shadow"
                       : "bg-white/10 text-white/80 hover:text-white hover:bg-white/15",
@@ -304,11 +312,11 @@ export function StructuredMenu({ clubId }: { clubId: string }) {
           }}
           data-catid={c.id}
           className="rounded-2xl border border-white/10 bg-white/5 p-4"
-          style={{ scrollMarginTop: "var(--nl-sticky-scroll-margin, 80px)" }}
+          style={{ scrollMarginTop: "calc(var(--nl-sticky-top, 64px) + 20px)" }}
         >
           <h3 className="text-white font-semibold mb-3">{c.name}</h3>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
             {c.items.map((item) => {
               const itemId = String(item.id);
               const itemInCart = qtyByItemId.get(itemId);

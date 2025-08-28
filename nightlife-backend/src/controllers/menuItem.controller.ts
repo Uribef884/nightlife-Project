@@ -580,6 +580,8 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
   export const getPublicMenuForClub = async (req: Request, res: Response): Promise<void> => {
   try {
     const { clubId } = req.params;
+    const { date } = req.query; // Get the selected date from query params
+    
     const repo = AppDataSource.getRepository(MenuItem);
     const clubRepo = AppDataSource.getRepository(Club);
     const club = await clubRepo.findOne({ where: { id: clubId } });
@@ -617,10 +619,19 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
       const variants = item.variants?.filter(v => v.isActive && !v.isDeleted) ?? [];
       let dynamicPrice = null;
       if (item.dynamicPricingEnabled && !item.hasVariants && club) {
+        // Parse the selected date if provided, otherwise use current time
+        let availableDate: Date | undefined;
+        if (date && typeof date === 'string') {
+          const [year, month, day] = date.split("-").map(Number);
+          availableDate = new Date(year, month - 1, day);
+        }
+        
         dynamicPrice = computeDynamicPrice({
           basePrice: Number(item.price),
           clubOpenDays: club.openDays,
           openHours: club.openHours,
+          availableDate,
+          useDateBasedLogic: false,
         });
       }
       const publicItem = {
@@ -635,10 +646,19 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
           ? variants.map(v => {
               let vDynamicPrice = v.price;
               if (v.dynamicPricingEnabled && club) {
+                // Parse the selected date if provided, otherwise use current time
+                let availableDate: Date | undefined;
+                if (date && typeof date === 'string') {
+                  const [year, month, day] = date.split("-").map(Number);
+                  availableDate = new Date(year, month - 1, day);
+                }
+                
                 vDynamicPrice = computeDynamicPrice({
                   basePrice: Number(v.price),
                   clubOpenDays: club.openDays,
                   openHours: club.openHours,
+                  availableDate,
+                  useDateBasedLogic: false,
                 });
               }
               return {

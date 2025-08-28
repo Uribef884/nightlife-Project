@@ -30,12 +30,19 @@ export function VariantRow({
   onAdd: () => void;
   onChangeQty: (cartLineId: string, nextQty: number) => void;
 }) {
-  const priceNow = toNum((variant as any)?.price);
-  // Optional: if backend provides a compareAt-original price, we'll show slash
-  const compareAt =
-    toNum((variant as any)?.compareAtPrice) ??
-    toNum((variant as any)?.originalPrice) ??
-    null;
+  // Dynamic pricing logic - same as TicketCard
+  const basePrice = toNum((variant as any)?.price);
+  const dynamicPrice = toNum((variant as any)?.dynamicPrice);
+  
+  // Use dynamic price if available and enabled, otherwise use base price
+  const priceNow = (variant.dynamicPricingEnabled && dynamicPrice != null && !isNaN(dynamicPrice)) 
+    ? dynamicPrice 
+    : basePrice;
+  
+  // Show strike-through only when dynamic price is cheaper than base price
+  const compareAt = (variant.dynamicPricingEnabled && dynamicPrice != null && basePrice != null && dynamicPrice < basePrice) 
+    ? basePrice 
+    : null;
   const maxPerPerson = (variant as any)?.maxPerPerson as number | null | undefined;
 
   const maxAllowed = useMemo(() => {
@@ -47,20 +54,24 @@ export function VariantRow({
   const canDec = qtyInCart > 0;
 
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div className="flex items-center gap-3 py-2 flex-wrap">
       <div className="flex-1 min-w-0">
-        <div className="text-white/90 text-sm font-medium truncate">{(variant as any).name}</div>
-        <div className="mt-0.5 flex items-baseline gap-2">
-          {compareAt != null && priceNow != null && compareAt > priceNow ? (
-            <span className="text-white/40 line-through text-xs">{fmt(compareAt)}</span>
-          ) : null}
-          <span className="text-white font-semibold text-sm">{fmt(priceNow)}</span>
+        <div className="text-white/90 text-sm font-medium break-words leading-tight">{(variant as any).name}</div>
+        <div className="mt-0.5 flex items-baseline gap-2 flex-wrap">
+          {compareAt && priceNow && compareAt > priceNow ? (
+            <>
+              <span className="text-white font-semibold text-sm">{fmt(priceNow)}</span>
+              <span className="text-purple-400 text-xs line-through font-medium">{fmt(compareAt)}</span>
+            </>
+          ) : (
+            <span className="text-white font-semibold text-sm">{fmt(priceNow)}</span>
+          )}
         </div>
       </div>
 
       {/* Stepper */}
       {qtyInCart > 0 ? (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             disabled={!canDec}
@@ -85,7 +96,7 @@ export function VariantRow({
         <button
           type="button"
           onClick={onAdd}
-          className="rounded-full bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-3 py-1.5"
+          className="rounded-full bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-3 py-1.5 shrink-0"
         >
           Agregar
         </button>

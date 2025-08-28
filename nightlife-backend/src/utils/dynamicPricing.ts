@@ -80,6 +80,38 @@ function getNextOpenClose(now: Date, openHoursArr: { day: string, open: string, 
   return null;
 }
 
+function isDateOpen(referenceDate: Date, openHoursArr: { day: string, open: string, close: string }[], clubOpenDays: string[]): { isOpen: boolean; openTime?: Date; closeTime?: Date } {
+  const dayIndex = referenceDate.getDay();
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayName = dayNames[dayIndex];
+  
+  // Check if this day is an open day
+  if (!clubOpenDays.includes(dayName)) {
+    return { isOpen: false };
+  }
+  
+  // Find the open hours for this day
+  const hours = openHoursArr.find(h => h.day === dayName);
+  if (!hours) {
+    return { isOpen: false };
+  }
+  
+  const [openHour, openMinute] = hours.open.trim().split(":").map(Number);
+  const [closeHour, closeMinute] = hours.close.trim().split(":").map(Number);
+  
+  const openTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), openHour, openMinute);
+  let closeTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), closeHour, closeMinute);
+  
+  // Handle cross-midnight
+  if (closeTime <= openTime) {
+    closeTime.setDate(closeTime.getDate() + 1);
+  }
+  
+  const isOpen = referenceDate >= openTime && referenceDate < closeTime;
+  
+  return { isOpen, openTime, closeTime };
+}
+
 export interface DynamicPriceInput {
   basePrice: number;
   clubOpenDays: string[];
@@ -101,6 +133,8 @@ export function computeDynamicPrice(input: DynamicPriceInput): number {
     availableDate,
     useDateBasedLogic = false
   } = input;
+
+
 
   if (!basePrice || basePrice <= 0 || isNaN(basePrice)) {
     return 0;
@@ -138,37 +172,49 @@ export function computeDynamicPrice(input: DynamicPriceInput): number {
   }
 
   // 📆 General Day/Time-Based Logic (covers, menu)
+  // For general tickets, use the selected date if provided, otherwise use current time
+  const referenceDate = availableDate ? (availableDate instanceof Date ? availableDate : new Date(availableDate)) : new Date();
+  
   let openHoursArr = Array.isArray(openHours) ? openHours : [];
   if (!Array.isArray(openHours) && typeof openHours === "string") {
     // fallback: treat as always open
     return basePrice;
   }
   
-  const nextOpenClose = getNextOpenClose(now, openHoursArr, clubOpenDays);
+
   
-  if (!nextOpenClose) {
-    // No open hours found in the next week, treat as closed
-    const discountedPrice = clampPrice(Math.round(basePrice * PRICING_RULES.CLOSED_DAY * 100) / 100, basePrice);
-    return discountedPrice;
-  }
+  // Check if the selected date is open
+  const dateStatus = isDateOpen(referenceDate, openHoursArr, clubOpenDays);
   
-  const { open, close } = nextOpenClose;
+
   
-  if (now >= open && now < close) {
-    // Currently open
+  if (dateStatus.isOpen) {
+    // Club is open on the selected date - no discount
     return basePrice;
   }
   
-  const minutesUntilOpen = Math.round((open.getTime() - now.getTime()) / 60000);
-  
-  if (minutesUntilOpen > 180) {
-    // More than 3 hours before next open: 30% off
-    const discountedPrice = clampPrice(Math.round(basePrice * PRICING_RULES.CLOSED_DAY * 100) / 100, basePrice);
-    return discountedPrice;
+  // Club is closed on the selected date - check if it's the same day or different day
+  if (dateStatus.openTime) {
+    // Use CURRENT TIME to calculate minutes until the club opens on the selected date
+    const now = new Date();
+    const minutesUntilOpen = Math.round((dateStatus.openTime.getTime() - now.getTime()) / 60000);
+    
+    if (minutesUntilOpen > 180) {
+      // More than 3 hours before open on the same day: 30% off
+      const multiplier = PRICING_RULES.CLOSED_DAY;
+      const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
+      return discountedPrice;
+    } else {
+      // 3 hours or less before open on the same day: 10% off
+      const multiplier = PRICING_RULES.EARLY;
+      const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
+      return discountedPrice;
+    }
   }
   
-  // 3 hours or less before open: 10% off
-  const discountedPrice = clampPrice(Math.round(basePrice * PRICING_RULES.EARLY * 100) / 100, basePrice);
+       // Different day and closed: 30% off
+  const multiplier = PRICING_RULES.CLOSED_DAY;
+  const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
   return discountedPrice;
 }
 
@@ -186,38 +232,46 @@ export function getNormalTicketDynamicPricingReason(input: DynamicPriceInput): s
   const {
     clubOpenDays,
     openHours,
+    availableDate,
   } = input;
 
-  const now = new Date();
+
+
+  // Use the selected date if provided, otherwise use current time
+  const referenceDate = availableDate ? (availableDate instanceof Date ? availableDate : new Date(availableDate)) : new Date();
   let openHoursArr = Array.isArray(openHours) ? openHours : [];
   
   if (!Array.isArray(openHours) && typeof openHours === "string") {
     return undefined; // No dynamic pricing
   }
   
-  const nextOpenClose = getNextOpenClose(now, openHoursArr, clubOpenDays);
+  // Check if the selected date is open
+  const dateStatus = isDateOpen(referenceDate, openHoursArr, clubOpenDays);
   
-  if (!nextOpenClose) {
-    // No open hours found in the next week, treat as closed
-    return "closed_day";
+
+  
+  if (dateStatus.isOpen) {
+    // Club is open on the selected date - no discount
+    return undefined;
   }
   
-  const { open, close } = nextOpenClose;
-  
-  if (now >= open && now < close) {
-    // Currently open
-    return undefined; // No discount
+  // Club is closed on the selected date - check if it's the same day or different day
+  if (dateStatus.openTime) {
+    // Use CURRENT TIME to calculate minutes until the club opens on the selected date
+    const now = new Date();
+    const minutesUntilOpen = Math.round((dateStatus.openTime.getTime() - now.getTime()) / 60000);
+    
+    if (minutesUntilOpen > 180) {
+      // More than 3 hours before open on the same day: 30% off
+      return "closed_day";
+    } else {
+      // 3 hours or less before open on the same day: 10% off
+      return "early";
+    }
   }
   
-  const minutesUntilOpen = Math.round((open.getTime() - now.getTime()) / 60000);
-  
-  if (minutesUntilOpen > 180) {
-    // More than 3 hours before next open: 30% off
-    return "closed_day";
-  }
-  
-  // 3 hours or less before open: 10% off
-  return "early";
+  // Different day and closed: 30% off
+  return "closed_day";
 }
 
 /**

@@ -7,6 +7,16 @@
 :root {
   --nl-bg: #000117;
   --nl-fg: 255 255 255; /* white as rgb for opacity utilities */
+  --nl-sticky-top: 64px;
+  --nl-sticky-scroll-margin: 80px;
+}
+
+/* Mobile-specific sticky adjustments */
+@media (max-width: 640px) {
+  :root {
+    --nl-sticky-top: 56px;
+    --nl-sticky-scroll-margin: 72px;
+  }
 }
 
 html, body {
@@ -33,4 +43,26 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: rgba(255,255,255,0.15);
   border-radius: 9999px;
+}
+
+/* Custom scrollbar for mobile menu navigation */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth scrolling for better mobile experience */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Mobile touch improvements */
+@media (max-width: 640px) {
+  .touch-pan-x {
+    touch-action: pan-x;
+  }
 }

@@ -50,8 +50,11 @@ export type MenuCartSummary = {
 };
 
 /** GET public menu items for a club */
-export async function getMenuItemsForClubCSR(clubId: string): Promise<MenuItemDTO[]> {
-  const url = joinUrl(API_BASE_CSR, `/menu/items/club/${encodeURIComponent(clubId)}`);
+export async function getMenuItemsForClubCSR(clubId: string, selectedDate?: string): Promise<MenuItemDTO[]> {
+  const url = selectedDate 
+    ? joinUrl(API_BASE_CSR, `/menu/items/club/${encodeURIComponent(clubId)}?date=${encodeURIComponent(selectedDate)}`)
+    : joinUrl(API_BASE_CSR, `/menu/items/club/${encodeURIComponent(clubId)}`);
+  
   const res = await fetch(url, {
     method: "GET",
     headers: { "Content-Type": "application/json" },

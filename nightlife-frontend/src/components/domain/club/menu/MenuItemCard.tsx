@@ -77,11 +77,19 @@ export function MenuItemCard({
 
   const hasVariants = !!item.hasVariants && (item.variants?.length ?? 0) > 0;
 
-  const priceNow = toNum((item as any).price);
-  const compareAt =
-    toNum((item as any)?.compareAtPrice) ??
-    toNum((item as any)?.originalPrice) ??
-    null;
+  // Dynamic pricing logic - same as TicketCard
+  const basePrice = toNum((item as any).price);
+  const dynamicPrice = toNum((item as any)?.dynamicPrice);
+  
+  // Use dynamic price if available and enabled, otherwise use base price
+  const priceNow = (item.dynamicPricingEnabled && dynamicPrice != null && !isNaN(dynamicPrice)) 
+    ? dynamicPrice 
+    : basePrice;
+  
+  // Show strike-through only when dynamic price is cheaper than base price
+  const compareAt = (item.dynamicPricingEnabled && dynamicPrice != null && basePrice != null && dynamicPrice < basePrice) 
+    ? basePrice 
+    : null;
 
   const maxPerPerson = (item as any)?.maxPerPerson as number | null | undefined;
   const maxAllowed = useMemo(() => {
@@ -122,15 +130,20 @@ export function MenuItemCard({
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-semibold text-white truncate">{item.name}</div>
+          <div className="text-[15px] font-semibold text-white break-words leading-tight">{item.name}</div>
 
-          <div className="mt-1 flex items-baseline gap-2">
-            {compareAt != null && priceNow != null && compareAt > priceNow ? (
-              <span className="text-white/40 line-through text-sm">{fmt(compareAt)}</span>
-            ) : null}
-
+          <div className="mt-1 flex items-baseline gap-2 flex-wrap">
             {!hasVariants ? (
-              <span className="text-white text-[15px] font-bold">{fmt(priceNow)}</span>
+              <>
+                {compareAt && priceNow && compareAt > priceNow ? (
+                  <>
+                    <span className="text-white text-[15px] font-bold">{fmt(priceNow)}</span>
+                    <span className="text-purple-400 text-sm line-through font-medium">{fmt(compareAt)}</span>
+                  </>
+                ) : (
+                  <span className="text-white text-[15px] font-bold">{fmt(priceNow)}</span>
+                )}
+              </>
             ) : (
               <span className="text-white/90 text-sm">
                 Desde{" "}
@@ -161,7 +174,7 @@ export function MenuItemCard({
                       ease: [0.16, 1, 0.3, 1],
                       height: { duration: 0.25 }
                     }}
-                    className="text-white/80 text-sm leading-5 overflow-hidden"
+                    className="text-white/80 text-sm leading-5 overflow-hidden break-words"
                   >
                     {desc}
                   </motion.p>
@@ -176,7 +189,7 @@ export function MenuItemCard({
                       ease: [0.16, 1, 0.3, 1],
                       height: { duration: 0.25 }
                     }}
-                    className="text-white/80 text-sm leading-5 overflow-hidden"
+                    className="text-white/80 text-sm leading-5 overflow-hidden break-words"
                   >
                     {desc}
                   </motion.p>
@@ -209,7 +222,7 @@ export function MenuItemCard({
       <div className="mt-3">
         {!hasVariants ? (
           qtyInCartForItem > 0 ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => cartLineIdForItem && onChangeQty(cartLineIdForItem, Math.max(0, qtyInCartForItem - 1))}
@@ -233,7 +246,7 @@ export function MenuItemCard({
               >
                 +
               </button>
-
+              
               {Number.isFinite(maxAllowed) ? (
                 <div className="ml-auto text-xs text-white/60">Límite: {maxAllowed}</div>
               ) : null}
@@ -242,7 +255,7 @@ export function MenuItemCard({
             <button
               type="button"
               onClick={onAddItem}
-              className="w-full rounded-full bg-green-600 hover:bg-green-500 text-white py-2 font-semibold"
+              className="w-full rounded-full bg-green-600 hover:bg-green-500 text-white py-2 font-semibold text-sm sm:text-base"
             >
               Agregar al carrito
             </button>
@@ -251,7 +264,7 @@ export function MenuItemCard({
           <button
             type="button"
             onClick={() => setShowVariants((v) => !v)}
-            className="w-full rounded-full bg-white/10 hover:bg-white/15 text-white py-2 font-semibold"
+            className="w-full rounded-full bg-white/10 hover:bg-white/15 text-white py-2 font-semibold text-sm sm:text-base"
           >
             {showVariants ? "Ocultar opciones" : "Ver opciones"}
           </button>
