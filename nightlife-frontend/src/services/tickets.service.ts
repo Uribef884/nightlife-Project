@@ -93,10 +93,39 @@ export async function getAvailableTicketsForDate(
 
   const data = (await res.json()) as AvailableTicketsResponse;
 
-  // Normalize arrays defensively
-  data.eventTickets = Array.isArray(data.eventTickets) ? data.eventTickets : [];
-  data.generalTickets = Array.isArray(data.generalTickets) ? data.generalTickets : [];
-  data.freeTickets = Array.isArray(data.freeTickets) ? data.freeTickets : [];
+  // Normalize arrays defensively and ensure includedMenuItems are properly structured
+  const normalizeTicket = (ticket: any): TicketDTO => ({
+    id: String(ticket.id),
+    name: String(ticket.name),
+    description: ticket.description ?? null,
+    price: ticket.price,
+    dynamicPricingEnabled: !!ticket.dynamicPricingEnabled,
+    dynamicPrice: ticket.dynamicPrice,
+    maxPerPerson: Number(ticket.maxPerPerson ?? 0),
+    priority: Number(ticket.priority ?? 0),
+    isActive: !!ticket.isActive,
+    includesMenuItem: !!ticket.includesMenuItem,
+    availableDate: ticket.availableDate ?? null,
+    quantity: ticket.quantity ?? null,
+    originalQuantity: ticket.originalQuantity ?? null,
+    category: ticket.category,
+    clubId: String(ticket.clubId),
+    eventId: ticket.eventId ?? null,
+    includedMenuItems: Array.isArray(ticket.includedMenuItems)
+      ? ticket.includedMenuItems.map((inc: any) => ({
+          id: String(inc.id),
+          menuItemId: String(inc.menuItemId),
+          menuItemName: String(inc.menuItemName),
+          variantId: inc.variantId ?? null,
+          variantName: inc.variantName ?? null,
+          quantity: Number(inc.quantity ?? 1),
+        }))
+      : [],
+  });
+
+  data.eventTickets = Array.isArray(data.eventTickets) ? data.eventTickets.map(normalizeTicket) : [];
+  data.generalTickets = Array.isArray(data.generalTickets) ? data.generalTickets.map(normalizeTicket) : [];
+  data.freeTickets = Array.isArray(data.freeTickets) ? data.freeTickets.map(normalizeTicket) : [];
 
   // Apply sorting: priority ASC, then name, then id
   sortTicketsByPriorityThenName(data.eventTickets);

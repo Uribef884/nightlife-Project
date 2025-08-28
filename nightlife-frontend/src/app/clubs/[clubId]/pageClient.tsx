@@ -398,27 +398,16 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       }
     })();
 
-    (async () => {
-      try {
-        const t = await getTicketsForClubCSR(clubId);
-        if (Array.isArray(t) && t.length > 0) {
-          setTickets(t);
-        } else {
-          const url = joinUrl(API_BASE_CSR, `/tickets/club/${encodeURIComponent(clubId)}?isActive=true`);
-          const res = await fetch(url, {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-            cache: "no-store",
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setTickets(Array.isArray(data) ? (data as TicketDTO[]) : []);
+            (async () => {
+          try {
+            const t = await getTicketsForClubCSR(clubId);
+            if (Array.isArray(t) && t.length > 0) {
+              setTickets(t);
+            }
+          } catch (err) {
+            // Silently handle errors
           }
-        }
-      } catch (err) {
-        // Silent fail
-      }
-    })();
+        })();
 
     (async () => {
       try {
@@ -668,7 +657,6 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                     selectedDate={selectedDate}
                     events={safeEvents}
                     tickets={safeTickets}
-                    selectedEventTickets={selectedEventTickets}
                     available={
                       available
                         ? {

@@ -1208,7 +1208,7 @@ export async function getAvailableTicketsForDate(req: Request, res: Response): P
       tickets = [...validGeneralTickets, ...validFreeTickets];
     }
     
-    // Process tickets with dynamic pricing
+    // Process tickets with dynamic pricing and included menu items
     const processedTickets = await Promise.all(tickets.map(async (ticket) => {
       let dynamicPrice = Number(ticket.price);
       let dynamicPricingReason: string | undefined = undefined;
@@ -1256,6 +1256,33 @@ export async function getAvailableTicketsForDate(req: Request, res: Response): P
         // Free tickets keep price = 0
       }
       
+      // Fetch included menu items if this ticket includes them
+      let includedMenuItems: Array<{
+        id: string;
+        menuItemId: string;
+        menuItemName: string;
+        variantId?: string;
+        variantName: string | null;
+        quantity: number;
+      }> = [];
+      
+      if (ticket.includesMenuItem) {
+        const ticketIncludedMenuRepo = AppDataSource.getRepository(TicketIncludedMenuItem);
+        const includedItems = await ticketIncludedMenuRepo.find({
+          where: { ticketId: ticket.id },
+          relations: ["menuItem", "variant"]
+        });
+        
+        includedMenuItems = includedItems.map(item => ({
+          id: item.id,
+          menuItemId: item.menuItemId,
+          menuItemName: item.menuItem?.name || 'Unknown Item',
+          variantId: item.variantId,
+          variantName: item.variant?.name || null,
+          quantity: item.quantity
+        }));
+      }
+      
       return {
         id: ticket.id,
         name: ticket.name,
@@ -1268,7 +1295,9 @@ export async function getAvailableTicketsForDate(req: Request, res: Response): P
         price: Number(ticket.price),
         dynamicPrice,
         dynamicPricingEnabled: ticket.dynamicPricingEnabled,
-        dynamicPricingReason
+        dynamicPricingReason,
+        includesMenuItem: ticket.includesMenuItem,
+        includedMenuItems
       };
     }));
     

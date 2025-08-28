@@ -712,7 +712,36 @@ export async function getTicketsForClubCSR(clubId: string): Promise<TicketDTO[]>
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json?.results) ? json.results
       : [];
-    return rows as TicketDTO[];
+    
+    // Map the rows to ensure includedMenuItems are properly structured
+    return rows.map((t: any) => ({
+      id: String(t.id),
+      name: String(t.name),
+      description: t.description ?? null,
+      price: t.price,
+      dynamicPricingEnabled: !!t.dynamicPricingEnabled,
+      dynamicPrice: t.dynamicPrice,
+      maxPerPerson: Number(t.maxPerPerson ?? 0),
+      priority: Number(t.priority ?? 0),
+      isActive: !!t.isActive,
+      includesMenuItem: !!t.includesMenuItem,
+      availableDate: t.availableDate ?? null,
+      quantity: t.quantity ?? null,
+      originalQuantity: t.originalQuantity ?? null,
+      category: t.category,
+      clubId: String(t.clubId),
+      eventId: t.eventId ?? null,
+      includedMenuItems: Array.isArray(t.includedMenuItems)
+        ? t.includedMenuItems.map((inc: any) => ({
+            id: String(inc.id),
+            menuItemId: String(inc.menuItemId),
+            menuItemName: String(inc.menuItemName),
+            variantId: inc.variantId ?? null,
+            variantName: inc.variantName ?? null,
+            quantity: Number(inc.quantity ?? 1),
+          }))
+        : [],
+    })) as TicketDTO[];
   } catch {
     return [];
   }

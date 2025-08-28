@@ -1,5 +1,7 @@
-// src/components/domain/club/TicketsGrid.tsx
+// nightlife-frontend/src/components/domain/club/TicketsGrid.tsx
 "use client";
+
+/* eslint-disable no-console */
 
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -9,29 +11,38 @@ import {
   getTicketCartSummary,
   updateTicketQty,
   removeTicketItem,
-  clearMenuCart, // ← used to clear the OTHER cart (menu) when adding tickets
+  clearMenuCart,
 } from "@/services/cart.service";
 import type { ClubDTO, EventDTO, TicketDTO } from "@/services/clubs.service";
 import type { AvailableTicketsResponse } from "@/services/tickets.service";
 import TicketCard from "./TicketCard";
 
+/** Merge a lightweight “ordering” list with a richer source by id.
+ *  The rich copy wins so relations (includedMenuItems) survive.
+ */
+function mergeById(ordering: TicketDTO[] | undefined, enriched: TicketDTO[]): TicketDTO[] {
+  if (!ordering || ordering.length === 0) return enriched;
+  const map = new Map(enriched.map((t) => [t.id, t]));
+  return ordering.map((o) => (map.has(o.id) ? { ...o, ...map.get(o.id)! } : o));
+}
+
+
+
 type CartSummary = {
-  items: { id: string; ticketId: string; quantity: number }[];
+  items: Array<{ id: string; ticketId: string; quantity: number }>;
 };
 
-export function TicketsGrid({
+export default function TicketsGrid({
   club,
   selectedDate,
   events,
-  tickets,
-  selectedEventTickets,
-  available,
+  tickets,   // expected rich list (may or may not include includedMenuItems)
+  available, // lightweight ordering
 }: {
   club: ClubDTO;
   selectedDate: string | null;
-  events: EventDTO[];
+  events?: EventDTO[];
   tickets: TicketDTO[];
-  selectedEventTickets?: TicketDTO[] | undefined;
   available?: Pick<
     AvailableTicketsResponse,
     "dateHasEvent" | "event" | "eventTickets" | "generalTickets" | "freeTickets"
@@ -41,7 +52,7 @@ export function TicketsGrid({
   const [ticketCart, setTicketCart] = useState<CartSummary | null>(null);
   const [menuCart, setMenuCart] = useState<{ items: any[] } | null>(null);
 
-  // Modal state: when user tries to add a ticket while menu cart has items
+  // Modal state
   const [showConfirmClearMenu, setShowConfirmClearMenu] = useState(false);
   const [pendingTicket, setPendingTicket] = useState<TicketDTO | null>(null);
 
@@ -62,13 +73,23 @@ export function TicketsGrid({
     return map;
   }, [ticketCart]);
 
-  // ── buckets (server wins; fallback by category)
-  const effGeneralTickets =
-    available?.generalTickets ?? tickets.filter((t) => (t as any).category === "general");
-  const effFreeTickets =
-    available?.freeTickets ?? tickets.filter((t) => (t as any).category === "free");
+  // Build enriched lists (these should carry includedMenuItems if `tickets` does)
+  const ticketsGeneral = useMemo(() => tickets.filter((t) => (t as any).category === "general"), [tickets]);
+  const ticketsFree = useMemo(() => tickets.filter((t) => (t as any).category === "free"), [tickets]);
 
-  // ── early UI
+  // Merge server ordering (light) with enriched copies
+  const effGeneralTickets = useMemo(
+    () => mergeById(available?.generalTickets, ticketsGeneral),
+    [available?.generalTickets, ticketsGeneral]
+  );
+  const effFreeTickets = useMemo(
+    () => mergeById(available?.freeTickets, ticketsFree),
+    [available?.freeTickets, ticketsFree]
+  );
+
+
+
+  // ── UI guard
   if (!selectedDate) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/70">
@@ -78,23 +99,24 @@ export function TicketsGrid({
   }
 
   // ── handlers
-  async function handleAdd(ticket: TicketDTO) {
-    // If there are MENU items in cart, ask the user before clearing them
-    if ((menuCart?.items?.length ?? 0) > 0) {
-      setPendingTicket(ticket);
+  async function handleAdd(t: TicketDTO) {
+    if (!selectedDate) return;
+
+    // Do not mix carts
+    if (menuCart && (menuCart.items?.length ?? 0) > 0) {
+      setPendingTicket(t);
       setShowConfirmClearMenu(true);
       return;
     }
-    // Normal add
+
     await addTicketToCart({
-      ticketId: (ticket as any).id,
+      ticketId: t.id,
+      date: selectedDate,
       quantity: 1,
-      date: selectedDate!, // guaranteed here
     });
     await refreshCarts();
   }
 
-  // Called by TicketCard stepper
   async function handleChangeQty(itemId: string, nextQty: number) {
     if (nextQty <= 0) {
       await removeTicketItem(itemId);
@@ -104,17 +126,16 @@ export function TicketsGrid({
     await refreshCarts();
   }
 
-  // Confirm modal "Vaciar y continuar"
   async function confirmClearMenuAndAdd() {
+    if (!pendingTicket || !selectedDate) return;
+
     try {
-      await clearMenuCart(); // clear OTHER cart (menu)
-      if (pendingTicket && selectedDate) {
-        await addTicketToCart({
-          ticketId: (pendingTicket as any).id,
-          quantity: 1,
-          date: selectedDate,
-        });
-      }
+      await clearMenuCart();
+      await addTicketToCart({
+        ticketId: pendingTicket.id,
+        date: selectedDate,
+        quantity: 1,
+      });
     } finally {
       setPendingTicket(null);
       setShowConfirmClearMenu(false);
@@ -129,58 +150,54 @@ export function TicketsGrid({
     <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
       <h3 className="text-white font-semibold mb-3">Reservas disponibles</h3>
 
-      {!hasAnyGeneral && !hasAnyFree ? (
-        <div className="text-white/60">No hay reservas disponibles para esta fecha.</div>
-      ) : (
-        <div className="space-y-6">
-          {hasAnyGeneral && (
-            <div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {effGeneralTickets.map((t) => {
-                  const inCart = qtyByTicketId.get((t as any).id);
-                  return (
-                    <TicketCard
-                      key={(t as any).id}
-                      ticket={t}
-                      bannerUrl={null}
-                      qtyInCart={inCart?.qty ?? 0}
-                      itemId={inCart?.itemId ?? ""}
-                      onAdd={() => handleAdd(t)}
-                      onChangeQty={handleChangeQty}
-                      compact
-                      showDescription
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
+      {/* GENERAL tickets */}
+      {hasAnyGeneral && (
+        <div className="mb-6">
+          <h4 className="text-white/80 text-sm mb-2">Covers</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {effGeneralTickets.map((t) => {
+              const inCart = qtyByTicketId.get(t.id);
+              return (
+                <TicketCard
+                  key={t.id}
+                  ticket={t} // merged -> should include includedMenuItems if source had them
+                  bannerUrl={null}
+                  qtyInCart={inCart?.qty ?? 0}
+                  itemId={inCart?.itemId ?? ""}
+                  onAdd={() => handleAdd(t)}
+                  onChangeQty={handleChangeQty}
+                  compact
+                  showDescription
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-          {/* Gratis */}
-          {hasAnyFree && (
-            <div>
-              <div className="text-white/80 font-semibold mb-2">Gratis</div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                                 {effFreeTickets.map((t) => {
-                   const inCart = qtyByTicketId.get((t as any).id);
-                   return (
-                     <TicketCard
-                       key={(t as any).id}
-                       ticket={t}
-                       bannerUrl={null}
-                       qtyInCart={inCart?.qty ?? 0}
-                       itemId={inCart?.itemId ?? ""}
-                       onAdd={() => handleAdd(t)}
-                       onChangeQty={handleChangeQty}
-                       compact
-                       showDescription
-                       isFree={true}
-                     />
-                   );
-                 })}
-              </div>
-            </div>
-          )}
+      {/* FREE tickets */}
+      {hasAnyFree && (
+        <div>
+          <h4 className="text-white/80 text-sm mb-2">Promos gratis</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {effFreeTickets.map((t) => {
+              const inCart = qtyByTicketId.get(t.id);
+              return (
+                <TicketCard
+                  key={t.id}
+                  ticket={t}
+                  bannerUrl={null}
+                  qtyInCart={inCart?.qty ?? 0}
+                  itemId={inCart?.itemId ?? ""}
+                  onAdd={() => handleAdd(t)}
+                  onChangeQty={handleChangeQty}
+                  compact
+                  showDescription
+                  isFree
+                />
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -199,3 +216,5 @@ export function TicketsGrid({
     </section>
   );
 }
+
+export { TicketsGrid };
