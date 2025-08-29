@@ -161,12 +161,12 @@ export function computeDynamicPrice(input: DynamicPriceInput): number {
       // More than 3 hours before event: 30% off
       const discountedPrice = clampPrice(Math.round(basePrice * PRICING_RULES.CLOSED_DAY * 100) / 100, basePrice);
       return discountedPrice;
-    } else if (minutesUntilEvent > 0) {
-      // 3 hours or less before event: 10% off
+    } else if (minutesUntilEvent > 120) {
+      // 2-3 hours before event: 10% off
       const discountedPrice = clampPrice(Math.round(basePrice * PRICING_RULES.EARLY * 100) / 100, basePrice);
       return discountedPrice;
     } else {
-      // Event has started or passed: full price
+      // 2 hours or less before event or during event: full price
       return basePrice;
     }
   }
@@ -204,15 +204,18 @@ export function computeDynamicPrice(input: DynamicPriceInput): number {
       const multiplier = PRICING_RULES.CLOSED_DAY;
       const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
       return discountedPrice;
-    } else {
-      // 3 hours or less before open on the same day: 10% off
+    } else if (minutesUntilOpen > 120) {
+      // 2-3 hours before open on the same day: 10% off
       const multiplier = PRICING_RULES.EARLY;
       const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
       return discountedPrice;
+    } else {
+      // 2 hours or less before open or during open hours: full price
+      return basePrice;
     }
   }
   
-       // Different day and closed: 30% off
+  // Different day and closed: 30% off
   const multiplier = PRICING_RULES.CLOSED_DAY;
   const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
   return discountedPrice;
@@ -264,9 +267,12 @@ export function getNormalTicketDynamicPricingReason(input: DynamicPriceInput): s
     if (minutesUntilOpen > 180) {
       // More than 3 hours before open on the same day: 30% off
       return "closed_day";
-    } else {
-      // 3 hours or less before open on the same day: 10% off
+    } else if (minutesUntilOpen > 120) {
+      // 2-3 hours before open on the same day: 10% off
       return "early";
+    } else {
+      // 2 hours or less before open or during open hours: full price
+      return "open";
     }
   }
   
