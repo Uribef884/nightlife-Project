@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { generateTicketEmailHTML } from "../templates/ticketEmailTemplate";
 import { generateMenuEmailHTML } from "../templates/menuEmailTemplate";
 import { generateMenuFromTicketEmailHTML } from "../templates/menuFromTicketEmailTemplate";
+import { generatePasswordResetEmailHTML } from "../templates/passwordResetEmailTemplate";
 
 type TicketEmailPayload = {
   to: string;
@@ -78,23 +79,34 @@ export async function sendMenuEmail(payload: MenuEmailPayload) {
 }
 
 export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
-  const resetUrl = `${process.env.FRONTEND_BASE_URL}/reset-password?token=${token}`;
+  try {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resetUrl = `${frontendUrl}/auth/reset-password?token=${token}`;
 
-  const html = `
-    <div style="font-family: sans-serif; padding: 1rem;">
-      <h2>Reset your NightLife password</h2>
-      <p>Click the link below to set a new password:</p>
-      <p><a href="${resetUrl}" target="_blank">${resetUrl}</a></p>
-      <p>This link will expire in 15 minutes. If you didn’t request this, you can ignore it.</p>
-    </div>
-  `;
+    console.log('📧 [EMAIL_SERVICE] Sending password reset email to:', email);
+    console.log('🔗 [EMAIL_SERVICE] Reset URL:', resetUrl);
 
-  await transporter.sendMail({
-    from: `"NightLife Support" <${process.env.SMTP_USER}>`,
-    to: email,
-    subject: "Reset Your NightLife Password",
-    html,
-  });
+    const html = generatePasswordResetEmailHTML({ resetUrl });
+
+    // Verify SMTP configuration
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      throw new Error('SMTP configuration missing. Please check SMTP_HOST, SMTP_USER, and SMTP_PASS environment variables.');
+    }
+
+    console.log('📧 [EMAIL_SERVICE] SMTP config verified, sending email...');
+
+    await transporter.sendMail({
+      from: `"NightLife Support" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: "🔐 Reset Your NightLife Password",
+      html,
+    });
+
+    console.log('✅ [EMAIL_SERVICE] Password reset email sent successfully to:', email);
+  } catch (error) {
+    console.error('❌ [EMAIL_SERVICE] Failed to send password reset email:', error);
+    throw error;
+  }
 }
 
 export async function sendMenuFromTicketEmail(payload: MenuFromTicketEmailPayload) {

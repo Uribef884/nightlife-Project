@@ -264,23 +264,38 @@ export async function deleteOwnUser(req: Request, res: Response): Promise<void> 
 
 
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
+  console.log('🔐 [AUTH_CONTROLLER] Forgot password request received:', req.body);
+  
   const result = forgotPasswordSchema.safeParse(req.body);
   if (!result.success) {
+    console.log('❌ [AUTH_CONTROLLER] Validation failed:', result.error);
     res.status(200).json({ message: "Reset link has been sent." });
     return;
   }
 
   const { email } = result.data;
+  console.log('📧 [AUTH_CONTROLLER] Processing forgot password for email:', email);
+  
   const user = await AppDataSource.getRepository(User).findOneBy({ email });
   if (!user) {
+    console.log('⚠️ [AUTH_CONTROLLER] User not found for email:', email);
     res.status(200).json({ message: "Reset link has been sent." });
     return;
   }
 
+  console.log('✅ [AUTH_CONTROLLER] User found, generating reset token for:', email);
+  
   const token = jwt.sign({ id: user.id }, RESET_SECRET, { expiresIn: RESET_EXPIRY });
-  await sendPasswordResetEmail(user.email, token);
-
-  res.status(200).json({ message: "Reset link has been sent." });
+  console.log('🔑 [AUTH_CONTROLLER] Reset token generated, sending email...');
+  
+  try {
+    await sendPasswordResetEmail(user.email, token);
+    console.log('✅ [AUTH_CONTROLLER] Password reset email sent successfully');
+    res.status(200).json({ message: "Reset link has been sent." });
+  } catch (error) {
+    console.error('❌ [AUTH_CONTROLLER] Failed to send password reset email:', error);
+    res.status(500).json({ error: "Failed to send reset email" });
+  }
 }
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {
@@ -392,7 +407,8 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     // Handle OAuth errors from Google
     if (error) {
       console.error('❌ Google OAuth error:', error, error_description);
-      res.redirect(`/clubs.html?error=oauth_${error}`);
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      res.redirect(`${frontendUrl}/auth/login?error=oauth_${error}`);
       return;
     }
     
@@ -498,14 +514,24 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
       });
     }
 
-    // Redirect to success page
-    const redirectUrl = `/clubs.html?oauth=success`; // Always redirect to our test page for now
+    // Redirect to frontend callback page with user data
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const redirectUrl = `${frontendUrl}/auth/google/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatar: user.avatar,
+      isOAuthUser: user.isOAuthUser
+    }))}`;
     
     res.redirect(redirectUrl);
 
   } catch (error) {
     console.error("❌ Error in Google OAuth callback:", error);
-    res.redirect(`/clubs.html?error=oauth_failed`);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    res.redirect(`${frontendUrl}/auth/login?error=oauth_failed`);
   }
 }
 

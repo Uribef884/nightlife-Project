@@ -6,10 +6,17 @@
  */
 import { ReactNode, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthProvider } from "../contexts/AuthContext";
 
 export function Providers({ children }: { children: ReactNode }) {
   // create one QueryClient per app on the client
   const [queryClient] = useState(() => new QueryClient());
 
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        {children}
+      </AuthProvider>
+    </QueryClientProvider>
+  );
 }

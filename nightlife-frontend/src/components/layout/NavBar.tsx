@@ -4,8 +4,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { LogIn, ShoppingCart, Menu as MenuIcon, X } from "lucide-react";
+import { LogIn, ShoppingCart, Menu as MenuIcon, X, User } from "lucide-react";
 import { ClubTabs } from "@/components/domain/club/ClubTabs";
+import { useAuthStore } from "@/stores/auth.store";
 
 type TabKey = "general" | "reservas" | "carta";
 
@@ -24,9 +25,11 @@ function resolveTabFromURL(): TabKey {
 
 export default function NavBar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { isAuthenticated } = useAuthStore();
 
   const pathname = usePathname() || "/";
   const isClubRoute = pathname.startsWith("/clubs/");
+  const isAuthRoute = pathname.startsWith("/auth/") || pathname === "/auth";
 
   const [currentTab, setCurrentTab] = useState<TabKey>("general");
 
@@ -69,32 +72,48 @@ export default function NavBar() {
           <span className="text-xl font-semibold text-slate-100 pointer-events-none">NightLife</span>
         </Link>
 
-        <div className="hidden items-center gap-3 md:flex">
+        {/* Only show actions if not on auth routes */}
+        {!isAuthRoute && (
+          <div className="hidden items-center gap-3 md:flex">
+            <button
+              aria-label="Abrir carrito"
+              className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
+            >
+              <ShoppingCart className="h-4 w-4" />
+            </button>
+
+            {isAuthenticated ? (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
+              >
+                <User className="h-4 w-4" />
+                Ver Perfil
+              </Link>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
+              >
+                <LogIn className="h-4 w-4" />
+                Iniciar Sesión
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* Only show mobile menu button if not on auth routes */}
+        {!isAuthRoute && (
           <button
-            aria-label="Abrir carrito"
-            className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
+            className="rounded-md p-2 text-slate-200 hover:bg-slate-800 md:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
+            aria-controls="mobile-menu"
+            aria-expanded={mobileOpen}
           >
-            <ShoppingCart className="h-4 w-4" />
+            <MenuIcon className="h-6 w-6" />
           </button>
-
-          <Link
-            href="/auth/login"
-            className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
-          >
-            <LogIn className="h-4 w-4" />
-            Iniciar Sesión
-          </Link>
-        </div>
-
-        <button
-          className="rounded-md p-2 text-slate-200 hover:bg-slate-800 md:hidden"
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open menu"
-          aria-controls="mobile-menu"
-          aria-expanded={mobileOpen}
-        >
-          <MenuIcon className="h-6 w-6" />
-        </button>
+        )}
       </div>
 
       {/* Row 2: tabs — transparent, centered; only on /clubs/* */}
@@ -106,8 +125,8 @@ export default function NavBar() {
         </div>
       )}
 
-      {/* Mobile sheet */}
-      {mobileOpen && (
+      {/* Mobile sheet - only show if not on auth routes */}
+      {mobileOpen && !isAuthRoute && (
         <div id="mobile-menu" className="md:hidden" role="dialog" aria-modal="true" aria-label="Mobile menu">
           <div className="border-t border-slate-800/60 bg-slate-900 px-4 py-3">
             <div className="flex items-center justify-between">
@@ -127,14 +146,25 @@ export default function NavBar() {
                 Carrito
               </button>
 
-              <Link
-                href="/auth/login"
-                className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500"
-                onClick={() => setMobileOpen(false)}
-              >
-                <LogIn className="h-4 w-4" />
-                Iniciar Sesión
-              </Link>
+              {isAuthenticated ? (
+                <Link
+                  href="/dashboard"
+                  className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <User className="h-4 w-4" />
+                  Ver Perfil
+                </Link>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <LogIn className="h-4 w-4" />
+                  Iniciar Sesión
+                </Link>
+              )}
             </div>
           </div>
         </div>
