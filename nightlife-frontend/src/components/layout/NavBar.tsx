@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { LogIn, ShoppingCart, Menu as MenuIcon, X, User } from "lucide-react";
 import { ClubTabs } from "@/components/domain/club/ClubTabs";
 import { useAuthStore } from "@/stores/auth.store";
+import { saveRedirectPath } from "@/utils/redirect";
 
 type TabKey = "general" | "reservas" | "carta";
 
@@ -93,6 +94,7 @@ export default function NavBar() {
             ) : (
               <Link
                 href="/auth/login"
+                onClick={saveRedirectPath}
                 className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
               >
                 <LogIn className="h-4 w-4" />
@@ -159,7 +161,10 @@ export default function NavBar() {
                 <Link
                   href="/auth/login"
                   className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500"
-                  onClick={() => setMobileOpen(false)}
+                  onClick={() => {
+                    saveRedirectPath();
+                    setMobileOpen(false);
+                  }}
                 >
                   <LogIn className="h-4 w-4" />
                   Iniciar Sesión

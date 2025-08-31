@@ -8,6 +8,7 @@ import { differenceInMinutes } from "date-fns";
 import { AuthenticatedRequest } from "../types/express";
 import { issueMockTransaction } from "../services/mockWompiService";
 import { sanitizeInput } from "../utils/sanitizeInput";
+import { lockAndValidateCart } from "../utils/cartLock";
 import { calculatePlatformFee, calculateGatewayFees } from "../utils/menuFeeUtils";
 import { getMenuCommissionRate } from "../config/fees";
 
@@ -38,22 +39,14 @@ export const initiateMenuCheckout = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing session or user" });
   }
 
-  const cartItems = await cartRepo.find({
-    where,
-    relations: ["menuItem", "variant", "menuItem.club"],
-  });
-
-  if (!cartItems.length) {
-    return res.status(400).json({ error: "Cart is empty" });
+  // 🔒 Lock and validate cart before proceeding with payment
+  const tempTransactionId = "temp-" + Date.now();
+  const cartValidation = await lockAndValidateCart(userId, sessionId, tempTransactionId, 'menu');
+  if (!cartValidation.success) {
+    return res.status(400).json({ error: cartValidation.error });
   }
-
-  // 🍒 TTL expiration check
-  const oldestItem = cartItems.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
-  const minutesOld = differenceInMinutes(new Date(), new Date(oldestItem.createdAt));
-  if (minutesOld > 30) {
-    await cartRepo.delete(where);
-    return res.status(400).json({ error: "Cart expired. Please start over." });
-  }
+  
+  const cartItems = cartValidation.cartItems!;
 
   const invalidItem = cartItems.find((item) => !item.menuItem.isActive);
   if (invalidItem) {

@@ -10,6 +10,7 @@ import { TicketIncludedMenuItem } from "../entities/TicketIncludedMenuItem";
 import { calculatePlatformFee, calculateGatewayFees } from "../utils/ticketfeeUtils";
 import { getTicketCommissionRate } from "../config/fees";
 import { summarizeCartTotals } from "../utils/cartSummary";
+import { isCartLockedSmart } from "../utils/cartLock";
 
 function ownsCartItem(item: CartItem, userId?: string, sessionId?: string): boolean {
   if (userId) return item.userId === userId;
@@ -25,6 +26,15 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
       res.status(401).json({ error: "Missing or invalid token" });
+      return;
+    }
+
+    // 🛑 Check if cart is locked for payment processing (smart check that auto-unlocks empty carts)
+    const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'ticket');
+    if (isLocked) {
+      res.status(423).json({ 
+        error: "Cart is currently being processed. Please wait for your payment to complete before adding more items." 
+      });
       return;
     }
 
@@ -207,6 +217,15 @@ export const updateCartItem = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
 
+    // 🛑 Check if cart is locked for payment processing (smart check that auto-unlocks empty carts)
+    const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'ticket');
+    if (isLocked) {
+      res.status(423).json({ 
+        error: "Cart is currently being processed. Please wait for your payment to complete before modifying items." 
+      });
+      return;
+    }
+
     if (!id || typeof quantity !== "number" || quantity <= 0) {
       res.status(400).json({ error: "Valid ID and quantity are required" });
       return;
@@ -278,6 +297,15 @@ export const removeCartItem = async (req: AuthenticatedRequest, res: Response): 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
       res.status(401).json({ error: "Missing or invalid token" });
+      return;
+    }
+
+    // 🛑 Check if cart is locked for payment processing (smart check that auto-unlocks empty carts)
+    const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'ticket');
+    if (isLocked) {
+      res.status(423).json({ 
+        error: "Cart is currently being processed. Please wait for your payment to complete before removing items." 
+      });
       return;
     }
 

@@ -13,6 +13,7 @@ import { WOMPI_CONFIG } from "../config/wompi";
 import { generateTransactionSignature } from "../utils/generateWompiSignature";
 import { PurchaseTransaction } from "../entities/TicketPurchaseTransaction";
 import { processWompiSuccessfulCheckout } from "./ticketCheckoutWompi.controller";
+import { lockAndValidateCart, updateCartLockTransactionId } from "../utils/cartLock";
 
 // In-memory store for temporary transaction data (in production, use Redis)
 const transactionStore = new Map<string, {
@@ -60,14 +61,14 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
     return res.status(400).json({ error: "Missing session or user" });
   }
 
-  const cartItems = await cartRepo.find({
-    where,
-    relations: ["ticket", "ticket.club", "ticket.event"],
-  });
-
-  if (!cartItems.length) {
-    return res.status(400).json({ error: "Cart is empty" });
+  // 🔒 Lock and validate cart before proceeding with payment
+  const tempTransactionId = "temp-" + Date.now();
+  const cartValidation = await lockAndValidateCart(userId, sessionId, tempTransactionId, 'ticket');
+  if (!cartValidation.success) {
+    return res.status(400).json({ error: cartValidation.error });
   }
+  
+  const cartItems = cartValidation.cartItems!;
 
   // 🎯 Business rule: All items must be for the same date and club
   const firstItem = cartItems[0];
@@ -83,14 +84,6 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
     return res.status(400).json({ 
       error: "All items in cart must be for the same date and club" 
     });
-  }
-
-  // 🕒 TTL expiration check
-  const oldestItem = cartItems.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
-  const minutesOld = differenceInMinutes(new Date(), new Date(oldestItem.createdAt));
-  if (minutesOld > 30) {
-    await cartRepo.delete(where);
-    return res.status(400).json({ error: "Cart expired. Please start over." });
   }
 
   const invalidTicket = cartItems.find((item) => !item.ticket.isActive);
@@ -411,6 +404,10 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
 
     // Store transaction data for confirmation
     const transactionId = transactionResponse.data.id;
+    
+    // 🔄 Update cart lock with real transaction ID
+    updateCartLockTransactionId(userId, sessionId, transactionId);
+    
     transactionStore.set(transactionId, {
       userId,
       sessionId,
@@ -571,8 +568,7 @@ async function startAutomaticTicketCheckout(transactionId: string, req: Request,
             return;
           }
           
-          // Remove stored data to prevent double processing
-          removeStoredTransactionData(transactionId);
+          // Store data will be removed AFTER checkout is complete and cart is unlocked
           
           // Create a mock response object for background processing
           const mockRes = {
@@ -590,6 +586,9 @@ async function startAutomaticTicketCheckout(transactionId: string, req: Request,
             transactionId,
             cartItems: storedData.cartItems,
           });
+          
+          // Remove stored data AFTER checkout is complete and cart is unlocked
+          removeStoredTransactionData(transactionId);
           
           console.log(`[WOMPI-TICKET-AUTO-CHECKOUT] ✅ Checkout completed successfully for transaction: ${transactionId}`);
           return;
@@ -698,14 +697,29 @@ async function updateTransactionStatus(wompiTransactionId: string, status: strin
 
 // Helper function to get stored transaction data
 export const getStoredTransactionData = (transactionId: string) => {
+  console.log(`[TRANSACTION-STORE] 🔍 Looking for transaction ${transactionId}`);
+  console.log(`[TRANSACTION-STORE] 📊 Current store size: ${transactionStore.size}`);
+  console.log(`[TRANSACTION-STORE] 🔑 Available keys:`, Array.from(transactionStore.keys()));
+  
   const data = transactionStore.get(transactionId);
-  if (!data) return null;
+  if (!data) {
+    console.log(`[TRANSACTION-STORE] ❌ No data found for transaction ${transactionId}`);
+    return null;
+  }
   
   // Check if expired
   if (Date.now() > data.expiresAt) {
+    console.log(`[TRANSACTION-STORE] ⏰ Data expired for transaction ${transactionId}, removing...`);
     transactionStore.delete(transactionId);
     return null;
   }
+  
+  console.log(`[TRANSACTION-STORE] ✅ Found data for transaction ${transactionId}:`, {
+    userId: data.userId,
+    sessionId: data.sessionId,
+    email: data.email,
+    expiresAt: new Date(data.expiresAt).toISOString()
+  });
   
   return data;
 };

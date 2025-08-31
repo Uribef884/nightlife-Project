@@ -16,6 +16,7 @@ import { getMenuCommissionRate } from "../config/fees";
 import { calculatePlatformFee, calculateGatewayFees } from "../utils/menuFeeUtils";
 import { differenceInMinutes } from "date-fns";
 import QRCode from "qrcode";
+import { unlockCart } from "../utils/cartLock";
 
 export const confirmWompiMenuCheckout = async (req: Request, res: Response) => {
   const typedReq = req as AuthenticatedRequest;
@@ -43,11 +44,8 @@ export const confirmWompiMenuCheckout = async (req: Request, res: Response) => {
       // Transaction is approved, proceed with checkout
       console.log(`[WOMPI-MENU-CHECKOUT] Transaction approved, processing checkout...`);
       
-      // Remove stored data to prevent double processing
-      removeStoredMenuTransactionData(transactionId);
-
       // Update the existing pending transaction instead of creating a new one
-      return await processWompiSuccessfulMenuCheckout({
+      const result = await processWompiSuccessfulMenuCheckout({
         userId: storedData.userId,
         sessionId: storedData.sessionId,
         email: storedData.email,
@@ -56,6 +54,11 @@ export const confirmWompiMenuCheckout = async (req: Request, res: Response) => {
         transactionId,
         cartItems: storedData.cartItems,
       });
+      
+      // Remove stored data AFTER checkout is complete and cart is unlocked
+      removeStoredMenuTransactionData(transactionId);
+      
+      return result;
 
     } else if (transactionStatus.data.status === WOMPI_CONFIG.STATUSES.DECLINED) {
       console.log(`[WOMPI-MENU-CHECKOUT] Transaction declined: ${transactionId}`);
@@ -89,11 +92,8 @@ export const confirmWompiMenuCheckout = async (req: Request, res: Response) => {
         const finalStatus = await wompiService().pollTransactionStatus(transactionId);
         
         if (finalStatus.data.status === WOMPI_CONFIG.STATUSES.APPROVED) {
-          // Remove stored data to prevent double processing
-          removeStoredMenuTransactionData(transactionId);
-
           // Update the existing pending transaction instead of creating a new one
-          return await processWompiSuccessfulMenuCheckout({
+          const result = await processWompiSuccessfulMenuCheckout({
             userId: storedData.userId,
             sessionId: storedData.sessionId,
             email: storedData.email,
@@ -102,6 +102,11 @@ export const confirmWompiMenuCheckout = async (req: Request, res: Response) => {
             transactionId,
             cartItems: storedData.cartItems,
           });
+          
+          // Remove stored data AFTER checkout is complete and cart is unlocked
+          removeStoredMenuTransactionData(transactionId);
+          
+          return result;
         } else {
           // Update the existing transaction status to match Wompi status
           await updateMenuTransactionStatus(transactionId, finalStatus.data.status === "DECLINED" ? "DECLINED" : "DECLINED");
@@ -515,6 +520,14 @@ export async function processWompiSuccessfulMenuCheckout({
       console.log(`[WOMPI-MENU-CHECKOUT] Cleared cart for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
     }
 
+    // 🔓 Unlock the cart after successful checkout
+    try {
+      unlockCart(userId, sessionId);
+      console.log(`[WOMPI-MENU-CHECKOUT] ✅ Cart unlocked successfully for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
+    } catch (unlockError) {
+      console.error(`[WOMPI-MENU-CHECKOUT] ❌ Failed to unlock cart:`, unlockError);
+    }
+
     // Return success response
     return res.status(200).json({
       success: true,
@@ -526,6 +539,15 @@ export async function processWompiSuccessfulMenuCheckout({
 
   } catch (error: any) {
     console.error(`[WOMPI-MENU-CHECKOUT] Error processing successful checkout:`, error);
+    
+    // 🔓 Always try to unlock the cart, even if checkout fails
+    try {
+      unlockCart(userId, sessionId);
+      console.log(`[WOMPI-MENU-CHECKOUT] ✅ Cart unlocked after checkout failure for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
+    } catch (unlockError) {
+      console.error(`[WOMPI-MENU-CHECKOUT] ❌ Failed to unlock cart after checkout failure:`, unlockError);
+    }
+    
     return res.status(500).json({ 
       error: "Failed to process successful checkout",
       details: error.message 

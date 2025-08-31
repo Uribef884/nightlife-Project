@@ -13,6 +13,7 @@ import { WOMPI_CONFIG } from "../config/wompi";
 import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
 import { processWompiSuccessfulMenuCheckout } from "./menuCheckoutWompi.controller";
 import { generateTransactionSignature } from "../utils/generateWompiSignature";
+import { lockAndValidateCart, updateCartLockTransactionId } from "../utils/cartLock";
 
 // In-memory store for temporary transaction data (in production, use Redis)
 const transactionStore = new Map<string, {
@@ -60,14 +61,14 @@ export const initiateWompiMenuCheckout = async (req: Request, res: Response) => 
     return res.status(400).json({ error: "Missing session or user" });
   }
 
-  const cartItems = await cartRepo.find({
-    where,
-    relations: ["menuItem", "variant", "menuItem.club"],
-  });
-
-  if (!cartItems.length) {
-    return res.status(400).json({ error: "Cart is empty" });
+  // 🔒 Lock and validate cart before proceeding with payment
+  const tempTransactionId = "temp-" + Date.now();
+  const cartValidation = await lockAndValidateCart(userId, sessionId, tempTransactionId, 'menu');
+  if (!cartValidation.success) {
+    return res.status(400).json({ error: cartValidation.error });
   }
+  
+  const cartItems = cartValidation.cartItems!;
 
   // 🎯 Business rule: All items must be from the same club
   const firstItem = cartItems[0];
@@ -81,14 +82,6 @@ export const initiateWompiMenuCheckout = async (req: Request, res: Response) => 
     return res.status(400).json({ 
       error: "All items in cart must be from the same club" 
     });
-  }
-
-  // 🍒 TTL expiration check
-  const oldestItem = cartItems.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
-  const minutesOld = differenceInMinutes(new Date(), new Date(oldestItem.createdAt));
-  if (minutesOld > 30) {
-    await cartRepo.delete(where);
-    return res.status(400).json({ error: "Cart expired. Please start over." });
   }
 
   const invalidItem = cartItems.find((item) => !item.menuItem.isActive);
@@ -397,6 +390,10 @@ export const initiateWompiMenuCheckout = async (req: Request, res: Response) => 
 
     // Store transaction data for confirmation
     const transactionId = transactionResponse.data.id;
+    
+    // 🔄 Update cart lock with real transaction ID
+    updateCartLockTransactionId(userId, sessionId, transactionId);
+    
     transactionStore.set(transactionId, {
       userId,
       sessionId,

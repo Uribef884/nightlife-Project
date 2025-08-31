@@ -1,9 +1,16 @@
 import nodemailer from "nodemailer";
+import fs from "fs";
+import path from "path";
+
 import { generateTicketEmailHTML } from "../templates/ticketEmailTemplate";
 import { generateMenuEmailHTML } from "../templates/menuEmailTemplate";
 import { generateMenuFromTicketEmailHTML } from "../templates/menuFromTicketEmailTemplate";
 import { generatePasswordResetEmailHTML } from "../templates/passwordResetEmailTemplate";
+import { generateTransactionInvoiceHTML } from "../templates/transactionInvoiceTemplate";
 
+/* =========================================================
+   Types (unchanged)
+   ========================================================= */
 type TicketEmailPayload = {
   to: string;
   ticketName: string;
@@ -43,79 +50,206 @@ type MenuFromTicketEmailPayload = {
   total?: number;
 };
 
+/* =========================================================
+   Centralized SMTP config + guards
+   ========================================================= */
+const ENV = (process.env.NODE_ENV || "development").toLowerCase();
+
+const SMTP_HOST = process.env.SMTP_HOST || "smtp.mailgun.org";
+const SMTP_PORT = Number(process.env.SMTP_PORT || "587");
+const SMTP_USER = process.env.SMTP_USER || "";
+const SMTP_PASS = process.env.SMTP_PASS || "";
+
+if (!SMTP_USER || !SMTP_PASS) {
+  throw new Error("[EMAIL] Missing SMTP_USER/SMTP_PASS in environment.");
+}
+
+// derive domain (everything after @). We will re-use this for From:
+const smtpDomain = (SMTP_USER.split("@")[1] || "").toLowerCase();
+
+// detect Mailgun sandbox users (anything@<sandbox...>.mailgun.org)
+const isSandbox = /\.?sandbox[0-9a-f\-]*\.mailgun\.org$/i.test(smtpDomain);
+
+// In prod: hard block sandbox. In dev: warn but continue.
+if (isSandbox && ENV === "production") {
+  throw new Error(
+    `[EMAIL] SMTP user belongs to a Mailgun SANDBOX domain (${smtpDomain}). ` +
+      `Use verified production SMTP_* credentials.`
+  );
+}
+if (isSandbox && ENV !== "production") {
+  console.warn(
+    `[EMAIL] Using Mailgun SANDBOX domain (${smtpDomain}) in ${ENV}. ` +
+      `Only authorized recipients will receive emails.`
+  );
+}
+
+// Optional dev redirect: route ALL outgoing mail to a safe inbox when sandbox or when you want to force it.
+// Example in .env: MAIL_FORCE_TO=felipeu2009@outlook.com
+const MAIL_FORCE_TO = (process.env.MAIL_FORCE_TO || "").trim();
+
+// build a DMARC-safe From using the same domain as SMTP_USER
+function buildFrom(label: string) {
+  const local = process.env.MAIL_FROM_LOCAL || "no-reply";
+  return `"${label}" <${local}@${smtpDomain}>`;
+}
+
+// Single transporter for the whole app
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_PORT === 465, // implicit TLS only for 465; use STARTTLS on 587
+  auth: { user: SMTP_USER, pass: SMTP_PASS },
 });
 
-export async function sendTicketEmail(payload: TicketEmailPayload) {
-  const html = generateTicketEmailHTML({
-    ...payload,
-    email: payload.to,
-  });
+// Log once so you can see which creds are live at runtime
+void transporter.verify()
+  .then(() => console.log(`[EMAIL] SMTP OK as ${SMTP_USER} (${SMTP_HOST}:${SMTP_PORT}) [env=${ENV}]`))
+  .catch((err) => console.error("[EMAIL] SMTP verification failed:", err));
 
+/* =========================================================
+   Helpers: inline logo + recipient resolver
+   ========================================================= */
+
+// Inline logo attachment — MUST match src="cid:nl-logo.png" in templates
+function getInlineLogoAttachment() {
+  const logoPath = path.resolve(process.cwd(), "assets/email/nl-logo.png");
+  if (!fs.existsSync(logoPath)) {
+    throw new Error(`[EMAIL] Logo missing at ${logoPath}. Add assets/email/nl-logo.png`);
+  }
+  return {
+    filename: "nl-logo.png",
+    path: logoPath,
+    contentType: "image/png",
+    cid: "nl-logo.png",
+  };
+}
+
+// Resolve "to" for dev when using sandbox or when you deliberately want to redirect all mail.
+function resolveTo(to: string): { to: string; headers?: Record<string, string> } {
+  // In dev or any env where MAIL_FORCE_TO is set, allow redirect.
+  if (MAIL_FORCE_TO) {
+    // If you're on sandbox, redirect to a single authorized inbox to avoid 421.
+    if (isSandbox || ENV !== "production") {
+      return {
+        to: MAIL_FORCE_TO,
+        headers: { "X-Original-To": to } // Helps you know who it was intended for
+      };
+    }
+  }
+  // Default: send to the intended recipient
+  return { to };
+}
+
+/* =========================================================
+   Senders (unified behavior)
+   ========================================================= */
+
+// 1) Ticket: one email per ticket (one QR each)
+export async function sendTicketEmail(payload: TicketEmailPayload) {
+  const html = generateTicketEmailHTML({ ...payload, email: payload.to });
+
+  const { to, headers } = resolveTo(payload.to);
   await transporter.sendMail({
-    from: `"NightLife Tickets" <${process.env.SMTP_USER}>`,
-    to: payload.to,
-    subject: `🎟️ Your Ticket for ${payload.ticketName}`,
+    from: buildFrom("NightLife Tickets"),
+    to,
+    subject: `🎟️ Tu entrada: ${payload.ticketName}`,
     html,
+    attachments: [getInlineLogoAttachment()],
+    headers,
   });
 }
 
+// 2) Menu: one email per transaction (one QR)
 export async function sendMenuEmail(payload: MenuEmailPayload) {
   const html = generateMenuEmailHTML(payload);
 
+  const { to, headers } = resolveTo(payload.to);
   await transporter.sendMail({
-    from: `"NightLife Menu" <${process.env.SMTP_USER}>`,
-    to: payload.to,
-    subject: `🍹 Your Menu QR from ${payload.clubName}`,
+    from: buildFrom("NightLife Menú"),
+    to,
+    subject: `🍹 Tu QR de menú - ${payload.clubName}`,
     html,
+    attachments: [getInlineLogoAttachment()],
+    headers,
   });
 }
 
-export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
-  try {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const resetUrl = `${frontendUrl}/auth/reset-password?token=${token}`;
-
-    console.log('📧 [EMAIL_SERVICE] Sending password reset email to:', email);
-    console.log('🔗 [EMAIL_SERVICE] Reset URL:', resetUrl);
-
-    const html = generatePasswordResetEmailHTML({ resetUrl });
-
-    // Verify SMTP configuration
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      throw new Error('SMTP configuration missing. Please check SMTP_HOST, SMTP_USER, and SMTP_PASS environment variables.');
-    }
-
-    console.log('📧 [EMAIL_SERVICE] SMTP config verified, sending email...');
-
-    await transporter.sendMail({
-      from: `"NightLife Support" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: "🔐 Reset Your NightLife Password",
-      html,
-    });
-
-    console.log('✅ [EMAIL_SERVICE] Password reset email sent successfully to:', email);
-  } catch (error) {
-    console.error('❌ [EMAIL_SERVICE] Failed to send password reset email:', error);
-    throw error;
-  }
-}
-
+// 3) Menu included with ticket (sent in addition to the ticket email)
 export async function sendMenuFromTicketEmail(payload: MenuFromTicketEmailPayload) {
   const html = generateMenuFromTicketEmailHTML(payload);
 
+  const { to, headers } = resolveTo(payload.to);
   await transporter.sendMail({
-    from: `"NightLife Menu" <${process.env.SMTP_USER}>`,
-    to: payload.to,
-    subject: `🍹 Your Included Menu Items for ${payload.ticketName}`,
+    from: buildFrom("NightLife Menú incluido"),
+    to,
+    subject: `🍹 Menú incluido - ${payload.ticketName}`,
     html,
+    attachments: [getInlineLogoAttachment()],
+    headers,
+  });
+}
+
+// 4) Password reset (same domain; branded template)
+export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const resetUrl = `${frontendUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
+
+  const html = generatePasswordResetEmailHTML({ resetUrl });
+
+  const { to, headers } = resolveTo(email);
+  await transporter.sendMail({
+    from: buildFrom("NightLife Soporte"),
+    to,
+    subject: "🔐 Restablece tu contraseña de NightLife",
+    html,
+    attachments: [getInlineLogoAttachment()],
+    headers,
+  });
+}
+
+// 5) Transaction Invoice: one email per transaction (complete breakdown)
+export async function sendTransactionInvoiceEmail(payload: {
+  to: string;
+  transactionId: string;
+  clubName: string;
+  clubAddress?: string;
+  clubPhone?: string;
+  clubEmail?: string;
+  date: string;
+  items: Array<{
+    name: string;
+    variant?: string | null;
+    quantity: number;
+    unitPrice: number;
+    subtotal: number;
+  }>;
+  subtotal: number;
+  platformFees: number;
+  gatewayFees: number;
+  gatewayIVA: number;
+  total: number;
+  currency?: string;
+  paymentMethod: string;
+  paymentProviderRef?: string;
+  customerInfo?: {
+    fullName?: string;
+    phoneNumber?: string;
+    email?: string;
+    legalId?: string;
+    legalIdType?: string;
+    creditCard?: string;
+  };
+}) {
+  const html = generateTransactionInvoiceHTML(payload);
+
+  const { to, headers } = resolveTo(payload.to);
+  await transporter.sendMail({
+    from: buildFrom("NightLife Facturación"),
+    to,
+    subject: `🧾 Factura de Compra - ${payload.clubName}`,
+    html,
+    attachments: [getInlineLogoAttachment()],
+    headers,
   });
 }

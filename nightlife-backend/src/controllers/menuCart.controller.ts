@@ -7,6 +7,7 @@ import { computeDynamicPrice } from "../utils/dynamicPricing";
 import { AuthenticatedRequest } from "../types/express";
 import { CartItem } from "../entities/TicketCartItem";
 import { summarizeCartTotals } from "../utils/cartSummary";
+import { isCartLockedSmart } from "../utils/cartLock";
 
 // ✅ Ownership check for deletion
 function ownsMenuCartItem(item: MenuCartItem, userId?: string, sessionId?: string): boolean {
@@ -28,6 +29,15 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
 
     if (!menuItemId || quantity == null || quantity <= 0) {
       res.status(400).json({ error: "Missing or invalid fields" });
+      return;
+    }
+
+    // 🛑 Check if cart is locked for payment processing (smart check that auto-unlocks empty carts)
+    const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'menu');
+    if (isLocked) {
+      res.status(423).json({ 
+        error: "Cart is currently being processed. Please wait for your payment to complete before adding more items." 
+      });
       return;
     }
 
@@ -181,6 +191,15 @@ export const updateMenuCartItem = async (req: AuthenticatedRequest, res: Respons
 
     if (!id || !quantity || quantity <= 0) {
       res.status(400).json({ error: "Valid ID and quantity are required" });
+      return;
+    }
+
+    // 🛑 Check if cart is locked for payment processing (smart check that auto-unlocks empty carts)
+    const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'menu');
+    if (isLocked) {
+      res.status(423).json({ 
+        error: "Cart is currently being processed. Please wait for your payment to complete before modifying items." 
+      });
       return;
     }
 
@@ -384,6 +403,15 @@ export const removeMenuCartItem = async (req: AuthenticatedRequest, res: Respons
 
     if (!item) {
       res.status(404).json({ error: "Menu cart item not found" });
+      return;
+    }
+
+    // 🛑 Check if cart is locked for payment processing (smart check that auto-unlocks empty carts)
+    const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'menu');
+    if (isLocked) {
+      res.status(423).json({ 
+        error: "Cart is currently being processed. Please wait for your payment to complete before removing items." 
+      });
       return;
     }
 

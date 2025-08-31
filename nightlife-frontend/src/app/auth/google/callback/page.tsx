@@ -1,18 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
 
 export default function GoogleCallbackPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { setUser } = useAuthStore();
   const [isProcessing, setIsProcessing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasRedirected, setHasRedirected] = useState(false);
+  const [hasProcessed, setHasProcessed] = useState(false);
 
   useEffect(() => {
     const processCallback = async () => {
+      // Prevent multiple processing
+      if (hasProcessed) {
+        return;
+      }
+      setHasProcessed(true);
+
       try {
         // Get token and user data from URL parameters
         const token = searchParams.get('token');
@@ -38,17 +45,32 @@ export default function GoogleCallbackPage() {
         // Store authentication data
         setUser(userData);
 
-        // Redirect to dashboard or home page
-        router.push('/dashboard');
+        // Prevent multiple redirects
+        if (!hasRedirected) {
+          setHasRedirected(true);
+          
+          // Get the saved redirect path
+          const savedPath = sessionStorage.getItem('auth_redirect_path');
+          const targetPath = savedPath || '/';
+          
+          // Clear the redirect path
+          if (savedPath) {
+            sessionStorage.removeItem('auth_redirect_path');
+          }
+          
+          // Use direct navigation for more reliable redirect
+          window.location.href = targetPath;
+        }
       } catch (error) {
         console.error('Google callback error:', error);
         setError('Authentication failed');
         setIsProcessing(false);
+        setHasRedirected(false); // Reset redirect flag on error
       }
     };
 
     processCallback();
-  }, [searchParams, setUser, router]);
+  }, [searchParams, setUser, hasRedirected, isProcessing, hasProcessed]);
 
   if (isProcessing) {
     return (
@@ -72,7 +94,7 @@ export default function GoogleCallbackPage() {
           <h2 className="text-xl font-semibold text-white mb-2">Error de autenticación</h2>
           <p className="text-red-300 mb-6">{error}</p>
           <button
-            onClick={() => router.push('/auth')}
+            onClick={() => window.location.href = '/auth/login'}
             className="inline-flex items-center rounded-full bg-purple-600 px-6 py-2 font-semibold text-white hover:bg-purple-700"
           >
             Volver al inicio de sesión

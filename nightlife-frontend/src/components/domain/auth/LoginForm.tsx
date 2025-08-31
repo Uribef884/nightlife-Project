@@ -10,17 +10,20 @@ import { useAuthStore } from '@/stores/auth.store';
 import { authService } from '@/services/domain/auth.service';
 import Link from 'next/link';
 import GoogleAuthButton from '@/components/auth/GoogleAuthButton';
+import { useAuthRedirect } from '@/utils/redirect';
 
 type LoginFormData = { email: string; password: string };
 
 export default function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const { login, clearError, isLoading, error, isAuthenticated } = useAuthStore();
-  const router = useRouter();
+  const redirectAfterAuth = useAuthRedirect('/');
 
   useEffect(() => {
-    if (isAuthenticated) router.push('/dashboard');
-  }, [isAuthenticated, router]);
+    if (isAuthenticated) {
+      redirectAfterAuth();
+    }
+  }, [isAuthenticated, redirectAfterAuth]);
 
   if (isAuthenticated === undefined) {
     return (
@@ -137,6 +140,19 @@ export default function LoginForm() {
         disabled={isLoading}
       />
 
+      {/* Terms and Privacy Policy Consent for OAuth */}
+      <p className="text-xs text-gray-400 text-center mt-3">
+        Al iniciar sesión con Google, aceptas nuestros{' '}
+        <Link href="/terms" className="text-purple-400 hover:text-purple-300 underline">
+          Términos
+        </Link>{' '}
+        y reconoces nuestra{' '}
+        <Link href="/privacy" className="text-purple-400 hover:text-purple-300 underline">
+          Política de Privacidad
+        </Link>
+        .
+      </p>
+
       {/* Forgot Password */}
       <div className="mt-4 flex justify-center">
         <Link
@@ -147,6 +163,8 @@ export default function LoginForm() {
           Olvidé mi contraseña
         </Link>
       </div>
+
+
     </div>
   );
 }

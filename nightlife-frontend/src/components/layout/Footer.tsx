@@ -61,8 +61,8 @@ export default function Footer() {
   ];
 
   const legalLinks = [
-    { label: "Términos y condiciones", href: "/terminos" },
-    { label: "Política de Privacidad", href: "/privacidad" },
+    { label: "Términos de Servicio", href: "/terms" },
+    { label: "Política de Privacidad", href: "/privacy" },
   ];
 
   return (

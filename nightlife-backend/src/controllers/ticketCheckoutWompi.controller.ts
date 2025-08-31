@@ -9,7 +9,7 @@ import { TicketPurchase } from "../entities/TicketPurchase";
 import { CartItem } from "../entities/TicketCartItem";
 import { Ticket } from "../entities/Ticket";
 import { generateEncryptedQR } from "../utils/generateEncryptedQR";
-import { sendTicketEmail, sendMenuFromTicketEmail } from "../services/emailService";
+import { sendTicketEmail, sendMenuFromTicketEmail, sendTransactionInvoiceEmail } from "../services/emailService";
 import { computeDynamicEventPrice, computeDynamicPrice, getNormalTicketDynamicPricingReason, getEventTicketDynamicPricingReason } from "../utils/dynamicPricing";
 import { TicketIncludedMenuItem } from "../entities/TicketIncludedMenuItem";
 import { MenuItemFromTicket } from "../entities/MenuItemFromTicket";
@@ -17,6 +17,7 @@ import { getTicketCommissionRate } from "../config/fees";
 import { calculatePlatformFee, calculateGatewayFees } from "../utils/ticketfeeUtils";
 import { differenceInMinutes } from "date-fns";
 import * as QRCode from "qrcode";
+import { unlockCart } from "../utils/cartLock";
 
 export const confirmWompiTicketCheckout = async (req: Request, res: Response) => {
   const typedReq = req as AuthenticatedRequest;
@@ -44,11 +45,8 @@ export const confirmWompiTicketCheckout = async (req: Request, res: Response) =>
       // Transaction is approved, proceed with checkout
       console.log(`[WOMPI-TICKET-CHECKOUT] Transaction approved, processing checkout...`);
       
-      // Remove stored data to prevent double processing
-      removeStoredTransactionData(transactionId);
-
       // Update the existing pending transaction instead of creating a new one
-      return await processWompiSuccessfulCheckout({
+      const result = await processWompiSuccessfulCheckout({
         userId: storedData.userId,
         sessionId: storedData.sessionId,
         email: storedData.email,
@@ -57,6 +55,11 @@ export const confirmWompiTicketCheckout = async (req: Request, res: Response) =>
         transactionId,
         cartItems: storedData.cartItems,
       });
+      
+      // Remove stored data AFTER checkout is complete and cart is unlocked
+      removeStoredTransactionData(transactionId);
+      
+      return result;
 
     } else if (transactionStatus.data.status === WOMPI_CONFIG.STATUSES.DECLINED) {
       console.log(`[WOMPI-TICKET-CHECKOUT] Transaction declined: ${transactionId}`);
@@ -90,11 +93,8 @@ export const confirmWompiTicketCheckout = async (req: Request, res: Response) =>
         const finalStatus = await wompiService().pollTransactionStatus(transactionId);
         
         if (finalStatus.data.status === WOMPI_CONFIG.STATUSES.APPROVED) {
-          // Remove stored data to prevent double processing
-          removeStoredTransactionData(transactionId);
-
           // Update the existing pending transaction instead of creating a new one
-          return await processWompiSuccessfulCheckout({
+          const result = await processWompiSuccessfulCheckout({
             userId: storedData.userId,
             sessionId: storedData.sessionId,
             email: storedData.email,
@@ -103,6 +103,11 @@ export const confirmWompiTicketCheckout = async (req: Request, res: Response) =>
             transactionId,
             cartItems: storedData.cartItems,
           });
+          
+          // Remove stored data AFTER checkout is complete and cart is unlocked
+          removeStoredTransactionData(transactionId);
+          
+          return result;
         } else {
           removeStoredTransactionData(transactionId);
           return res.status(400).json({ 
@@ -219,6 +224,9 @@ export async function processWompiSuccessfulCheckout({
   transactionId: string;
   cartItems: any[];
 }) {
+  // Declare existingTransaction outside try block so it's accessible in catch
+  let existingTransaction: any = null;
+  
   try {
     console.log(`[WOMPI-TICKET-CHECKOUT] Processing successful checkout for transaction: ${transactionId}`);
 
@@ -243,7 +251,7 @@ export async function processWompiSuccessfulCheckout({
 
     // Find and update the existing pending transaction
     const transactionRepo = AppDataSource.getRepository(PurchaseTransaction);
-    const existingTransaction = await transactionRepo.findOne({
+    existingTransaction = await transactionRepo.findOne({
       where: { paymentProviderTransactionId: transactionId }
     });
 
@@ -362,6 +370,9 @@ export async function processWompiSuccessfulCheckout({
     }
     
     const date = cartDate; // Use the validated date
+    const purchaseDate = new Date(); // Current date for invoice
+    const dateStr = date.toISOString().split("T")[0]; // Format date for invoice
+    const purchaseDateStr = purchaseDate.toISOString().split("T")[0]; // Format purchase date for invoice
 
     // First, update ticket quantities (mirror legacy)
     const ticketRepo = AppDataSource.getRepository(Ticket);
@@ -382,6 +393,10 @@ export async function processWompiSuccessfulCheckout({
     // Create ticket purchases for each cart item
     const ticketPurchaseRepo = AppDataSource.getRepository(TicketPurchase);
     
+    // Calculate total tickets across all cart items for proper numbering (ONCE, before the loop)
+    const totalTicketsInCart = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+    let globalTicketCounter = 0;
+    
     for (const cartItem of cartItems) {
       const ticket = await ticketRepo.findOne({ 
         where: { id: cartItem.ticketId },
@@ -391,9 +406,10 @@ export async function processWompiSuccessfulCheckout({
         console.warn(`[WOMPI-TICKET-CHECKOUT] Ticket not found: ${cartItem.ticketId}`);
         continue;
       }
-
+      
       // Create individual ticket purchases with proper pricing and QR codes
       for (let i = 0; i < cartItem.quantity; i++) {
+        globalTicketCounter++; // Increment global counter for each ticket
         const basePrice = Number(ticket.price);
         
         // 🎯 Apply dynamic pricing if enabled
@@ -507,12 +523,12 @@ export async function processWompiSuccessfulCheckout({
             date: dateStr,
             qrImageDataUrl: qrDataUrl,
             clubName: ticket.club?.name || "Your Club",
-            index: i,
-            total: cartItem.quantity,
+            index: globalTicketCounter,
+            total: totalTicketsInCart,
           });
-          console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Email sent for ticket ${i + 1}/${cartItem.quantity}`);
+          console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Email sent for ticket ${globalTicketCounter}/${totalTicketsInCart}`);
         } catch (err) {
-          console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Email failed for ticket ${i + 1}:`, err);
+          console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Email failed for ticket ${globalTicketCounter}:`, err);
         }
 
         // Handle menu items if ticket includes them
@@ -569,11 +585,11 @@ export async function processWompiSuccessfulCheckout({
                 qrImageDataUrl: menuQrDataUrl,
                 clubName: ticket.club?.name || "Your Club",
                 items: menuItems,
-                index: i,
-                total: cartItem.quantity,
+                index: globalTicketCounter,
+                total: totalTicketsInCart,
               });
 
-              console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Menu email sent for ticket ${i + 1}/${cartItem.quantity}`);
+              console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Menu email sent for ticket ${globalTicketCounter}/${totalTicketsInCart}`);
             }
           } catch (err) {
             console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Menu items for ticket ${i + 1} failed:`, err);
@@ -582,6 +598,105 @@ export async function processWompiSuccessfulCheckout({
 
         console.log(`[WOMPI-TICKET-CHECKOUT] Created ticket purchase: ${ticketPurchase.id}`);
       }
+    }
+
+    // 🔓 Unlock the cart after successful checkout
+    // Get sessionId from stored transaction data since it's not in the entity
+    const storedData = getStoredTransactionData(transactionId);
+    console.log(`[WOMPI-TICKET-CHECKOUT] 🔍 Debug stored data for transaction ${transactionId}:`, {
+      hasStoredData: !!storedData,
+      storedUserId: storedData?.userId,
+      storedSessionId: storedData?.sessionId,
+      existingTransactionUserId: existingTransaction.userId
+    });
+    
+    const storedSessionId = storedData?.sessionId || null;
+    
+    // Debug cart lock status before unlocking
+    console.log(`[WOMPI-TICKET-CHECKOUT] 🔍 Debug cart lock status before unlocking:`, {
+      userId: existingTransaction.userId,
+      sessionId: storedSessionId,
+      hasUserId: !!existingTransaction.userId,
+      hasSessionId: !!storedSessionId
+    });
+    
+    // Try to unlock cart with stored data first
+    let unlockSuccess = false;
+    if (storedData?.userId || storedData?.sessionId) {
+      try {
+        unlockSuccess = unlockCart(storedData.userId, storedData.sessionId);
+        if (unlockSuccess) {
+          console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Cart unlocked successfully using stored data for ${storedData.userId ? 'user' : 'session'}: ${storedData.userId || storedData.sessionId}`);
+        }
+      } catch (unlockError) {
+        console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Failed to unlock cart with stored data:`, unlockError);
+      }
+    }
+    
+    // If unlock failed with stored data, try with existingTransaction data as fallback
+    if (!unlockSuccess && (existingTransaction.userId || storedSessionId)) {
+      try {
+        unlockSuccess = unlockCart(existingTransaction.userId || null, storedSessionId);
+        if (unlockSuccess) {
+          console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Cart unlocked successfully using fallback data for ${existingTransaction.userId ? 'user' : 'session'}: ${existingTransaction.userId || storedSessionId}`);
+        }
+      } catch (unlockError) {
+        console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Failed to unlock cart with fallback data:`, unlockError);
+      }
+    }
+    
+    if (!unlockSuccess) {
+      console.warn(`[WOMPI-TICKET-CHECKOUT] ⚠️ Could not unlock cart - no valid userId or sessionId found`);
+    }
+
+    // 📧 Send transaction invoice email (ONE email for the entire transaction)
+    try {
+      // Prepare items for invoice (combine all cart items)
+      const invoiceItems = cartItems.map(item => ({
+        name: item.ticket.name,
+        variant: null, // Tickets don't have variants
+        quantity: item.quantity,
+        unitPrice: Number(item.ticket.price),
+        subtotal: Number(item.ticket.price) * item.quantity
+      }));
+
+      // Calculate totals
+      const subtotal = invoiceItems.reduce((sum, item) => sum + item.subtotal, 0);
+      const platformFees = Number(existingTransaction.platformReceives);
+      const gatewayFees = Number(existingTransaction.gatewayFee);
+      const gatewayIVA = Number(existingTransaction.gatewayIVA);
+      const total = Number(existingTransaction.totalPaid);
+
+      // Get customer info from stored data
+      const customerInfo = storedData?.customerInfo || {};
+
+      await sendTransactionInvoiceEmail({
+        to: existingTransaction.email,
+        transactionId: existingTransaction.id,
+        clubName: cartItems[0]?.ticket?.club?.name || "Your Club",
+        clubAddress: cartItems[0]?.ticket?.club?.address,
+        clubPhone: cartItems[0]?.ticket?.club?.phone,
+        clubEmail: cartItems[0]?.ticket?.club?.email,
+        date: purchaseDateStr, // Use purchase date, not ticket date
+        items: invoiceItems,
+        subtotal,
+        platformFees,
+        gatewayFees,
+        gatewayIVA,
+        total,
+        currency: "COP",
+        paymentMethod: "Credit/Debit Card",
+        paymentProviderRef: transactionId, // Wompi transaction ID
+        customerInfo: {
+          ...customerInfo,
+          email: existingTransaction.email
+        }
+      });
+
+      console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Transaction invoice email sent successfully`);
+    } catch (invoiceError) {
+      console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Failed to send transaction invoice email:`, invoiceError);
+      // Don't fail the checkout if invoice email fails
     }
 
     // Return success response
@@ -595,6 +710,51 @@ export async function processWompiSuccessfulCheckout({
 
   } catch (error: any) {
     console.error(`[WOMPI-TICKET-CHECKOUT] Error processing successful checkout:`, error);
+    
+    // 🔓 Always try to unlock the cart, even if checkout fails
+    try {
+      const storedData = getStoredTransactionData(transactionId);
+      console.log(`[WOMPI-TICKET-CHECKOUT] 🔍 Debug stored data for error path transaction ${transactionId}:`, {
+        hasStoredData: !!storedData,
+        storedUserId: storedData?.userId,
+        storedSessionId: storedData?.sessionId,
+        existingTransactionUserId: existingTransaction?.userId
+      });
+      
+      const storedSessionId = storedData?.sessionId || null;
+      
+      // Try to unlock cart with stored data first
+      let unlockSuccess = false;
+      if (storedData?.userId || storedData?.sessionId) {
+        try {
+          unlockSuccess = unlockCart(storedData.userId, storedData.sessionId);
+          if (unlockSuccess) {
+            console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Cart unlocked after checkout failure using stored data for ${storedData.userId ? 'user' : 'session'}: ${storedData.userId || storedData.sessionId}`);
+          }
+        } catch (unlockError) {
+          console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Failed to unlock cart after checkout failure with stored data:`, unlockError);
+        }
+      }
+      
+      // If unlock failed with stored data, try with existingTransaction data as fallback
+      if (!unlockSuccess && (existingTransaction?.userId || storedSessionId)) {
+        try {
+          unlockSuccess = unlockCart(existingTransaction?.userId || null, storedSessionId);
+          if (unlockSuccess) {
+            console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Cart unlocked after checkout failure using fallback data for ${existingTransaction?.userId ? 'user' : 'session'}: ${existingTransaction?.userId || storedSessionId}`);
+          }
+        } catch (unlockError) {
+          console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Failed to unlock cart after checkout failure with fallback data:`, unlockError);
+        }
+      }
+      
+      if (!unlockSuccess) {
+        console.warn(`[WOMPI-TICKET-CHECKOUT] ⚠️ Could not unlock cart after checkout failure - no valid userId or sessionId found`);
+      }
+    } catch (unlockError) {
+      console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Failed to unlock cart after checkout failure:`, unlockError);
+    }
+    
     return res.status(500).json({ 
       error: "Failed to process successful checkout",
       details: error.message 

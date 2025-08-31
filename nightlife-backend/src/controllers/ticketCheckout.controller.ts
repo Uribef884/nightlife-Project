@@ -20,6 +20,7 @@ import QRCode from "qrcode";
 import { computeDynamicPrice, computeDynamicEventPrice, getNormalTicketDynamicPricingReason, getEventTicketDynamicPricingReason } from "../utils/dynamicPricing";
 import { getTicketCommissionRate } from "../config/fees";
 import { sanitizeInput } from "../utils/sanitizeInput";
+import { unlockCart } from "../utils/cartLock";
 
 export const processSuccessfulCheckout = async ({
   userId,
@@ -138,11 +139,16 @@ export const processSuccessfulCheckout = async ({
   }
 
   // 🎯 Calculate ticket totals first (before gateway fees)
+  // Calculate total tickets across all cart items for proper numbering (ONCE, before the loop)
+  const totalTicketsInCart = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  let globalTicketCounter = 0;
+  
   for (const item of cartItems) {
     const ticket = item.ticket;
     const quantity = item.quantity;
 
     for (let i = 0; i < quantity; i++) {
+      globalTicketCounter++; // Increment global counter for each ticket
       const basePrice = Number(ticket.price);
       
       // 🎯 Apply dynamic pricing if enabled
@@ -285,12 +291,16 @@ export const processSuccessfulCheckout = async ({
   let individualTotalPaid = 0;
   let individualTotalClubReceives = 0;
   let individualTotalPlatformReceives = 0;
+  
+  // Reset global counter for the second loop
+  globalTicketCounter = 0;
 
   for (const item of cartItems) {
     const ticket = item.ticket;
     const quantity = item.quantity;
 
     for (let i = 0; i < quantity; i++) {
+      globalTicketCounter++; // Increment global counter for each ticket
       const basePrice = Number(ticket.price);
       
       // 🎯 Apply dynamic pricing if enabled
@@ -426,11 +436,11 @@ export const processSuccessfulCheckout = async ({
           date: dateStr,
           qrImageDataUrl: qrDataUrl,
           clubName: ticket.club?.name || "Your Club",
-          index: i,
-          total: quantity,
+          index: globalTicketCounter,
+          total: totalTicketsInCart,
         });
       } catch (err) {
-        console.error(`[EMAIL ❌] Ticket ${i + 1} failed:`, err);
+        console.error(`[EMAIL ❌] Ticket ${globalTicketCounter} failed:`, err);
       }
 
       // Handle menu items if ticket includes them
@@ -485,8 +495,8 @@ export const processSuccessfulCheckout = async ({
               qrImageDataUrl: menuQrDataUrl,
               clubName: ticket.club?.name || "Your Club",
               items: menuItems,
-              index: i,
-              total: quantity,
+              index: globalTicketCounter,
+              total: totalTicketsInCart,
             });
           }
         } catch (err) {
@@ -508,6 +518,9 @@ export const processSuccessfulCheckout = async ({
   } else if (sessionId) {
     await cartRepo.delete({ sessionId });
   }
+
+  // 🔓 Unlock the cart after successful checkout
+  unlockCart(userId, sessionId);
 
   // For free checkouts, don't return a transactionId since there's no payment gateway involved
   if (isFreeCheckout) {

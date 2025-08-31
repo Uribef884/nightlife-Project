@@ -15,6 +15,7 @@ import QRCode from "qrcode";
 import { computeDynamicPrice } from "../utils/dynamicPricing";
 import { getMenuCommissionRate } from "../config/fees";
 import { sanitizeInput } from "../utils/sanitizeInput";
+import { unlockCart } from "../utils/cartLock";
 
 export const processSuccessfulMenuCheckout = async ({
   userId,
@@ -311,6 +312,9 @@ export const processSuccessfulMenuCheckout = async ({
   } else if (sessionId) {
     await cartRepo.delete({ sessionId });
   }
+
+  // 🔓 Unlock the cart after successful checkout
+  unlockCart(userId, sessionId);
 
   return res.json({
     message: "Menu checkout completed",

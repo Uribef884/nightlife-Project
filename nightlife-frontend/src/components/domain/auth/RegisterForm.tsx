@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff } from 'lucide-react';
@@ -9,13 +9,19 @@ import { useAuthStore } from '@/stores/auth.store';
 import { authService } from '@/services/domain/auth.service';
 import Link from 'next/link';
 import GoogleAuthButton from '@/components/auth/GoogleAuthButton';
+import { useAuthRedirect } from '@/utils/redirect';
 
 type RegisterFormData = { email: string; password: string; confirmPassword: string };
 
 export default function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const { register: registerUser, clearError, isLoading, error } = useAuthStore();
+  const { register: registerUser, clearError, isLoading, error, isAuthenticated } = useAuthStore();
+  const redirectAfterAuth = useAuthRedirect('/');
+
+  useEffect(() => {
+    if (isAuthenticated) redirectAfterAuth();
+  }, [isAuthenticated, redirectAfterAuth]);
 
   const {
     register,
@@ -178,6 +184,19 @@ export default function RegisterForm() {
         >
           {isLoading ? 'Creando cuenta…' : 'Crear cuenta'}
         </button>
+
+        {/* Terms and Privacy Policy Consent */}
+        <p className="text-xs text-gray-400 text-center mt-3">
+          Al crear una cuenta, aceptas nuestros{' '}
+          <Link href="/terms" className="text-purple-400 hover:text-purple-300 underline">
+            Términos
+          </Link>{' '}
+          y reconoces nuestra{' '}
+          <Link href="/privacy" className="text-purple-400 hover:text-purple-300 underline">
+            Política de Privacidad
+          </Link>
+          .
+        </p>
       </form>
 
       {/* Divider */}
@@ -196,6 +215,19 @@ export default function RegisterForm() {
         onClick={handleGoogleRegister}
         disabled={isLoading}
       />
+
+      {/* Terms and Privacy Policy Consent for OAuth */}
+      <p className="text-xs text-gray-400 text-center mt-3">
+        Al crear una cuenta, aceptas nuestros{' '}
+        <Link href="/terms" className="text-purple-400 hover:text-purple-300 underline">
+          Términos
+        </Link>{' '}
+        y reconoces nuestra{' '}
+        <Link href="/privacy" className="text-purple-400 hover:text-purple-300 underline">
+          Política de Privacidad
+        </Link>
+        .
+      </p>
 
       {/* Back to login */}
       <div className="mt-4 text-center text-sm text-purple-200">
