@@ -17,9 +17,27 @@ type QRPayload = {
 
 export async function generateEncryptedQR(data: QRPayload): Promise<string> {
   const iv = randomBytes(16);
-  const json = JSON.stringify(data);
+  
+  // Optimize payload for smaller QR codes
+  const optimizedData = optimizePayload(data);
+  const json = JSON.stringify(optimizedData);
+  
   const cipher = createCipheriv(algorithm, key, iv);
   const encrypted = Buffer.concat([cipher.update(json), cipher.final()]);
   return Buffer.concat([iv, encrypted]).toString("base64");
+}
+
+// Optimize payload by using shorter field names
+function optimizePayload(data: QRPayload): any {
+  const optimized: any = {
+    t: data.type // 't' instead of 'type'
+  };
+  
+  // Map common fields to shorter names
+  if (data.id) optimized.i = data.id; // 'i' instead of 'id'
+  if (data.clubId) optimized.c = data.clubId; // 'c' instead of 'clubId'
+  if (data.ticketPurchaseId) optimized.tp = data.ticketPurchaseId; // 'tp' instead of 'ticketPurchaseId'
+  
+  return optimized;
 }
 

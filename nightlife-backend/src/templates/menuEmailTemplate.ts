@@ -61,7 +61,7 @@ export function generateMenuEmailHTML(p: MenuEmailParams): string {
           <!-- Title -->
           <tr>
             <td style="padding:18px 24px 0 24px;">
-              <h1 style="margin:0 0 8px 0;font:700 24px/1.25 Arial,Helvetica,sans-serif;color:#F4F6FB;">Tu pedido de bar</h1>
+              <h1 style="margin:0 0 8px 0;font:700 24px/1.25 Arial,Helvetica,sans-serif;color:#F4F6FB;">Tu orden de consumo</h1>
               <p style="margin:6px 0 0 0;font:13px Arial,Helvetica,sans-serif;color:#AEB6C3;">Club: ${escapeHtml(p.clubName)}</p>
               ${idLine}
             </td>
@@ -125,6 +125,32 @@ function legalSection(): string {
       <ul style="margin:8px 0 0 18px;color:#98A4B5;font:12px/1.6 Arial,Helvetica,sans-serif;">
         <li>Compras de bar se redimen el mismo día/servicio indicado por el club. Aplica política del establecimiento.</li>
       </ul>
+      
+      <!-- Soporte y Enlaces -->
+      <div style="margin:24px 0 16px 0;padding:16px;background:#1A1F2A;border-radius:12px;">
+        <h3 style="margin:0 0 12px 0;font:600 16px Arial,Helvetica,sans-serif;color:#F4F6FB;">Soporte y Enlaces</h3>
+        
+        <div style="margin-bottom:16px;">
+          <h4 style="margin:0 0 8px 0;font:600 14px Arial,Helvetica,sans-serif;color:#DDE3EE;">Soporte</h4>
+          <ul style="margin:0 0 0 18px;color:#C9D1E0;font:13px/1.5 Arial,Helvetica,sans-serif;">
+            <li>Chat del sitio web</li>
+            <li>WhatsApp: +57 XXX XXX XXXX</li>
+            <li>Email: support@nightlife.com</li>
+          </ul>
+        </div>
+        
+                 <div style="margin-bottom:16px;">
+           <h4 style="margin:0 0 8px 0;font:600 14px Arial,Helvetica,sans-serif;color:#DDE3EE;">Enlaces Importantes</h4>
+           <ul style="margin:0 0 0 18px;color:#C9D1E0;font:13px/1.5 Arial,Helvetica,sans-serif;">
+             <li><a href="${process.env.FRONTEND_BASE_URL || 'http://localhost:3000'}/terms" style="color:#6B3FA0;text-decoration:none;">Términos y Servicio</a></li>
+             <li><a href="${process.env.FRONTEND_BASE_URL || 'http://localhost:3000'}/privacy" style="color:#6B3FA0;text-decoration:none;">Política de Privacidad</a></li>
+           </ul>
+         </div>
+        
+        <p style="margin:0;font:12px/1.4 Arial,Helvetica,sans-serif;color:#98A4B5;">
+          Legal: Esta es tu factura oficial de NightLife. Consérvala para tus registros contables y en caso de cualquier consulta sobre tu compra. Los tickets y menús se envían por separado con sus respectivos códigos QR. NightLife Inc. - NIT: [Tu NIT aquí]
+        </p>
+      </div>
     </td>
   </tr>`;
 }

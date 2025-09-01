@@ -13,7 +13,7 @@ import { WOMPI_CONFIG } from "../config/wompi";
 import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
 import { processWompiSuccessfulMenuCheckout } from "./menuCheckoutWompi.controller";
 import { generateTransactionSignature } from "../utils/generateWompiSignature";
-import { lockAndValidateCart, updateCartLockTransactionId } from "../utils/cartLock";
+import { lockAndValidateCart, updateCartLockTransactionId, unlockCart } from "../utils/cartLock";
 
 // In-memory store for temporary transaction data (in production, use Redis)
 const transactionStore = new Map<string, {
@@ -239,6 +239,24 @@ export const initiateWompiMenuCheckout = async (req: Request, res: Response) => 
   // Calculate gateway fees on the total amount (matching checkout logic exactly)
   const { totalGatewayFee, iva } = calculateGatewayFees(totalPaid);
   const finalTotal = totalPaid + totalGatewayFee + iva;
+
+  // 🚫 Validate minimum transaction amount (Wompi requirement: 1500 COP)
+  if (finalTotal < 1500) { // 1500 COP minimum
+    console.log(`[WOMPI-MENU-INITIATE] ❌ Cart total ${finalTotal} is below Wompi minimum (1500 COP). Unlocking cart.`);
+    
+    // Unlock the cart since we can't proceed
+    try {
+      await unlockCart(userId, sessionId);
+      console.log(`[WOMPI-MENU-INITIATE] 🔓 Cart unlocked due to insufficient amount`);
+    } catch (unlockError) {
+      console.warn(`[WOMPI-MENU-INITIATE] Could not unlock cart:`, unlockError);
+    }
+    
+    return res.status(400).json({ 
+      error: "El monto mínimo de una transacción es $1,500 COP (exceptuando impuestos). Por favor, agrega más items a tu carrito.",
+      details: `Total del carrito: $${finalTotal.toFixed(2)} COP, mínimo requerido: $1,500 COP`
+    });
+  }
 
   console.log(`🍽️ [WOMPI-MENU-INITIATE] CALCULATION DEBUG:`);
   console.log(`   Total Paid (before gateway): ${totalPaid}`);

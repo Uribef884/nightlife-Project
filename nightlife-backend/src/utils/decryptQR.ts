@@ -25,7 +25,18 @@ export function decryptQR(encryptedQR: string): QRPayload {
     const decipher = createDecipheriv(algorithm, key, iv);
     const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
     const json = decrypted.toString("utf-8");
-    const payload = JSON.parse(json) as QRPayload;
+    const optimizedPayload = JSON.parse(json);
+    
+    // Convert optimized payload back to standard format
+    const payload: QRPayload = {
+      type: optimizedPayload.t, // 't' -> 'type'
+      clubId: optimizedPayload.c // 'c' -> 'clubId'
+    };
+    
+    // Map optional fields
+    if (optimizedPayload.i) payload.id = optimizedPayload.i; // 'i' -> 'id'
+    if (optimizedPayload.tp) payload.ticketPurchaseId = optimizedPayload.tp; // 'tp' -> 'ticketPurchaseId'
+    
     return payload;
   } catch (error) {
     throw new Error("Invalid QR code");

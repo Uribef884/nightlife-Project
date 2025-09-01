@@ -105,6 +105,36 @@ export function generatePasswordResetEmailHTML({
                 </td>
               </tr>
 
+              <!-- Soporte y Enlaces -->
+              <tr>
+                <td style="padding:12px 24px;">
+                  <div style="background:#1a1423; border-radius:10px; padding:16px;">
+                    <h3 style="margin:0 0 12px 0; font-size:16px; color:#dce1ff; font-family:Arial,Helvetica,sans-serif;">Soporte y Enlaces</h3>
+                    
+                    <div style="margin-bottom:16px;">
+                      <h4 style="margin:0 0 8px 0; font-size:14px; color:#d7c8f5; font-family:Arial,Helvetica,sans-serif;">Soporte</h4>
+                      <ul style="margin:0 0 0 18px; color:#b5bdd1; font-size:13px; font-family:Arial,Helvetica,sans-serif;">
+                        <li>Chat del sitio web</li>
+                        <li>WhatsApp: +57 XXX XXX XXXX</li>
+                        <li>Email: support@nightlife.com</li>
+                      </ul>
+                    </div>
+                    
+                                         <div style="margin-bottom:16px;">
+                       <h4 style="margin:0 0 8px 0; font-size:14px; color:#d7c8f5; font-family:Arial,Helvetica,sans-serif;">Enlaces Importantes</h4>
+                       <ul style="margin:0 0 0 18px; color:#b5bdd1; font-size:13px; font-family:Arial,Helvetica,sans-serif;">
+                         <li><a href="${process.env.FRONTEND_BASE_URL || 'http://localhost:3000'}/terms" style="color:#6B3FA0;text-decoration:none;">Términos y Servicio</a></li>
+                         <li><a href="${process.env.FRONTEND_BASE_URL || 'http://localhost:3000'}/privacy" style="color:#6B3FA0;text-decoration:none;">Política de Privacidad</a></li>
+                       </ul>
+                     </div>
+                    
+                    <p style="margin:0; font-size:12px; color:#9aa3b2; font-family:Arial,Helvetica,sans-serif;">
+                      Legal: Esta es tu factura oficial de NightLife. Consérvala para tus registros contables y en caso de cualquier consulta sobre tu compra. Los tickets y menús se envían por separado con sus respectivos códigos QR. NightLife Inc. - NIT: [Tu NIT aquí]
+                    </p>
+                  </div>
+                </td>
+              </tr>
+
               <!-- Footer -->
               <tr>
                 <td align="center" style="padding:24px; background:#111317;">

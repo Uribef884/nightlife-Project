@@ -4,7 +4,7 @@ import path from "path";
 
 import { generateTicketEmailHTML } from "../templates/ticketEmailTemplate";
 import { generateMenuEmailHTML } from "../templates/menuEmailTemplate";
-import { generateMenuFromTicketEmailHTML } from "../templates/menuFromTicketEmailTemplate";
+import { generateUnifiedTicketEmailHTML } from "../templates/unifiedTicketEmailTemplate";
 import { generatePasswordResetEmailHTML } from "../templates/passwordResetEmailTemplate";
 import { generateTransactionInvoiceHTML } from "../templates/transactionInvoiceTemplate";
 
@@ -48,6 +48,25 @@ type MenuFromTicketEmailPayload = {
   }>;
   index?: number;
   total?: number;
+};
+
+type UnifiedTicketEmailPayload = {
+  to: string;
+  email: string;
+  ticketName: string;
+  date: string;
+  ticketQrImageDataUrl: string;
+  menuQrImageDataUrl: string;
+  clubName: string;
+  menuItems: Array<{
+    name: string;
+    variant: string | null;
+    quantity: number;
+  }>;
+  index?: number;
+  total?: number;
+  description?: string | null;
+  purchaseId?: string;
 };
 
 /* =========================================================
@@ -175,15 +194,15 @@ export async function sendMenuEmail(payload: MenuEmailPayload) {
   });
 }
 
-// 3) Menu included with ticket (sent in addition to the ticket email)
-export async function sendMenuFromTicketEmail(payload: MenuFromTicketEmailPayload) {
-  const html = generateMenuFromTicketEmailHTML(payload);
+// 3) Unified ticket with menu (one email with both QR codes)
+export async function sendUnifiedTicketEmail(payload: UnifiedTicketEmailPayload) {
+  const html = generateUnifiedTicketEmailHTML(payload);
 
   const { to, headers } = resolveTo(payload.to);
   await transporter.sendMail({
-    from: buildFrom("NightLife Menú incluido"),
+    from: buildFrom("NightLife Tickets"),
     to,
-    subject: `🍹 Menú incluido - ${payload.ticketName}`,
+    subject: `🎟️ Tu entrada con menú: ${payload.ticketName}`,
     html,
     attachments: [getInlineLogoAttachment()],
     headers,

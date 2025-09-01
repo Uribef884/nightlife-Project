@@ -11,7 +11,7 @@ import { MenuItemVariant } from "../entities/MenuItemVariant";
 import { calculatePlatformFee, calculateGatewayFees } from "../utils/ticketfeeUtils";
 import { isDisposableEmail } from "../utils/disposableEmailValidator";
 import { generateEncryptedQR } from "../utils/generateEncryptedQR";
-import { sendTicketEmail, sendMenuFromTicketEmail } from "../services/emailService";
+import { sendTicketEmail, sendUnifiedTicketEmail } from "../services/emailService";
 import { differenceInMinutes } from "date-fns";
 import { mockValidateWompiTransaction } from "../services/mockWompiService";
 import { User } from "../entities/User";
@@ -429,20 +429,6 @@ export const processSuccessfulCheckout = async ({
 
       ticketPurchases.push(purchase);
 
-      try {
-        await sendTicketEmail({
-          to: email,
-          ticketName: ticket.name,
-          date: dateStr,
-          qrImageDataUrl: qrDataUrl,
-          clubName: ticket.club?.name || "Your Club",
-          index: globalTicketCounter,
-          total: totalTicketsInCart,
-        });
-      } catch (err) {
-        console.error(`[EMAIL ❌] Ticket ${globalTicketCounter} failed:`, err);
-      }
-
       // Handle menu items if ticket includes them
       if (ticket.includesMenuItem) {
         try {
@@ -453,16 +439,11 @@ export const processSuccessfulCheckout = async ({
           });
 
           if (includedMenuItems.length > 0) {
-            // Generate menu QR payload
+            // Generate menu QR payload (simplified - only reference ticketPurchaseId)
             const menuPayload = {
               type: "menu_from_ticket" as const,
               ticketPurchaseId: purchase.id,
-              clubId,
-              items: includedMenuItems.map(item => ({
-                menuItemId: item.menuItemId,
-                variantId: item.variantId || undefined,
-                quantity: item.quantity
-              }))
+              clubId
             };
 
             const menuEncryptedPayload = await generateEncryptedQR(menuPayload);
@@ -480,27 +461,45 @@ export const processSuccessfulCheckout = async ({
 
             await menuItemFromTicketRepo.save(menuItemFromTicketRecords);
 
-            // Send menu email
+            // Send unified email with both QR codes
             const menuItems = includedMenuItems.map(item => ({
               name: item.menuItem.name,
               variant: item.variant?.name || null,
               quantity: item.quantity
             }));
 
-            await sendMenuFromTicketEmail({
+            await sendUnifiedTicketEmail({
               to: email,
               email: email,
               ticketName: ticket.name,
               date: dateStr,
-              qrImageDataUrl: menuQrDataUrl,
+              ticketQrImageDataUrl: qrDataUrl,
+              menuQrImageDataUrl: menuQrDataUrl,
               clubName: ticket.club?.name || "Your Club",
-              items: menuItems,
+              menuItems: menuItems,
               index: globalTicketCounter,
               total: totalTicketsInCart,
+              description: ticket.description,
+              purchaseId: purchase.id,
             });
           }
         } catch (err) {
-          console.error(`[MENU EMAIL ❌] Menu items for ticket ${i + 1} failed:`, err);
+          console.error(`[EMAIL ❌] Unified email for ticket ${globalTicketCounter} failed:`, err);
+        }
+      } else {
+        // Send regular ticket email (no menu included)
+        try {
+          await sendTicketEmail({
+            to: email,
+            ticketName: ticket.name,
+            date: dateStr,
+            qrImageDataUrl: qrDataUrl,
+            clubName: ticket.club?.name || "Your Club",
+            index: globalTicketCounter,
+            total: totalTicketsInCart,
+          });
+        } catch (err) {
+          console.error(`[EMAIL ❌] Ticket ${globalTicketCounter} failed:`, err);
         }
       }
     }

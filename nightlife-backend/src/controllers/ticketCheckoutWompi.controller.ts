@@ -9,7 +9,7 @@ import { TicketPurchase } from "../entities/TicketPurchase";
 import { CartItem } from "../entities/TicketCartItem";
 import { Ticket } from "../entities/Ticket";
 import { generateEncryptedQR } from "../utils/generateEncryptedQR";
-import { sendTicketEmail, sendMenuFromTicketEmail, sendTransactionInvoiceEmail } from "../services/emailService";
+import { sendTicketEmail, sendUnifiedTicketEmail, sendTransactionInvoiceEmail } from "../services/emailService";
 import { computeDynamicEventPrice, computeDynamicPrice, getNormalTicketDynamicPricingReason, getEventTicketDynamicPricingReason } from "../utils/dynamicPricing";
 import { TicketIncludedMenuItem } from "../entities/TicketIncludedMenuItem";
 import { MenuItemFromTicket } from "../entities/MenuItemFromTicket";
@@ -515,22 +515,6 @@ export async function processWompiSuccessfulCheckout({
         }
         const dateStr = cartDate.toISOString().split("T")[0];
 
-        // Send email for this ticket
-        try {
-          await sendTicketEmail({
-            to: existingTransaction.email,
-            ticketName: ticket.name,
-            date: dateStr,
-            qrImageDataUrl: qrDataUrl,
-            clubName: ticket.club?.name || "Your Club",
-            index: globalTicketCounter,
-            total: totalTicketsInCart,
-          });
-          console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Email sent for ticket ${globalTicketCounter}/${totalTicketsInCart}`);
-        } catch (err) {
-          console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Email failed for ticket ${globalTicketCounter}:`, err);
-        }
-
         // Handle menu items if ticket includes them
         if (ticket.includesMenuItem) {
           try {
@@ -542,16 +526,11 @@ export async function processWompiSuccessfulCheckout({
             });
 
             if (includedMenuItems.length > 0) {
-              // Generate menu QR payload
+              // Generate menu QR payload (simplified - only reference ticketPurchaseId)
               const menuPayload = {
                 type: "menu_from_ticket" as const,
                 ticketPurchaseId: ticketPurchase.id,
-                clubId: existingTransaction.clubId,
-                items: includedMenuItems.map(item => ({
-                  menuItemId: item.menuItemId,
-                  variantId: item.variantId || undefined,
-                  quantity: item.quantity
-                }))
+                clubId: existingTransaction.clubId
               };
 
               const menuEncryptedPayload = await generateEncryptedQR(menuPayload);
@@ -570,29 +549,48 @@ export async function processWompiSuccessfulCheckout({
 
               await menuItemFromTicketRepo.save(menuItemFromTicketRecords);
 
-              // Send menu email
+              // Send unified email with both QR codes
               const menuItems = includedMenuItems.map(item => ({
                 name: item.menuItem.name,
                 variant: item.variant?.name || null,
                 quantity: item.quantity
               }));
 
-              await sendMenuFromTicketEmail({
+              await sendUnifiedTicketEmail({
                 to: existingTransaction.email,
                 email: existingTransaction.email,
                 ticketName: ticket.name,
                 date: dateStr,
-                qrImageDataUrl: menuQrDataUrl,
+                ticketQrImageDataUrl: qrDataUrl,
+                menuQrImageDataUrl: menuQrDataUrl,
                 clubName: ticket.club?.name || "Your Club",
-                items: menuItems,
+                menuItems: menuItems,
                 index: globalTicketCounter,
                 total: totalTicketsInCart,
+                description: ticket.description,
+                purchaseId: ticketPurchase.id,
               });
 
-              console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Menu email sent for ticket ${globalTicketCounter}/${totalTicketsInCart}`);
+              console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Unified email sent for ticket ${globalTicketCounter}/${totalTicketsInCart} with menu`);
             }
           } catch (err) {
-            console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Menu items for ticket ${i + 1} failed:`, err);
+            console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Unified email for ticket ${globalTicketCounter} failed:`, err);
+          }
+        } else {
+          // Send regular ticket email (no menu included)
+          try {
+            await sendTicketEmail({
+              to: existingTransaction.email,
+              ticketName: ticket.name,
+              date: dateStr,
+              qrImageDataUrl: qrDataUrl,
+              clubName: ticket.club?.name || "Your Club",
+              index: globalTicketCounter,
+              total: totalTicketsInCart,
+            });
+            console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Email sent for ticket ${globalTicketCounter}/${totalTicketsInCart}`);
+          } catch (err) {
+            console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Email failed for ticket ${globalTicketCounter}:`, err);
           }
         }
 
@@ -782,4 +780,4 @@ async function updateTransactionStatus(wompiTransactionId: string, status: "APPR
   } catch (error) {
     console.error(`[WOMPI-TICKET-CHECKOUT] Error updating transaction status:`, error);
   }
-} 
+}
