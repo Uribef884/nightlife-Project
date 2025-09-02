@@ -9,6 +9,7 @@ import { IsNull, In } from "typeorm";
 import { TicketPurchase } from "../entities/TicketPurchase";
 import { validateImageUrlWithResponse } from "../utils/validateImageUrl";
 import { cleanupAdS3Files } from "../utils/s3Cleanup";
+import { validateExternalUrlWithResponse } from "../utils/validateExternalUrl";
 
 function buildAdLink(ad: Ad): string | null {
   if (ad.targetType === "event" && ad.targetId) {
@@ -16,6 +17,9 @@ function buildAdLink(ad: Ad): string | null {
   }
   if (ad.targetType === "ticket" && ad.targetId) {
     return `/clubs.html?ticket=${ad.targetId}`;
+  }
+  if (ad.targetType === "external" && ad.externalUrl) {
+    return ad.externalUrl;
   }
   return null;
 }
@@ -42,7 +46,7 @@ function validatePriority(priority: any): boolean {
 }
 
 function validateTargetType(type: any): boolean {
-  return type === "event" || type === "ticket";
+  return type === "event" || type === "ticket" || type === "external";
 }
 
 // --- CREATE ADMIN AD ---
@@ -52,7 +56,7 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
       res.status(403).json({ error: "Only admins can create admin ads." });
       return;
     }
-    const { priority, isVisible, targetType, targetId } = req.body;
+    const { priority, isVisible, targetType, targetId, externalUrl } = req.body;
     // Validate priority
     const prio = priority !== undefined ? parseInt(priority) : 1;
     if (!validatePriority(prio)) {
@@ -61,34 +65,62 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
     }
     // Validate target and get clubId if targeting ticket/event
     let validatedTargetId: string | null = null;
+    let validatedExternalUrl: string | null = null;
     let clubId: string | undefined = undefined;
     
     if (targetType) {
       if (!validateTargetType(targetType)) {
-        res.status(400).json({ error: "targetType must be 'ticket' or 'event' if provided." });
+        res.status(400).json({ error: "targetType must be 'ticket', 'event', or 'external' if provided." });
         return;
       }
-      if (!targetId) {
-        res.status(400).json({ error: "targetId is required if targetType is provided." });
-        return;
-      }
-      // Validate existence and get clubId
-      if (targetType === "ticket") {
-        const ticket = await AppDataSource.getRepository(Ticket).findOne({ where: { id: targetId } });
-        if (!ticket) {
-          res.status(400).json({ error: "Target ticket not found." });
+      
+      if (targetType === "external") {
+        // External ads validation
+        if (!externalUrl) {
+          res.status(400).json({ error: "externalUrl is required for external ads." });
           return;
         }
-        clubId = ticket.clubId; // Automatically get clubId from ticket
-      } else if (targetType === "event") {
-        const event = await AppDataSource.getRepository(Event).findOne({ where: { id: targetId } });
-        if (!event) {
-          res.status(400).json({ error: "Target event not found." });
+        // External ads cannot have targetId
+        if (targetId) {
+          res.status(400).json({ error: "External ads cannot have targetId. Use externalUrl instead." });
           return;
         }
-        clubId = event.clubId; // Automatically get clubId from event
+        // Validate external URL with cybersecurity checks
+        if (!validateExternalUrlWithResponse(externalUrl, res)) {
+          return;
+        }
+        validatedExternalUrl = externalUrl;
+        // External ads are always global (no clubId)
+        clubId = undefined;
+      } else {
+        // Internal ads validation (ticket/event)
+        if (!targetId) {
+          res.status(400).json({ error: "targetId is required for ticket/event ads." });
+          return;
+        }
+        // Internal ads cannot have external URLs
+        if (externalUrl) {
+          res.status(400).json({ error: "Internal ads (ticket/event) cannot have external URLs." });
+          return;
+        }
+        // Validate existence and get clubId
+        if (targetType === "ticket") {
+          const ticket = await AppDataSource.getRepository(Ticket).findOne({ where: { id: targetId } });
+          if (!ticket) {
+            res.status(400).json({ error: "Target ticket not found." });
+            return;
+          }
+          clubId = ticket.clubId; // Automatically get clubId from ticket
+        } else if (targetType === "event") {
+          const event = await AppDataSource.getRepository(Event).findOne({ where: { id: targetId } });
+          if (!event) {
+            res.status(400).json({ error: "Target event not found." });
+            return;
+          }
+          clubId = event.clubId; // Automatically get clubId from event
+        }
+        validatedTargetId = targetId;
       }
-      validatedTargetId = targetId;
     }
     // Validate image
     if (!req.file) {
@@ -106,6 +138,7 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
       isVisible: isVisible !== undefined ? isVisible === "true" || isVisible === true : true,
       targetType: targetType || null,
       targetId: validatedTargetId,
+      externalUrl: validatedExternalUrl,
       label: "global", // Admin ads are labeled as "global"
     });
     await adRepo.save(ad);
@@ -128,7 +161,7 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
       res.status(403).json({ error: "Only club owners and admins can create club ads." });
       return;
     }
-    const { priority, isVisible, targetType, targetId } = req.body;
+    const { priority, isVisible, targetType, targetId, externalUrl } = req.body;
     
     // Get clubId based on user role
     let clubId: string;
@@ -162,15 +195,24 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
       res.status(400).json({ error: "Priority must be a positive integer (min 1)." });
       return;
     }
-    // Validate target
+    // Validate target - club ads cannot be external
     let validatedTargetId: string | null = null;
     if (targetType) {
+      if (targetType === "external") {
+        res.status(400).json({ error: "Club ads cannot be external. Only global ads can link to external URLs." });
+        return;
+      }
       if (!validateTargetType(targetType)) {
-        res.status(400).json({ error: "targetType must be 'ticket' or 'event' if provided." });
+        res.status(400).json({ error: "targetType must be 'ticket' or 'event' for club ads." });
         return;
       }
       if (!targetId) {
         res.status(400).json({ error: "targetId is required if targetType is provided." });
+        return;
+      }
+      // Club ads cannot have external URLs
+      if (externalUrl) {
+        res.status(400).json({ error: "Club ads cannot have external URLs. Only global ads can link to external URLs." });
         return;
       }
       // Validate existence and club ownership
@@ -204,6 +246,7 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
       isVisible: isVisible !== undefined ? isVisible === "true" || isVisible === true : true,
       targetType: targetType || null,
       targetId: validatedTargetId,
+      externalUrl: null, // Club ads cannot have external URLs
       label: "club", // Club owner ads are labeled as "club"
     });
     await adRepo.save(ad);
@@ -245,7 +288,7 @@ export const updateAd = async (req: AuthenticatedRequest, res: Response): Promis
       }
     }
     // Update fields
-    const { priority, isVisible, targetType, targetId, imageUrl } = req.body;
+    const { priority, isVisible, targetType, targetId, externalUrl, imageUrl } = req.body;
 
     // Validate image URL if provided
     if (imageUrl && !validateImageUrlWithResponse(imageUrl, res)) {
@@ -262,10 +305,10 @@ export const updateAd = async (req: AuthenticatedRequest, res: Response): Promis
     if (isVisible !== undefined) {
       ad.isVisible = isVisible === "true" || isVisible === true;
     }
-    // Target validation - targetType and targetId cannot be changed once created
-    if (targetType !== undefined || targetId !== undefined) {
+    // Target validation - targetType, targetId, and externalUrl cannot be changed once created
+    if (targetType !== undefined || targetId !== undefined || externalUrl !== undefined) {
       res.status(400).json({ 
-        error: "targetType and targetId cannot be modified after ad creation. Please delete the ad and create a new one if you need to change the target." 
+        error: "targetType, targetId, and externalUrl cannot be modified after ad creation. Please delete the ad and create a new one if you need to change the target." 
       });
       return;
     }

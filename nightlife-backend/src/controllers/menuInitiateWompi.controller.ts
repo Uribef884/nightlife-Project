@@ -91,6 +91,31 @@ export const initiateWompiMenuCheckout = async (req: Request, res: Response) => 
     });
   }
 
+  // 🎁 Check for free checkout (all items have price 0)
+  const isFreeCheckout = cartItems.every((item) => {
+    if (item.variant) {
+      return Number(item.variant.price) === 0;
+    }
+    return Number(item.menuItem.price) === 0;
+  });
+
+  if (isFreeCheckout) {
+    console.log("[WOMPI-MENU-INITIATE] 🎁 Free checkout detected. Processing immediately.");
+    
+    // Import the checkout function
+    const { processWompiSuccessfulMenuCheckout } = require("./menuCheckoutWompi.controller");
+    
+    // Process free checkout immediately (no payment needed)
+    return await processWompiSuccessfulMenuCheckout({ 
+      userId, 
+      sessionId, 
+      email, 
+      req, 
+      res,
+      isFreeCheckout: true 
+    });
+  }
+
   // Get payment method from request
   const { 
     paymentMethod, 

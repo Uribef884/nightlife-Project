@@ -11,8 +11,9 @@ export type ResolvedAd = {
   imageBlurhash?: string | null;
   priority: number;
   isVisible: boolean;
-  targetType?: "ticket" | "event" | "club";
+  targetType?: "ticket" | "event" | "club" | "external";
   targetId?: string | null;
+  externalUrl?: string | null; // For external ads only
   label?: "global" | "club";
   resolvedDate?: string | null; // YYYY-MM-DD or null
 };

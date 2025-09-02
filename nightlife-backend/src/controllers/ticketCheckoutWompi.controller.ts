@@ -215,6 +215,7 @@ export async function processWompiSuccessfulCheckout({
   res,
   transactionId,
   cartItems,
+  isFreeCheckout = false,
 }: {
   userId: string | null;
   sessionId: string | null;
@@ -223,6 +224,7 @@ export async function processWompiSuccessfulCheckout({
   res: Response;
   transactionId: string;
   cartItems: any[];
+  isFreeCheckout?: boolean;
 }) {
   // Declare existingTransaction outside try block so it's accessible in catch
   let existingTransaction: any = null;
@@ -249,39 +251,99 @@ export async function processWompiSuccessfulCheckout({
     // Use fresh cart items with proper relations
     cartItems = freshCartItems;
 
+    // 🎁 Handle free checkout (no payment processing needed)
+    if (isFreeCheckout) {
+      console.log(`[WOMPI-TICKET-CHECKOUT] 🎁 Processing FREE checkout - creating transaction record`);
+      
+      // For free checkouts, create a new transaction record
+      const freeTransactionId = `free_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      transactionId = freeTransactionId;
+      
+      // We'll create the transaction record later in the flow after transactionRepo is declared
+      console.log(`[WOMPI-TICKET-CHECKOUT] 🎁 Will create free transaction record later in the flow`);
+    }
+
     // Find and update the existing pending transaction
     const transactionRepo = AppDataSource.getRepository(PurchaseTransaction);
-    existingTransaction = await transactionRepo.findOne({
-      where: { paymentProviderTransactionId: transactionId }
-    });
+    
+    if (isFreeCheckout) {
+      // For free checkouts, create a new transaction record
+      console.log(`[WOMPI-TICKET-CHECKOUT] 🎁 Creating new transaction for FREE checkout`);
+      
+      // Create a new transaction record for free checkout
+      const newTransaction = transactionRepo.create({
+        userId: userId || undefined,
+        email: email,
+        clubId: cartItems[0].ticket.clubId,
+        date: new Date(), // Use current date for free transactions
+        totalPaid: 0,
+        clubReceives: 0,
+        platformReceives: 0,
+        gatewayFee: 0,
+        gatewayIVA: 0,
+        paymentStatus: "APPROVED",
+        paymentProvider: "free",
+        paymentProviderReference: transactionId,
+        paymentProviderTransactionId: transactionId
+      });
+      
+      await transactionRepo.save(newTransaction);
+      existingTransaction = newTransaction;
+      
+      console.log(`[WOMPI-TICKET-CHECKOUT] 🎁 Created free transaction: ${newTransaction.id}`);
+    } else {
+      existingTransaction = await transactionRepo.findOne({
+        where: { paymentProviderTransactionId: transactionId }
+      });
 
-    if (!existingTransaction) {
-      console.error(`[WOMPI-TICKET-CHECKOUT] No pending transaction found for ID: ${transactionId}`);
-      return res.status(400).json({ error: "Transaction not found" });
+      if (!existingTransaction) {
+        console.error(`[WOMPI-TICKET-CHECKOUT] No pending transaction found for ID: ${transactionId}`);
+        return res.status(400).json({ error: "Transaction not found" });
+      }
     }
 
     // Get the current Wompi transaction status to confirm it's actually approved
-    const wompiStatus = await wompiService().getTransactionStatus(transactionId);
-    const finalStatus = wompiStatus.data.status.toUpperCase();
-    
-    console.log(`[WOMPI-TICKET-CHECKOUT] Wompi transaction status: ${finalStatus}`);
-    
-    // Only proceed if Wompi confirms the transaction is approved
-    if (finalStatus !== "APPROVED") {
-      console.error(`[WOMPI-TICKET-CHECKOUT] Transaction not approved in Wompi. Status: ${finalStatus}`);
-      return res.status(400).json({ 
-        error: `Payment not approved. Status: ${finalStatus}`,
-        status: finalStatus
-      });
+    if (!isFreeCheckout) {
+      const wompiStatus = await wompiService().getTransactionStatus(transactionId);
+      const finalStatus = wompiStatus.data.status.toUpperCase();
+      
+      console.log(`[WOMPI-TICKET-CHECKOUT] Wompi transaction status: ${finalStatus}`);
+      
+      // Only proceed if Wompi confirms the transaction is approved
+      if (finalStatus !== "APPROVED") {
+        console.error(`[WOMPI-TICKET-CHECKOUT] Transaction not approved in Wompi. Status: ${finalStatus}`);
+        return res.status(400).json({ 
+          error: `Payment not approved. Status: ${finalStatus}`,
+          status: finalStatus
+        });
+      }
+    } else {
+      console.log(`[WOMPI-TICKET-CHECKOUT] 🎁 FREE checkout - skipping Wompi validation`);
     }
 
-    // 🎯 USE EXISTING TRANSACTION TOTALS (legacy approach)
-    // Don't recalculate - use the amounts that were calculated at initiate time
-    const totalPaid = Number(existingTransaction.totalPaid);
-    const totalClubReceives = Number(existingTransaction.clubReceives);
-    const totalPlatformReceives = Number(existingTransaction.platformReceives);
-    const totalGatewayFee = Number(existingTransaction.gatewayFee);
-    const gatewayIVA = Number(existingTransaction.gatewayIVA);
+    // 🎯 GET TRANSACTION TOTALS
+    let totalPaid: number;
+    let totalClubReceives: number;
+    let totalPlatformReceives: number;
+    let totalGatewayFee: number;
+    let gatewayIVA: number;
+
+    if (isFreeCheckout) {
+      // For free checkouts, all amounts are 0
+      console.log(`🎫 [WOMPI-TICKET-CHECKOUT] FREE CHECKOUT - All amounts are 0`);
+      totalPaid = 0;
+      totalClubReceives = 0;
+      totalPlatformReceives = 0;
+      totalGatewayFee = 0;
+      gatewayIVA = 0;
+    } else {
+      // Use existing transaction totals (legacy approach)
+      totalPaid = Number(existingTransaction.totalPaid);
+      totalClubReceives = Number(existingTransaction.clubReceives);
+      totalPlatformReceives = Number(existingTransaction.platformReceives);
+      totalGatewayFee = Number(existingTransaction.gatewayFee);
+      gatewayIVA = Number(existingTransaction.gatewayIVA);
+    }
 
     console.log(`🎫 [WOMPI-TICKET-CHECKOUT] USING ORIGINAL TRANSACTION TOTALS:`);
     console.log(`   Total Paid: ${totalPaid}`);
@@ -291,25 +353,29 @@ export async function processWompiSuccessfulCheckout({
     console.log(`   Gateway IVA: ${gatewayIVA}`);
     
     // ✅ VALIDATION: Check if this matches what was sent to Wompi
-    const wompiValidationStatus = await wompiService().getTransactionStatus(transactionId);
-    const wompiAmountInCents = wompiValidationStatus.data.amount_in_cents;
-    const ourAmountInCents = Math.round(totalPaid * 100);
-    
-    console.log(`🔍 [WOMPI-TICKET-CHECKOUT] AMOUNT VALIDATION:`);
-    console.log(`   Wompi Amount (cents): ${wompiAmountInCents}`);
-    console.log(`   Our Stored (cents): ${ourAmountInCents}`);
-    console.log(`   Difference: ${wompiAmountInCents - ourAmountInCents}`);
-    
-    if (Math.abs(wompiAmountInCents - ourAmountInCents) > 1) { // Allow 1 cent rounding diff
-      console.error(`❌ [WOMPI-TICKET-CHECKOUT] AMOUNT MISMATCH DETECTED!`);
-      console.error(`   Wompi charged: ${wompiAmountInCents / 100} COP`);
-      console.error(`   We stored: ${ourAmountInCents / 100} COP`);
-      console.error(`   This should not happen with the legacy approach!`);
-    }
+    if (!isFreeCheckout) {
+      const wompiValidationStatus = await wompiService().getTransactionStatus(transactionId);
+      const wompiAmountInCents = wompiValidationStatus.data.amount_in_cents;
+      const ourAmountInCents = Math.round(totalPaid * 100);
+      
+      console.log(`🔍 [WOMPI-TICKET-CHECKOUT] AMOUNT VALIDATION:`);
+      console.log(`   Wompi Amount (cents): ${wompiAmountInCents}`);
+      console.log(`   Our Stored (cents): ${ourAmountInCents}`);
+      console.log(`   Difference: ${wompiAmountInCents - ourAmountInCents}`);
+      
+      if (Math.abs(wompiAmountInCents - ourAmountInCents) > 1) { // Allow 1 cent rounding diff
+        console.error(`❌ [WOMPI-TICKET-CHECKOUT] AMOUNT MISMATCH DETECTED!`);
+        console.error(`   Wompi charged: ${wompiAmountInCents / 100} COP`);
+        console.error(`   We stored: ${ourAmountInCents / 100} COP`);
+        console.error(`   This should not happen with the legacy approach!`);
+      }
 
-    // Simply update the payment status - amounts remain unchanged
-    existingTransaction.paymentStatus = "APPROVED";
-    await transactionRepo.save(existingTransaction);
+      // Simply update the payment status - amounts remain unchanged
+      existingTransaction.paymentStatus = "APPROVED";
+      await transactionRepo.save(existingTransaction);
+    } else {
+      console.log(`🔍 [WOMPI-TICKET-CHECKOUT] FREE CHECKOUT - skipping amount validation and payment status update`);
+    }
     
     console.log(`[WOMPI-TICKET-CHECKOUT] Updated transaction status to APPROVED: ${existingTransaction.id}`);
 
@@ -648,53 +714,58 @@ export async function processWompiSuccessfulCheckout({
     }
 
     // 📧 Send transaction invoice email (ONE email for the entire transaction)
-    try {
-      // Prepare items for invoice (combine all cart items)
-      const invoiceItems = cartItems.map(item => ({
-        name: item.ticket.name,
-        variant: null, // Tickets don't have variants
-        quantity: item.quantity,
-        unitPrice: Number(item.ticket.price),
-        subtotal: Number(item.ticket.price) * item.quantity
-      }));
+    // Skip invoice for free checkouts since there's no payment
+    if (!isFreeCheckout) {
+      try {
+        // Prepare items for invoice (combine all cart items)
+        const invoiceItems = cartItems.map(item => ({
+          name: item.ticket.name,
+          variant: null, // Tickets don't have variants
+          quantity: item.quantity,
+          unitPrice: Number(item.ticket.price),
+          subtotal: Number(item.ticket.price) * item.quantity
+        }));
 
-      // Calculate totals
-      const subtotal = invoiceItems.reduce((sum, item) => sum + item.subtotal, 0);
-      const platformFees = Number(existingTransaction.platformReceives);
-      const gatewayFees = Number(existingTransaction.gatewayFee);
-      const gatewayIVA = Number(existingTransaction.gatewayIVA);
-      const total = Number(existingTransaction.totalPaid);
+        // Calculate totals
+        const subtotal = invoiceItems.reduce((sum, item) => sum + item.subtotal, 0);
+        const platformFees = Number(existingTransaction.platformReceives);
+        const gatewayFees = Number(existingTransaction.gatewayFee);
+        const gatewayIVA = Number(existingTransaction.gatewayIVA);
+        const total = Number(existingTransaction.totalPaid);
 
-      // Get customer info from stored data
-      const customerInfo = storedData?.customerInfo || {};
+        // Get customer info from stored data
+        const customerInfo = storedData?.customerInfo || {};
 
-      await sendTransactionInvoiceEmail({
-        to: existingTransaction.email,
-        transactionId: existingTransaction.id,
-        clubName: cartItems[0]?.ticket?.club?.name || "Your Club",
-        clubAddress: cartItems[0]?.ticket?.club?.address,
-        clubPhone: cartItems[0]?.ticket?.club?.phone,
-        clubEmail: cartItems[0]?.ticket?.club?.email,
-        date: purchaseDateStr, // Use purchase date, not ticket date
-        items: invoiceItems,
-        subtotal,
-        platformFees,
-        gatewayFees,
-        gatewayIVA,
-        total,
-        currency: "COP",
-        paymentMethod: "Credit/Debit Card",
-        paymentProviderRef: transactionId, // Wompi transaction ID
-        customerInfo: {
-          ...customerInfo,
-          email: existingTransaction.email
-        }
-      });
+        await sendTransactionInvoiceEmail({
+          to: existingTransaction.email,
+          transactionId: existingTransaction.id,
+          clubName: cartItems[0]?.ticket?.club?.name || "Your Club",
+          clubAddress: cartItems[0]?.ticket?.club?.address,
+          clubPhone: cartItems[0]?.ticket?.club?.phone,
+          clubEmail: cartItems[0]?.ticket?.club?.email,
+          date: purchaseDateStr, // Use purchase date, not ticket date
+          items: invoiceItems,
+          subtotal,
+          platformFees,
+          gatewayFees,
+          gatewayIVA,
+          total,
+          currency: "COP",
+          paymentMethod: "Credit/Debit Card",
+          paymentProviderRef: transactionId, // Wompi transaction ID
+          customerInfo: {
+            ...customerInfo,
+            email: existingTransaction.email
+          }
+        });
 
-      console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Transaction invoice email sent successfully`);
-    } catch (invoiceError) {
-      console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Failed to send transaction invoice email:`, invoiceError);
-      // Don't fail the checkout if invoice email fails
+        console.log(`[WOMPI-TICKET-CHECKOUT] ✅ Transaction invoice email sent successfully`);
+      } catch (invoiceError) {
+        console.error(`[WOMPI-TICKET-CHECKOUT] ❌ Failed to send transaction invoice email:`, invoiceError);
+        // Don't fail the checkout if invoice email fails
+      }
+    } else {
+      console.log(`[WOMPI-TICKET-CHECKOUT] 🎁 FREE checkout - skipping invoice email (no payment)`);
     }
 
     // Return success response

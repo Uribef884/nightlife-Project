@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { resolveAdCTA } from "@/services/ads.service";
+import { createSecureExternalLink, isExternalUrl } from "@/utils/validateExternalUrl";
 
 export type AdLike = {
   id: string;
   imageUrl: string;
-  targetType?: "ticket" | "event" | "club" | null;
+  targetType?: "ticket" | "event" | "club" | "external" | null;
   targetId?: string | null;
+  externalUrl?: string | null; // For external ads only
   clubId?: string | null;
   resolvedDate?: string | null;
   link?: string | null; // optional fallback URL (internal/external)
@@ -119,7 +121,19 @@ export function AdLightbox({
       onClose();
       return;
     }
-    // Otherwise, navigate normally.
+    
+    // Check if it's an external URL
+    if (isExternalUrl(href)) {
+      // For external URLs, open in new tab with security measures
+      const secureUrl = createSecureExternalLink(href);
+      if (secureUrl !== '#') {
+        window.open(secureUrl, '_blank', 'noopener,noreferrer');
+        onClose();
+        return;
+      }
+    }
+    
+    // Otherwise, navigate normally for internal URLs.
     router.push(href);
   };
 
@@ -174,7 +188,7 @@ export function AdLightbox({
               </button>
             ) : (
               <a
-                href={fallbackHref}
+                href={createSecureExternalLink(fallbackHref)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-4 py-2 rounded-2xl bg-white text-black font-semibold hover:opacity-90 transition"

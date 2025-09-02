@@ -104,7 +104,19 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
   const isFreeCheckout = cartItems.every((item) => Number(item.ticket.price) === 0);
 
   if (isFreeCheckout) {
-    return res.status(400).json({ error: "Free checkouts should use the regular checkout endpoint" });
+    console.log("[WOMPI-TICKET-INITIATE] Free checkout detected. Processing immediately.");
+    // Import the checkout function
+    const { processWompiSuccessfulCheckout } = require("./ticketCheckoutWompi.controller");
+    
+    // Process free checkout immediately (no payment needed)
+    return await processWompiSuccessfulCheckout({ 
+      userId, 
+      sessionId, 
+      email, 
+      req, 
+      res,
+      isFreeCheckout: true 
+    });
   }
 
   // Get payment method from request

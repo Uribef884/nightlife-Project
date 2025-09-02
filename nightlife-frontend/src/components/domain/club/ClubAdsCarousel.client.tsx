@@ -14,8 +14,9 @@ export type ClubAdClient = {
   linkRaw?: string | null;
 
   // ⬇️ NEW: carry targeting through
-  targetType?: "ticket" | "event" | "club" | null;
+  targetType?: "ticket" | "event" | "club" | "external" | null;
   targetId?: string | null;
+  externalUrl?: string | null; // For external ads only
   clubId?: string | null;
   resolvedDate?: string | null;
 };

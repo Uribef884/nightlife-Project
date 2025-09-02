@@ -4,8 +4,9 @@ import { API_BASE_CSR, API_BASE_SSR, joinUrl } from "@/lib/env";
 export type AdLike = {
   id: string;
   imageUrl: string;
-  targetType?: "ticket" | "event" | "club" | null;
+  targetType?: "ticket" | "event" | "club" | "external" | null;
   targetId?: string | null;
+  externalUrl?: string | null; // For external ads only
   clubId?: string | null;
   resolvedDate?: string | null;
   link?: string | null;
@@ -103,6 +104,10 @@ export async function resolveAdCTA(
     if (ad.targetType === "club" && ad.clubId) {
       const ymd = ad.resolvedDate ? toYMD(ad.resolvedDate) : null;
       return { label: ymd ? `Ir a Reservas – ${ymd}` : "Ir a Reservas", href: reservasHref(ad.clubId, ymd) };
+    }
+    if (ad.targetType === "external" && ad.externalUrl) {
+      // External ads - validate URL and return with security measures
+      return { label: "Visitar Sitio Web", href: ad.externalUrl };
     }
 
     // 2) infer from free-form link (common for older ads)

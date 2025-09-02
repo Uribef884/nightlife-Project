@@ -123,8 +123,6 @@ const transporter = nodemailer.createTransport({
 
 // Log once so you can see which creds are live at runtime
 void transporter.verify()
-  .then(() => console.log(`[EMAIL] SMTP OK as ${SMTP_USER} (${SMTP_HOST}:${SMTP_PORT}) [env=${ENV}]`))
-  .catch((err) => console.error("[EMAIL] SMTP verification failed:", err));
 
 /* =========================================================
    Helpers: inline logo + recipient resolver

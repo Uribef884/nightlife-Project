@@ -9,7 +9,7 @@ import {
 } from "typeorm";
 import { Club } from "./Club";
 
-export type AdTargetType = "event" | "ticket";
+export type AdTargetType = "event" | "ticket" | "external";
 export type AdLabel = "global" | "club";
 
 @Entity()
@@ -41,6 +41,9 @@ export class Ad {
 
   @Column({ type: "varchar", nullable: true })
   targetId?: string | null;
+
+  @Column({ type: "varchar", nullable: true })
+  externalUrl?: string | null; // For external ads only
 
   @Column({ type: "varchar", default: "clubb" })
   label!: AdLabel; // "global" for admin ads, "club" for club owner ads

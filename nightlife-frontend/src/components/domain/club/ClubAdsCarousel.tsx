@@ -13,8 +13,9 @@ export type ClubAd = {
   link?: string | null;
 
   // ⬇️ NEW: targeting info coming from backend
-  targetType?: "ticket" | "event" | "club";
+  targetType?: "ticket" | "event" | "club" | "external";
   targetId?: string | null;
+  externalUrl?: string | null; // For external ads only
   clubId?: string | null;
   resolvedDate?: string | null; // YYYY-MM-DD
 };
