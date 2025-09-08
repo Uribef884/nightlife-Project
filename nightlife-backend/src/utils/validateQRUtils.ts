@@ -109,6 +109,48 @@ export function validateQRType(type: string, expected: "menu" | "ticket" | "menu
   return type === expected;
 }
 
+// 🎯 PREVIEW FUNCTION: No restrictions - can be used anytime, any day by bouncers/waiters
+export async function previewMenuTransaction(
+  qrCode: string,
+  user: { id: string; role: string; clubId?: string }
+): Promise<{
+  isValid: boolean;
+  transaction?: MenuPurchaseTransaction;
+  error?: string;
+}> {
+  try {
+    const payload = decryptQR(qrCode);
+
+    if (!validateQRType(payload.type, "menu")) {
+      return { isValid: false, error: "Invalid QR type for menu validation" };
+    }
+
+    if (!payload.id) {
+      return { isValid: false, error: "Missing transaction ID in QR code" };
+    }
+
+    const transactionRepository = AppDataSource.getRepository(MenuPurchaseTransaction);
+    const transaction = await transactionRepository.findOne({
+      where: { id: payload.id },
+      relations: ["purchases", "purchases.menuItem", "purchases.variant"]
+    });
+
+    if (!transaction) {
+      return { isValid: false, error: "Transaction not found" };
+    }
+
+    const hasAccess = await validateClubAccess(user, transaction.clubId);
+    if (!hasAccess) {
+      return { isValid: false, error: "Access denied to this club" };
+    }
+
+    // Preview has NO time/date restrictions - bouncers/waiters can preview anytime
+    return { isValid: true, transaction };
+  } catch (error) {
+    return { isValid: false, error: "Invalid QR code" };
+  }
+}
+
 export async function validateMenuTransaction(
   qrCode: string,
   user: { id: string; role: string; clubId?: string }
@@ -143,6 +185,82 @@ export async function validateMenuTransaction(
       return { isValid: false, error: "Access denied to this club" };
     }
 
+    // 🎯 SIMPLE RULE: Menu items can only be confirmed on open days, UNLESS there's an event
+    const clubRepository = AppDataSource.getRepository(Club);
+    const club = await clubRepository.findOne({
+      where: { id: transaction.clubId }
+    });
+
+    if (!club) {
+      return { isValid: false, error: "Club not found" };
+    }
+
+    const today = new Date();
+    const todayDayName = today.toLocaleString("en-US", { weekday: "long" });
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Check if there's an event happening today
+    const ticketRepo = AppDataSource.getRepository('Ticket');
+    const eventToday = await ticketRepo.findOne({
+      where: {
+        club: { id: transaction.clubId },
+        category: 'event',
+        availableDate: new Date(todayStr + 'T00:00:00'),
+        isActive: true
+      }
+    });
+
+    // If there's an event today, allow menu redemption regardless of club open days
+    if (eventToday) {
+      return { isValid: true, transaction };
+    }
+
+    // If no event today, check club operating days
+    if (!club.openDays || !club.openDays.includes(todayDayName)) {
+      return { 
+        isValid: false, 
+        error: `This club is not open on ${todayDayName}. Menu items can only be redeemed when the club is operating.` 
+      };
+    }
+
+    // Check if club is currently within operating hours
+    if (club.openHours && club.openHours.length > 0) {
+      const currentHour = today.getHours();
+      const currentMinute = today.getMinutes();
+      const currentTime = currentHour * 60 + currentMinute; // Convert to minutes since midnight
+      
+      let isWithinHours = false;
+      for (const timeSlot of club.openHours) {
+        const [openHour, openMinute] = timeSlot.open.split(':').map(Number);
+        const [closeHour, closeMinute] = timeSlot.close.split(':').map(Number);
+        
+        const openTime = openHour * 60 + openMinute;
+        const closeTime = closeHour * 60 + closeMinute;
+        
+        // Handle overnight hours (e.g., 22:00 - 06:00)
+        if (closeTime < openTime) {
+          // Overnight hours: check if current time is after open OR before close
+          if (currentTime >= openTime || currentTime <= closeTime) {
+            isWithinHours = true;
+            break;
+          }
+        } else {
+          // Regular hours: check if current time is between open and close
+          if (currentTime >= openTime && currentTime <= closeTime) {
+            isWithinHours = true;
+            break;
+          }
+        }
+      }
+      
+      if (!isWithinHours) {
+        return { 
+          isValid: false, 
+          error: "This club is currently closed. Menu items can only be redeemed during operating hours." 
+        };
+      }
+    }
+
     return { isValid: true, transaction };
   } catch (error) {
     return { isValid: false, error: "Invalid QR code" };
@@ -173,7 +291,7 @@ export async function validateTicketPurchase(
     const purchaseRepository = AppDataSource.getRepository(TicketPurchase);
     const purchase = await purchaseRepository.findOne({
       where: { id: payload.id },
-      relations: ["ticket", "club", "transaction"]
+      relations: ["ticket", "ticket.event", "club", "transaction"]
     });
 
     if (!purchase) {
@@ -195,7 +313,7 @@ export async function validateTicketPurchase(
       };
     }
 
-    // For confirmation: only allow on event date
+    // For confirmation: check date validity and operating hours
     if (!checkTicketDateIsValid(purchase.date)) {
       // Handle date properly to avoid timezone issues
       const eventDateValue = purchase.date as any; // TypeORM can return date as string or Date
@@ -239,11 +357,168 @@ export async function validateTicketPurchase(
       }
     }
 
+    // 🎯 SIMPLE RULE: Tickets can only be confirmed on open days, UNLESS there's an event
+    const clubRepository = AppDataSource.getRepository(Club);
+    const club = await clubRepository.findOne({
+      where: { id: purchase.clubId }
+    });
+
+    if (!club) {
+      return { isValid: false, error: "Club not found" };
+    }
+
+    const today = new Date();
+    const todayDayName = today.toLocaleString("en-US", { weekday: "long" });
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Check if this is an event ticket
+    const isEventTicket = purchase.ticket.category === "event";
+    
+    if (isEventTicket) {
+      // For event tickets: Check event open hours if available
+      if (purchase.ticket.event && purchase.ticket.event.openHours) {
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+        const currentTime = currentHour * 60 + currentMinute; // Convert to minutes since midnight
+        
+        const { open, close } = purchase.ticket.event.openHours;
+        const [openHour, openMinute] = open.split(':').map(Number);
+        const [closeHour, closeMinute] = close.split(':').map(Number);
+        
+        const openTime = openHour * 60 + openMinute;
+        const closeTime = closeHour * 60 + closeMinute;
+        
+        let isWithinEventHours = false;
+        
+        // Handle overnight hours (e.g., 22:00 - 06:00)
+        if (closeTime < openTime) {
+          // Overnight hours: check if current time is after open OR before close
+          if (currentTime >= openTime || currentTime <= closeTime) {
+            isWithinEventHours = true;
+          }
+        } else {
+          // Regular hours: check if current time is between open and close
+          if (currentTime >= openTime && currentTime <= closeTime) {
+            isWithinEventHours = true;
+          }
+        }
+        
+        if (!isWithinEventHours) {
+          return { 
+            isValid: false, 
+            error: `This event ticket is only valid during event hours (${open} - ${close}).` 
+          };
+        }
+      }
+      
+      // Event tickets are valid on event date regardless of club operating days
+      return { isValid: true, purchase };
+    } else {
+      // For non-event tickets: Check club operating days and hours
+      if (!club.openDays || !club.openDays.includes(todayDayName)) {
+        return { 
+          isValid: false, 
+          error: `This club is not open on ${todayDayName}. Tickets can only be redeemed when the club is operating.` 
+        };
+      }
+
+      // Check if club is currently within operating hours
+      if (club.openHours && club.openHours.length > 0) {
+        const currentHour = today.getHours();
+        const currentMinute = today.getMinutes();
+        const currentTime = currentHour * 60 + currentMinute; // Convert to minutes since midnight
+        
+        let isWithinHours = false;
+        for (const timeSlot of club.openHours) {
+          const [openHour, openMinute] = timeSlot.open.split(':').map(Number);
+          const [closeHour, closeMinute] = timeSlot.close.split(':').map(Number);
+          
+          const openTime = openHour * 60 + openMinute;
+          const closeTime = closeHour * 60 + closeMinute;
+          
+          // Handle overnight hours (e.g., 22:00 - 06:00)
+          if (closeTime < openTime) {
+            // Overnight hours: check if current time is after open OR before close
+            if (currentTime >= openTime || currentTime <= closeTime) {
+              isWithinHours = true;
+              break;
+            }
+          } else {
+            // Regular hours: check if current time is between open and close
+            if (currentTime >= openTime && currentTime <= closeTime) {
+              isWithinHours = true;
+              break;
+            }
+          }
+        }
+        
+        if (!isWithinHours) {
+          return { 
+            isValid: false, 
+            error: "This club is currently closed. Tickets can only be redeemed during operating hours." 
+          };
+        }
+      }
+    }
+
     return { isValid: true, purchase };
   } catch (error) {
     return { isValid: false, error: "Invalid QR code" };
   }
 } 
+
+// 🎯 PREVIEW FUNCTION: No restrictions - can be used anytime, any day by bouncers/waiters
+export async function previewMenuFromTicketPurchase(
+  qrCode: string,
+  user: { id: string; role: string; clubId?: string }
+): Promise<{
+  isValid: boolean;
+  purchase?: TicketPurchase;
+  error?: string;
+  isFutureEvent?: boolean;
+}> {
+  try {
+    const payload = decryptQR(qrCode);
+
+    if (!validateQRType(payload.type, "menu_from_ticket")) {
+      return { isValid: false, error: "Invalid QR type for menu from ticket validation" };
+    }
+
+    if (!payload.ticketPurchaseId) {
+      return { isValid: false, error: "Missing ticket purchase ID in QR code" };
+    }
+
+    // Only waiters can validate menu_from_ticket QRs
+    if (user.role !== "waiter") {
+      return { isValid: false, error: "Only waiters can validate menu QR codes from tickets" };
+    }
+
+    const purchaseRepository = AppDataSource.getRepository(TicketPurchase);
+    const purchase = await purchaseRepository.findOne({
+      where: { id: payload.ticketPurchaseId },
+      relations: ["ticket", "club"]
+    });
+
+    if (!purchase) {
+      return { isValid: false, error: "Ticket purchase not found" };
+    }
+
+    const hasAccess = await validateClubAccess(user, purchase.clubId);
+    if (!hasAccess) {
+      return { isValid: false, error: "Access denied to this club" };
+    }
+
+    // Preview has NO time/date restrictions - bouncers/waiters can preview anytime
+    const isFuture = isTicketDateInFuture(purchase.date);
+    return { 
+      isValid: true, 
+      purchase, 
+      isFutureEvent: isFuture 
+    };
+  } catch (error) {
+    return { isValid: false, error: "Invalid QR code" };
+  }
+}
 
 export async function validateMenuFromTicketPurchase(
   qrCode: string,
@@ -336,6 +611,82 @@ export async function validateMenuFromTicketPurchase(
         return { 
           isValid: false, 
           error: `This menu QR was for ${eventDateDisplay} and is no longer valid (expired at 1:00 AM next day).` 
+        };
+      }
+    }
+
+    // 🎯 SIMPLE RULE: Menu items can only be confirmed on open days, UNLESS there's an event
+    const clubRepository = AppDataSource.getRepository(Club);
+    const club = await clubRepository.findOne({
+      where: { id: purchase.clubId }
+    });
+
+    if (!club) {
+      return { isValid: false, error: "Club not found" };
+    }
+
+    const today = new Date();
+    const todayDayName = today.toLocaleString("en-US", { weekday: "long" });
+    const todayStr = today.toISOString().split('T')[0];
+
+    // Check if there's an event happening today
+    const ticketRepo = AppDataSource.getRepository('Ticket');
+    const eventToday = await ticketRepo.findOne({
+      where: {
+        club: { id: purchase.clubId },
+        category: 'event',
+        availableDate: new Date(todayStr + 'T00:00:00'),
+        isActive: true
+      }
+    });
+
+    // If there's an event today, allow menu redemption regardless of club open days
+    if (eventToday) {
+      return { isValid: true, purchase };
+    }
+
+    // If no event today, check club operating days
+    if (!club.openDays || !club.openDays.includes(todayDayName)) {
+      return { 
+        isValid: false, 
+        error: `This club is not open on ${todayDayName}. Menu items can only be redeemed when the club is operating.` 
+      };
+    }
+
+    // Check if club is currently within operating hours
+    if (club.openHours && club.openHours.length > 0) {
+      const currentHour = today.getHours();
+      const currentMinute = today.getMinutes();
+      const currentTime = currentHour * 60 + currentMinute; // Convert to minutes since midnight
+      
+      let isWithinHours = false;
+      for (const timeSlot of club.openHours) {
+        const [openHour, openMinute] = timeSlot.open.split(':').map(Number);
+        const [closeHour, closeMinute] = timeSlot.close.split(':').map(Number);
+        
+        const openTime = openHour * 60 + openMinute;
+        const closeTime = closeHour * 60 + closeMinute;
+        
+        // Handle overnight hours (e.g., 22:00 - 06:00)
+        if (closeTime < openTime) {
+          // Overnight hours: check if current time is after open OR before close
+          if (currentTime >= openTime || currentTime <= closeTime) {
+            isWithinHours = true;
+            break;
+          }
+        } else {
+          // Regular hours: check if current time is between open and close
+          if (currentTime >= openTime && currentTime <= closeTime) {
+            isWithinHours = true;
+            break;
+          }
+        }
+      }
+      
+      if (!isWithinHours) {
+        return { 
+          isValid: false, 
+          error: "This club is currently closed. Menu items can only be redeemed during operating hours." 
         };
       }
     }

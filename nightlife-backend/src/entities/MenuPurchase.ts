@@ -45,9 +45,6 @@ export class MenuPurchase {
   @Column()
   clubId!: string;
 
-  @Column({ type: 'date' })
-  date!: Date;
-
   @Column({ nullable: true })
   buyerName?: string;
 

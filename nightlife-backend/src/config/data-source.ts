@@ -16,6 +16,9 @@ import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
 import { TicketIncludedMenuItem } from "../entities/TicketIncludedMenuItem";
 import { MenuItemFromTicket } from "../entities/MenuItemFromTicket";
 import { Ad } from "../entities/Ad";
+import { UnifiedCartItem } from "../entities/UnifiedCartItem";
+import { UnifiedPurchaseTransaction } from "../entities/UnifiedPurchaseTransaction";
+import { UnifiedPurchaseLineItem } from "../entities/UnifiedPurchaseLineItem";
 
 dotenv.config();
 
@@ -45,5 +48,8 @@ export const AppDataSource = new DataSource({
     MenuPurchaseTransaction,
     TicketIncludedMenuItem,
     MenuItemFromTicket,
+    UnifiedCartItem,
+    UnifiedPurchaseTransaction,
+    UnifiedPurchaseLineItem,
   ],
 });

@@ -271,33 +271,17 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     }).join('');
 
-    // Use cart summaries from backend if available
+    // Use unified cart summary from backend if available
     let totalProductCost = 0;
     let totalOperationCost = 0;
     let finalTotal = 0;
 
-    if (window.cartSummaries && (window.cartSummaries.ticket || window.cartSummaries.menu)) {
-      // Use whichever summary has items (only one can have items due to exclusivity)
-      if (window.cartSummaries.ticket && window.cartSummaries.ticket.total > 0) {
-        totalProductCost += window.cartSummaries.ticket.total;
-        totalOperationCost += window.cartSummaries.ticket.operationalCosts;
-        finalTotal += window.cartSummaries.ticket.actualTotal;
-      } else if (window.cartSummaries.menu && window.cartSummaries.menu.total > 0) {
-        totalProductCost += window.cartSummaries.menu.total;
-        totalOperationCost += window.cartSummaries.menu.operationalCosts;
-        finalTotal += window.cartSummaries.menu.actualTotal;
-      } else {
-        // Both summaries are empty, use whichever exists for proper structure
-        if (window.cartSummaries.ticket) {
-          totalProductCost += window.cartSummaries.ticket.total;
-          totalOperationCost += window.cartSummaries.ticket.operationalCosts;
-          finalTotal += window.cartSummaries.ticket.actualTotal;
-        } else if (window.cartSummaries.menu) {
-          totalProductCost += window.cartSummaries.menu.total;
-          totalOperationCost += window.cartSummaries.menu.operationalCosts;
-          finalTotal += window.cartSummaries.menu.actualTotal;
-        }
-      }
+    if (window.cartSummaries && window.cartSummaries.unified) {
+      // Use unified cart summary
+      const summary = window.cartSummaries.unified;
+      totalProductCost = summary.total || 0;
+      totalOperationCost = summary.operationalCosts || 0;
+      finalTotal = summary.actualTotal || 0;
     } else {
       // Fallback to frontend calculation
       cartItems.forEach(item => {
@@ -310,7 +294,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
       finalTotal = totalProductCost + totalOperationCost;
-      console.log('⚠️ Using frontend calculation (no backend summaries available)');
+      console.log('⚠️ Using frontend calculation (no unified cart summary available)');
     }
     
     console.log(`🛒 [FRONTEND-CART] TOTALS:`);
@@ -397,13 +381,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     
-    if (type === 'mixed') {
-      showStatus(checkoutStatus, "⚠️ Mixed cart: You have both tickets and menu items. Use Ticket Checkout for tickets.", "error");
-      ticketCheckoutBtn.disabled = false;
-      menuCheckoutBtn.disabled = true;
-      return;
-    }
-    
     if (!isLoggedIn) {
       const hasEmail = emailInput.value.trim() !== "";
       if (!hasEmail) {
@@ -412,16 +389,13 @@ document.addEventListener("DOMContentLoaded", () => {
         menuCheckoutBtn.disabled = true;
         return;
       }
-      }
+    }
 
-      if (type === "ticket") {
-        showStatus(checkoutStatus, "✅ Ready for ticket checkout", "success");
+    // Unified cart supports mixed items, so enable unified checkout
+    if (type === "ticket" || type === "menu" || type === "mixed") {
+      showStatus(checkoutStatus, "✅ Ready for unified checkout", "success");
       ticketCheckoutBtn.disabled = false;
-      menuCheckoutBtn.disabled = true;
-    } else if (type === "menu") {
-        showStatus(checkoutStatus, "✅ Ready for menu checkout", "success");
-      ticketCheckoutBtn.disabled = true;
-      menuCheckoutBtn.disabled = false;
+      menuCheckoutBtn.disabled = false; // Both buttons now use unified checkout
     }
   }
 
@@ -430,128 +404,94 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function handleViewCart() {
     try {
-      showStatus(checkoutStatus, "⏳ Loading cart...", "info");
+      showStatus(checkoutStatus, "⏳ Loading unified cart...", "info");
       
-      // Check both ticket and menu carts (items and summaries)
-      const [ticketRes, menuRes, ticketSummaryRes, menuSummaryRes] = await Promise.all([
-        fetch('/cart', { credentials: "include" }),
-        fetch('/menu/cart', { credentials: "include" }),
-        fetch('/cart/summary', { credentials: "include" }),
-        fetch('/menu/cart/summary', { credentials: "include" })
+      // Use unified cart endpoints
+      const [cartRes, summaryRes] = await Promise.all([
+        fetch('/unified-cart', { credentials: "include" }),
+        fetch('/unified-cart/summary', { credentials: "include" })
       ]);
       
-      let ticketData = [];
-      let menuData = [];
-      let ticketSummary = null;
-      let menuSummary = null;
+      let cartData = [];
+      let summary = null;
       
-      if (ticketRes.ok) {
-        const ticketResponse = await ticketRes.json();
-        ticketData = Array.isArray(ticketResponse) ? ticketResponse : [];
+      if (cartRes.ok) {
+        const cartResponse = await cartRes.json();
+        cartData = Array.isArray(cartResponse) ? cartResponse : [];
       }
       
-      if (menuRes.ok) {
-        const menuResponse = await menuRes.json();
-        menuData = Array.isArray(menuResponse) ? menuResponse : [];
+      if (summaryRes.ok) {
+        summary = await summaryRes.json();
       }
       
-      if (ticketSummaryRes.ok) {
-        ticketSummary = await ticketSummaryRes.json();
-      }
-      
-      if (menuSummaryRes.ok) {
-        menuSummary = await menuSummaryRes.json();
-      }
-      
-      // Combine both cart types
-      const allCartItems = [];
-      
-      // Process ticket items
-      ticketData.forEach(item => {
-            if (item.ticket) {
-          allCartItems.push({
+      // Process unified cart items
+      const allCartItems = cartData.map(item => {
+        if (item.itemType === 'ticket' && item.ticket) {
+          return {
             id: item.id,
             ticketId: item.ticketId || item.ticket.id,
-                name: item.ticket.name || `Ticket ${item.ticketId || item.ticket.id}`,
-                type: 'ticket',
-                quantity: item.quantity || 1,
-                price: item.ticket.price || 0,
-                dynamicPrice: item.ticket.dynamicPrice,
+            name: item.ticket.name || `Ticket ${item.ticketId || item.ticket.id}`,
+            type: 'ticket',
+            quantity: item.quantity || 1,
+            price: item.ticket.price || 0,
+            dynamicPrice: item.dynamicPrice,
             date: item.date,
             menuItems: item.menuItems || [],
             priceBreakdown: item.priceBreakdown || null
-          });
-        } else {
-          // Handle flat ticket structure
-          allCartItems.push({
-            id: item.id,
-            ticketId: item.ticketId,
-            name: item.name || item.ticketName || `Ticket ${item.id}`,
-            type: 'ticket',
-            quantity: item.quantity || 1,
-            price: item.price || 0,
-            dynamicPrice: item.dynamicPrice,
-                date: item.date,
-                priceBreakdown: item.priceBreakdown || null
-          });
-        }
-      });
-      
-      // Process menu items
-      menuData.forEach(item => {
-        if (item.menuItem) {
-          allCartItems.push({
+          };
+        } else if (item.itemType === 'menu' && item.menuItem) {
+          return {
             id: item.id,
             menuItemId: item.menuItemId || item.menuItem.id,
             name: item.menuItem.name || `Menu Item ${item.menuItemId || item.menuItem.id}`,
             type: 'menu',
             quantity: item.quantity || 1,
             price: item.menuItem.price || 0,
-            dynamicPrice: item.menuItem.dynamicPrice,
+            dynamicPrice: item.dynamicPrice,
             // Add variant information
             variantId: item.variantId,
             variant: item.variant,
             hasVariants: item.menuItem.hasVariants,
             priceBreakdown: item.priceBreakdown || null
-          });
+          };
         } else {
-          // Handle flat menu structure
-          allCartItems.push({
+          // Handle flat structure
+          return {
             id: item.id,
+            ticketId: item.ticketId,
             menuItemId: item.menuItemId,
-            name: item.name || item.menuItemName || `Menu Item ${item.id}`,
-            type: 'menu',
+            name: item.name || `Item ${item.id}`,
+            type: item.itemType || (item.ticketId ? 'ticket' : 'menu'),
             quantity: item.quantity || 1,
             price: item.price || 0,
             dynamicPrice: item.dynamicPrice,
-            // Add variant information if available
+            date: item.date,
             variantId: item.variantId,
             variant: item.variant,
             hasVariants: item.hasVariants,
             priceBreakdown: item.priceBreakdown || null
-          });
+          };
         }
       });
       
       cartItems = allCartItems;
       
-      // Store cart summaries for use in display
+      // Store unified cart summary
       window.cartSummaries = {
-        ticket: ticketSummary,
-        menu: menuSummary
+        unified: summary
       };
       
-      logResult({ ticketItems: ticketData.length, menuItems: menuData.length, totalItems: cartItems.length });
-      showStatus(checkoutStatus, "✅ Cart loaded successfully", "success");
+      logResult({ totalItems: cartItems.length, summary });
+      showStatus(checkoutStatus, "✅ Unified cart loaded successfully", "success");
         
         // Force update the cart display
         updateCartDisplay();
     } catch (err) {
-      logResult({ error: 'Failed to load cart', details: err.message }, true);
+      logResult({ error: 'Failed to load unified cart', details: err.message }, true);
       showStatus(checkoutStatus, `❌ Failed to load cart: ${err.message}`, "error");
       // Clear cart display on error
       cartItems = [];
-      window.cartSummaries = { ticket: null, menu: null };
+      window.cartSummaries = { unified: null };
       updateCartDisplay();
     }
   }
@@ -560,30 +500,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function handleClearCart() {
     try {
-      showStatus(checkoutStatus, "⏳ Clearing cart...", "info");
+      showStatus(checkoutStatus, "⏳ Clearing unified cart...", "info");
       
-      // Clear both ticket and menu carts
-      const ticketRes = await fetch('/cart/clear', {
+      // Clear unified cart
+      const res = await fetch('/unified-cart/clear', {
         method: "DELETE",
         credentials: "include"
       });
       
-      const menuRes = await fetch('/menu/cart/clear', {
-        method: "DELETE",
-        credentials: "include"
-      });
-      
-      // Check if either cart was cleared successfully
-      if (ticketRes.ok || menuRes.ok) {
-        logResult({ message: "Cart cleared successfully" });
+      if (res.ok) {
+        logResult({ message: "Unified cart cleared successfully" });
         showStatus(checkoutStatus, "✅ Cart cleared successfully", "success");
         // Clear cart display and summaries
         cartItems = [];
-        window.cartSummaries = { ticket: null, menu: null };
+        window.cartSummaries = { unified: null };
         updateCartDisplay();
         updateCheckoutStatus();
       } else {
-        logResult({ error: "Failed to clear cart" }, true);
+        logResult({ error: "Failed to clear unified cart" }, true);
         showStatus(checkoutStatus, "❌ Failed to clear cart", "error");
       }
     } catch (err) {
@@ -593,7 +527,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleTicketCheckout() {
-    console.log('🎫 Ticket checkout button clicked!');
+    console.log('🎫 Unified checkout button clicked!');
     
     // If logged in, don't send email in body
     const requestBody = isLoggedIn ? {} : { email: emailInput.value.trim() };
@@ -604,10 +538,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     try {
-      showStatus(checkoutStatus, "⏳ Processing ticket checkout...", "info");
+      showStatus(checkoutStatus, "⏳ Processing unified checkout...", "info");
       
-      // Step 1: Initiate checkout
-      const res = await fetch("/checkout/initiate", {
+      // Step 1: Initiate unified checkout
+      const res = await fetch("/checkout/unified/initiate", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -619,11 +553,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (res.ok) {
         if (data.transactionId) {
           // Paid checkout - proceed with confirmation
-          logResult({ message: 'Ticket checkout initiated', data });
-          showStatus(checkoutStatus, "⏳ Confirming ticket transaction...", "info");
+          logResult({ message: 'Unified checkout initiated', data });
+          showStatus(checkoutStatus, "⏳ Confirming unified transaction...", "info");
           
-          // Step 2: Confirm checkout
-          const confirmRes = await fetch("/checkout/confirm", {
+          // Step 2: Confirm unified checkout
+          const confirmRes = await fetch("/checkout/unified/confirm", {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
@@ -637,19 +571,19 @@ document.addEventListener("DOMContentLoaded", () => {
           
           if (confirmRes.ok) {
             logResult(confirmData);
-            showStatus(checkoutStatus, "✅ Ticket checkout completed successfully", "success");
+            showStatus(checkoutStatus, "✅ Unified checkout completed successfully", "success");
           } else {
             logResult(confirmData, true);
-            showStatus(checkoutStatus, `❌ Ticket checkout confirmation failed: ${confirmData.error || 'Unknown error'}`, "error");
+            showStatus(checkoutStatus, `❌ Unified checkout confirmation failed: ${confirmData.error || 'Unknown error'}`, "error");
           }
         } else {
           // Free checkout - already completed
           logResult(data);
-          showStatus(checkoutStatus, "✅ Free ticket checkout completed successfully", "success");
+          showStatus(checkoutStatus, "✅ Free unified checkout completed successfully", "success");
         }
       } else {
         logResult(data, true);
-        showStatus(checkoutStatus, `❌ Ticket checkout failed: ${data.error || 'Unknown error'}`, "error");
+        showStatus(checkoutStatus, `❌ Unified checkout failed: ${data.error || 'Unknown error'}`, "error");
       }
     } catch (err) {
       logResult({ error: err.message }, true);
@@ -658,68 +592,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleMenuCheckout() {
-    console.log('🍽️ Menu checkout button clicked!');
-    
-    // If logged in, don't send email in body
-    const requestBody = isLoggedIn ? {} : { email: emailInput.value.trim() };
-    
-    if (!isLoggedIn && !requestBody.email) {
-      showStatus(checkoutStatus, "❌ Email is required for checkout", "error");
-      return;
-    }
-
-    try {
-      showStatus(checkoutStatus, "⏳ Processing menu checkout...", "info");
-      
-      // Step 1: Initiate checkout
-      const res = await fetch("/menu/checkout/initiate", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        if (data.transactionId) {
-          // Paid checkout - proceed with confirmation
-          logResult({ message: 'Menu checkout initiated', data });
-          showStatus(checkoutStatus, "⏳ Confirming menu transaction...", "info");
-          
-          // Step 2: Confirm checkout
-          const confirmRes = await fetch("/menu/checkout/confirm", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ...requestBody,
-              transactionId: data.transactionId
-            }),
-          });
-          
-          const confirmData = await confirmRes.json();
-          
-          if (confirmRes.ok) {
-            logResult(confirmData);
-            showStatus(checkoutStatus, "✅ Menu checkout completed successfully", "success");
-          } else {
-            logResult(confirmData, true);
-            showStatus(checkoutStatus, `❌ Menu checkout confirmation failed: ${confirmData.error || 'Unknown error'}`, "error");
-          }
-        } else {
-          // Free checkout - already completed
-          logResult(data);
-          showStatus(checkoutStatus, "✅ Free menu checkout completed successfully", "success");
-        }
-      } else {
-        logResult(data, true);
-        showStatus(checkoutStatus, `❌ Menu checkout failed: ${data.error || 'Unknown error'}`, "error");
-      }
-    } catch (err) {
-      logResult({ error: err.message }, true);
-      showStatus(checkoutStatus, "❌ Network error occurred", "error");
-    }
+    // Menu checkout is now handled by unified checkout
+    console.log('🍽️ Menu checkout redirected to unified checkout!');
+    handleTicketCheckout();
   }
 
   // Toggle visible input fields based on cart type
@@ -856,22 +731,11 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       showStatus(checkoutStatus, "⏳ Updating quantity...", "info");
       
-      let url, payload;
-      if (itemType === "ticket") {
-        // Ticket cart: id goes in request body
-        url = "/cart/update";
-        payload = {
-          id: itemId,
-          quantity: newQuantity
-        };
-      } else {
-        // Menu cart: id goes in request body (same as ticket cart)
-        url = `/menu/cart/update`;
-        payload = {
-          id: itemId,
-          quantity: newQuantity
-        };
-      }
+      // Use unified cart update endpoint
+      const url = "/unified-cart/line/" + itemId;
+      const payload = {
+        quantity: newQuantity
+      };
       
       console.log('Making request to:', url, 'with payload:', payload);
       
@@ -918,12 +782,8 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       showStatus(checkoutStatus, "⏳ Removing item...", "info");
       
-      let url;
-      if (itemType === "ticket") {
-        url = `/cart/item/${itemId}`;
-      } else {
-        url = `/menu/cart/item/${itemId}`;
-      }
+      // Use unified cart delete endpoint
+      const url = `/unified-cart/line/${itemId}`;
       
       console.log('Making DELETE request to:', url);
       
@@ -1221,8 +1081,9 @@ document.addEventListener("DOMContentLoaded", () => {
         selectedClub.openDays.includes(getDayName(date));
       
       // Priority: Events > Free Tickets > Open Days
+      // Events are shown regardless of club open days
       if (hasEvents) {
-        dayClasses += ' event-day'; // Red - Events take priority
+        dayClasses += ' event-day'; // Red - Events take priority (shown even on closed days)
       } else if (hasFreeTickets) {
         dayClasses += ' free-ticket'; // Yellow - Free tickets when no events
       } else if (isOpenDay) {
@@ -1359,17 +1220,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Normalize the date to avoid timezone issues
     const selectedDateStr = date; // Keep as YYYY-MM-DD string
     
-    // Check if the selected date is an open day for the club
-    const selectedDateObj = new Date(date + 'T00:00:00');
-    const dayName = getDayName(selectedDateObj);
-    const isClubOpen = selectedClub && Array.isArray(selectedClub.openDays) && 
-      selectedClub.openDays.includes(dayName);
-    
-    if (!isClubOpen) {
-      console.log(`🚫 Club is not open on ${dayName} (${date})`);
-      return []; // Return empty array if club is not open on this day
-    }
-    
     // Check if there are events on this date
     const hasEventsOnDate = Array.isArray(allEvents) && allEvents.some(event => {
       const eventDate = event.date || event.availableDate;
@@ -1386,6 +1236,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     
     console.log(`📅 Date ${date} has events: ${hasEventsOnDate}`);
+    
+    // Check if the selected date is an open day for the club
+    const selectedDateObj = new Date(date + 'T00:00:00');
+    const dayName = getDayName(selectedDateObj);
+    const isClubOpen = selectedClub && Array.isArray(selectedClub.openDays) && 
+      selectedClub.openDays.includes(dayName);
+    
+    console.log(`📅 Club is open on ${dayName} (${date}): ${isClubOpen}`);
     
     return tickets.filter(ticket => {
       // If ticket has a specific available date, check if it matches
@@ -1405,8 +1263,12 @@ document.addEventListener("DOMContentLoaded", () => {
         return ticket.category === 'event';
       }
       
-      // If no events on this date, show general/free tickets
-      return ticket.category !== 'event';
+      // If no events on this date, show general/free tickets ONLY if club is open
+      if (ticket.category !== 'event') {
+        return isClubOpen;
+      }
+      
+      return false;
     });
   }
 
@@ -1416,16 +1278,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // Normalize the date to avoid timezone issues
     const selectedDateStr = date; // Keep as YYYY-MM-DD string
     
-    // Check if the selected date is an open day for the club
-    const selectedDateObj = new Date(date + 'T00:00:00');
-    const dayName = getDayName(selectedDateObj);
-    const isClubOpen = selectedClub && Array.isArray(selectedClub.openDays) && 
-      selectedClub.openDays.includes(dayName);
-    
-    if (!isClubOpen) {
-      console.log(`🚫 Club is not open on ${dayName} (${date}) - no events shown`);
-      return []; // Return empty array if club is not open on this day
-    }
+    // Events are shown regardless of club open days
+    console.log(`📅 Showing events for ${date} regardless of club open days`);
     
     return events.filter(event => {
       if (event.date || event.availableDate) {
@@ -1905,13 +1759,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Add ticket to cart
   async function addTicketToCart(ticketId, ticketName, basePrice, dynamicPrice, eventDate = null) {
     try {
-      // First, test if the cart endpoint is accessible
-      console.log('🧪 Testing cart endpoint accessibility...');
-      const testRes = await fetch('/cart', { 
+      // First, test if the unified cart endpoint is accessible
+      console.log('🧪 Testing unified cart endpoint accessibility...');
+      const testRes = await fetch('/unified-cart', { 
         method: 'GET',
         credentials: 'include'
       });
-      console.log('🧪 Cart endpoint test result:', {
+      console.log('🧪 Unified cart endpoint test result:', {
         status: testRes.status,
         statusText: testRes.statusText,
         ok: testRes.ok
@@ -1929,16 +1783,17 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       const payload = {
+        itemType: 'ticket',
         ticketId: ticketId,
         quantity: 1,
         date: dateStr
       };
 
-      console.log('🎫 Adding ticket to cart:', payload);
-      console.log('🔗 Making request to:', '/cart/add');
+      console.log('🎫 Adding ticket to unified cart:', payload);
+      console.log('🔗 Making request to:', '/unified-cart/add');
       console.log('📤 Request payload:', JSON.stringify(payload, null, 2));
 
-      const res = await fetch('/cart/add', {
+      const res = await fetch('/unified-cart/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1954,7 +1809,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (res.ok) {
         const data = await res.json();
-        logResult({ message: 'Ticket added to cart', ticketName, data });
+        logResult({ message: 'Ticket added to unified cart', ticketName, data });
         showStatus(checkoutStatus, `✅ Added "${ticketName}" to cart`, "success");
         
         // Refresh cart display
@@ -1978,7 +1833,7 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(errorMessage);
       }
     } catch (err) {
-      logResult({ error: 'Failed to add ticket to cart', details: err.message }, true);
+      logResult({ error: 'Failed to add ticket to unified cart', details: err.message }, true);
       showStatus(checkoutStatus, `❌ Failed to add ticket: ${err.message}`, "error");
     }
   }
@@ -1987,6 +1842,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function addMenuItemToCart(menuItemId, variantId, itemName, basePrice, dynamicPrice) {
     try {
       const payload = {
+        itemType: 'menu',
         menuItemId: menuItemId,
         quantity: 1
       };
@@ -1995,7 +1851,7 @@ document.addEventListener("DOMContentLoaded", () => {
         payload.variantId = variantId;
       }
 
-      const res = await fetch('/menu/cart/add', {
+      const res = await fetch('/unified-cart/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -2004,17 +1860,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (res.ok) {
         const data = await res.json();
-        logResult({ message: 'Menu item added to cart', itemName, data });
+        logResult({ message: 'Menu item added to unified cart', itemName, data });
         showStatus(checkoutStatus, `✅ Added "${itemName}" to cart`, "success");
         
         // Refresh cart display
         await handleViewCart();
       } else {
         const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to add menu item to cart');
+        throw new Error(errorData.error || 'Failed to add menu item to unified cart');
       }
     } catch (err) {
-      logResult({ error: 'Failed to add menu item to cart', details: err.message }, true);
+      logResult({ error: 'Failed to add menu item to unified cart', details: err.message }, true);
       showStatus(checkoutStatus, `❌ Failed to add menu item: ${err.message}`, "error");
     }
   }

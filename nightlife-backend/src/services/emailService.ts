@@ -122,7 +122,11 @@ const transporter = nodemailer.createTransport({
 });
 
 // Log once so you can see which creds are live at runtime
-void transporter.verify()
+void transporter.verify().then(() => {
+  console.log('[EMAIL] SMTP connection verified successfully');
+}).catch((error) => {
+  console.error('[EMAIL] SMTP connection failed:', error);
+});
 
 /* =========================================================
    Helpers: inline logo + recipient resolver
@@ -164,32 +168,54 @@ function resolveTo(to: string): { to: string; headers?: Record<string, string> }
 
 // 1) Ticket: one email per ticket (one QR each)
 export async function sendTicketEmail(payload: TicketEmailPayload) {
+  console.log(`[EMAIL] Sending ticket email to: ${payload.to}`);
+  console.log(`[EMAIL] Ticket: ${payload.ticketName}, Club: ${payload.clubName}`);
+  
   const html = generateTicketEmailHTML({ ...payload, email: payload.to });
 
   const { to, headers } = resolveTo(payload.to);
-  await transporter.sendMail({
-    from: buildFrom("NightLife Tickets"),
-    to,
-    subject: `🎟️ Tu entrada: ${payload.ticketName}`,
-    html,
-    attachments: [getInlineLogoAttachment()],
-    headers,
-  });
+  console.log(`[EMAIL] Resolved recipient: ${to}`);
+  
+  try {
+    await transporter.sendMail({
+      from: buildFrom("NightLife Tickets"),
+      to,
+      subject: `🎟️ Tu entrada: ${payload.ticketName}`,
+      html,
+      attachments: [getInlineLogoAttachment()],
+      headers,
+    });
+    console.log(`[EMAIL] ✅ Ticket email sent successfully to: ${to}`);
+  } catch (error) {
+    console.error(`[EMAIL] ❌ Failed to send ticket email to ${to}:`, error);
+    throw error;
+  }
 }
 
 // 2) Menu: one email per transaction (one QR)
 export async function sendMenuEmail(payload: MenuEmailPayload) {
+  console.log(`[EMAIL] Sending menu email to: ${payload.to}`);
+  console.log(`[EMAIL] Club: ${payload.clubName}, Items: ${payload.items.length}`);
+  
   const html = generateMenuEmailHTML(payload);
 
   const { to, headers } = resolveTo(payload.to);
-  await transporter.sendMail({
-    from: buildFrom("NightLife Menú"),
-    to,
-    subject: `🍹 Tu QR de menú - ${payload.clubName}`,
-    html,
-    attachments: [getInlineLogoAttachment()],
-    headers,
-  });
+  console.log(`[EMAIL] Resolved recipient: ${to}`);
+  
+  try {
+    await transporter.sendMail({
+      from: buildFrom("NightLife Menú"),
+      to,
+      subject: `🍹 Tu QR de menú - ${payload.clubName}`,
+      html,
+      attachments: [getInlineLogoAttachment()],
+      headers,
+    });
+    console.log(`[EMAIL] ✅ Menu email sent successfully to: ${to}`);
+  } catch (error) {
+    console.error(`[EMAIL] ❌ Failed to send menu email to ${to}:`, error);
+    throw error;
+  }
 }
 
 // 3) Unified ticket with menu (one email with both QR codes)
@@ -258,15 +284,26 @@ export async function sendTransactionInvoiceEmail(payload: {
     creditCard?: string;
   };
 }) {
+  console.log(`[EMAIL] Sending transaction invoice to: ${payload.to}`);
+  console.log(`[EMAIL] Transaction: ${payload.transactionId}, Club: ${payload.clubName}, Total: ${payload.total}`);
+  
   const html = generateTransactionInvoiceHTML(payload);
 
   const { to, headers } = resolveTo(payload.to);
-  await transporter.sendMail({
-    from: buildFrom("NightLife Facturación"),
-    to,
-    subject: `🧾 Factura de Compra - ${payload.clubName}`,
-    html,
-    attachments: [getInlineLogoAttachment()],
-    headers,
-  });
+  console.log(`[EMAIL] Resolved recipient: ${to}`);
+  
+  try {
+    await transporter.sendMail({
+      from: buildFrom("NightLife Facturación"),
+      to,
+      subject: `🧾 Factura de Compra - ${payload.clubName}`,
+      html,
+      attachments: [getInlineLogoAttachment()],
+      headers,
+    });
+    console.log(`[EMAIL] ✅ Transaction invoice sent successfully to: ${to}`);
+  } catch (error) {
+    console.error(`[EMAIL] ❌ Failed to send transaction invoice to ${to}:`, error);
+    throw error;
+  }
 }

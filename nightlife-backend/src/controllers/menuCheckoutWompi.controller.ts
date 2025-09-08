@@ -496,7 +496,6 @@ export async function processWompiSuccessfulMenuCheckout({
         sessionId: null, // Clear session since this is now completed
         clubId: existingTransaction.clubId,
         email: existingTransaction.email,
-        date: new Date(), // Menu purchases use current date
         quantity: cartItem.quantity,
         originalBasePrice: basePrice,
         priceAtCheckout: dynamicPrice,

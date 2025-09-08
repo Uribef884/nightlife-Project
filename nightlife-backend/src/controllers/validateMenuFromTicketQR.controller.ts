@@ -3,7 +3,7 @@ import { AppDataSource } from "../config/data-source";
 import { TicketPurchase } from "../entities/TicketPurchase";
 import { MenuItemFromTicket } from "../entities/MenuItemFromTicket";
 import { AuthenticatedRequest } from "../types/express";
-import { validateMenuFromTicketPurchase } from "../utils/validateQRUtils";
+import { previewMenuFromTicketPurchase, validateMenuFromTicketPurchase } from "../utils/validateQRUtils";
 
 export async function previewMenuFromTicketQR(
   req: AuthenticatedRequest,
@@ -18,7 +18,7 @@ export async function previewMenuFromTicketQR(
     }
 
     const user = req.user!;
-    const validation = await validateMenuFromTicketPurchase(qrCode, user, true); // isPreview = true
+    const validation = await previewMenuFromTicketPurchase(qrCode, user);
 
     if (!validation.isValid) {
       res.status(400).json({ error: validation.error });

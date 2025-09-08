@@ -5,7 +5,7 @@ import { AuthenticatedRequest } from "../types/express";
 import { computeDynamicPrice, computeDynamicEventPrice, getNormalTicketDynamicPricingReason, getEventTicketDynamicPricingReason } from "../utils/dynamicPricing";
 import { Ticket, TicketCategory } from "../entities/Ticket";
 import { MenuCartItem } from "../entities/MenuCartItem";
-import { toZonedTime, format } from "date-fns-tz";
+
 import { TicketIncludedMenuItem } from "../entities/TicketIncludedMenuItem";
 import { calculatePlatformFee, calculateGatewayFees } from "../utils/ticketfeeUtils";
 import { getTicketCommissionRate } from "../config/fees";
@@ -43,9 +43,9 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
       return;
     }
 
-    const timeZone = "America/Bogota";
-    const today = toZonedTime(new Date(), timeZone);
-    const todayStr = format(today, "yyyy-MM-dd", { timeZone });
+    // Use UTC date for consistent validation regardless of server location
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
 
     if (date < todayStr) {
       res.status(400).json({ error: "Cannot select a past date" });

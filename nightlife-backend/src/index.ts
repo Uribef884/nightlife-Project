@@ -38,6 +38,9 @@ import menuCheckoutWompiRoutes from "./routes/menuCheckoutWompi.routes";
 import webhookRoutes from './routes/webhook.routes';
 import pseRoutes from './routes/pse.routes';
 
+// Unified Cart and Checkout Routes
+import unifiedCheckoutRoutes from "./routes/unifiedCheckout.routes";
+import unifiedCartRoutes from "./routes/unifiedCart.routes";
 dotenv.config();
 
 const app = express();
@@ -133,6 +136,10 @@ app.use("/wompi/menu/initiate", menuInitiateWompiRoutes);
 app.use("/wompi/menu/checkout", menuCheckoutWompiRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/pse', pseRoutes);
+
+// Unified Cart and Checkout Routes
+app.use("/unified-cart", unifiedCartRoutes);
+app.use("/checkout/unified", unifiedCheckoutRoutes);
 
 // Admin Routes
 app.use("/admin", adminRoutes);

@@ -1,0 +1,15 @@
+import { Router } from "express";
+import { unifiedCheckoutController } from "../controllers/unifiedCheckout.controller";
+
+const router = Router();
+
+// Initiate unified checkout
+router.post("/initiate", unifiedCheckoutController.initiateCheckout.bind(unifiedCheckoutController));
+
+// Confirm unified checkout
+router.post("/confirm", unifiedCheckoutController.confirmCheckout.bind(unifiedCheckoutController));
+
+// Get transaction status
+router.get("/status/:transactionId", unifiedCheckoutController.getTransactionStatus.bind(unifiedCheckoutController));
+
+export default router;

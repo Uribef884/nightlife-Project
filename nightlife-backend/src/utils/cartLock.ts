@@ -1,13 +1,14 @@
 import { AppDataSource } from "../config/data-source";
 import { CartItem } from "../entities/TicketCartItem";
 import { MenuCartItem } from "../entities/MenuCartItem";
+import { UnifiedCartItem } from "../entities/UnifiedCartItem";
 
 // In-memory store for cart locks (in production, use Redis)
 const cartLocks = new Map<string, {
   lockedAt: number;
   transactionId: string;
   expiresAt: number;
-  cartType: 'ticket' | 'menu';
+  cartType: 'ticket' | 'menu' | 'unified';
 }>();
 
 const LOCK_TIMEOUT = 10 * 60 * 1000; // 10 minutes
@@ -15,7 +16,7 @@ const LOCK_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 /**
  * Locks a cart to prevent modifications during payment processing
  */
-export const lockCart = (userId: string | null, sessionId: string | null | undefined, transactionId: string, cartType: 'ticket' | 'menu'): boolean => {
+export const lockCart = (userId: string | null, sessionId: string | null | undefined, transactionId: string, cartType: 'ticket' | 'menu' | 'unified'): boolean => {
   const lockKey = getLockKey(userId, sessionId);
   
   // Check if cart is already locked
@@ -115,7 +116,7 @@ export const isCartLocked = (userId: string | null, sessionId: string | null | u
 export const isCartLockedSmart = async (
   userId: string | null, 
   sessionId: string | null | undefined, 
-  cartType: 'ticket' | 'menu'
+  cartType: 'ticket' | 'menu' | 'unified'
 ): Promise<boolean> => {
   // First check if cart is locked normally
   if (!isCartLocked(userId, sessionId)) {
@@ -182,12 +183,14 @@ const getLockKey = (userId: string | null, sessionId: string | null | undefined)
 export const autoUnlockEmptyCart = async (
   userId: string | null, 
   sessionId: string | null | undefined, 
-  cartType: 'ticket' | 'menu'
+  cartType: 'ticket' | 'menu' | 'unified'
 ): Promise<boolean> => {
   try {
     const cartRepo = cartType === 'ticket' 
       ? AppDataSource.getRepository(CartItem)
-      : AppDataSource.getRepository(MenuCartItem);
+      : cartType === 'menu'
+      ? AppDataSource.getRepository(MenuCartItem)
+      : AppDataSource.getRepository(UnifiedCartItem);
     
     const whereClause = userId ? { userId } : sessionId ? { sessionId } : null;
     if (!whereClause) return false;
@@ -217,7 +220,7 @@ export const lockAndValidateCart = async (
   userId: string | null, 
   sessionId: string | null | undefined, 
   transactionId: string, 
-  cartType: 'ticket' | 'menu'
+  cartType: 'ticket' | 'menu' | 'unified'
 ): Promise<{ success: boolean; error?: string; cartItems?: any[] }> => {
   // First, check if cart is empty and auto-unlock if needed
   const wasUnlocked = await autoUnlockEmptyCart(userId, sessionId, cartType);
@@ -237,7 +240,9 @@ export const lockAndValidateCart = async (
     // Validate cart contents haven't changed since lock
     const cartRepo = cartType === 'ticket' 
       ? AppDataSource.getRepository(CartItem)
-      : AppDataSource.getRepository(MenuCartItem);
+      : cartType === 'menu'
+      ? AppDataSource.getRepository(MenuCartItem)
+      : AppDataSource.getRepository(UnifiedCartItem);
     
     const where = userId !== null ? { userId } : sessionId !== null && sessionId !== undefined ? { sessionId } : undefined;
     if (!where) {
@@ -249,7 +254,9 @@ export const lockAndValidateCart = async (
       where,
       relations: cartType === 'ticket' 
         ? ["ticket", "ticket.club", "ticket.event"]
-        : ["menuItem", "variant", "menuItem.club"]
+        : cartType === 'menu'
+        ? ["menuItem", "variant", "menuItem.club"]
+        : ["ticket", "ticket.club", "ticket.event", "menuItem", "variant", "menuItem.club"]
     });
     
     if (!cartItems.length) {

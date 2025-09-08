@@ -1,7 +1,7 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../types/express";
 import { decryptQR } from "../utils/decryptQR";
-import { validateMenuTransaction, validateMenuFromTicketPurchase } from "../utils/validateQRUtils";
+import { previewMenuTransaction, previewMenuFromTicketPurchase, validateMenuTransaction, validateMenuFromTicketPurchase } from "../utils/validateQRUtils";
 import { AppDataSource } from "../config/data-source";
 import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
 import { TicketPurchase } from "../entities/TicketPurchase";
@@ -26,8 +26,8 @@ export async function previewUnifiedMenuQR(
     }
     const user = req.user!;
     if (payload.type === "menu") {
-      // Standalone menu QR
-      const validation = await validateMenuTransaction(qrCode, user);
+      // Standalone menu QR - use preview function (no restrictions)
+      const validation = await previewMenuTransaction(qrCode, user);
       if (!validation.isValid) {
         res.status(400).json({ error: validation.error });
         return;
@@ -49,8 +49,8 @@ export async function previewUnifiedMenuQR(
       };
       res.json(response);
     } else if (payload.type === "menu_from_ticket") {
-      // Menu QR from ticket
-      const validation = await validateMenuFromTicketPurchase(qrCode, user, true); // isPreview = true
+      // Menu QR from ticket - use preview function (no restrictions)
+      const validation = await previewMenuFromTicketPurchase(qrCode, user);
       if (!validation.isValid) {
         res.status(400).json({ error: validation.error });
         return;

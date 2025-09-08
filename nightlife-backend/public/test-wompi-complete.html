@@ -162,6 +162,9 @@
             <label>
                 <input type="radio" name="purchaseType" value="menu"> Menu Purchase
             </label>
+            <label>
+                <input type="radio" name="purchaseType" value="unified"> 🚀 Unified Cart (NEW!)
+            </label>
         </div>
         <div class="form-group">
             <label for="customerEmail">Customer Email:</label>
@@ -395,7 +398,13 @@
         
         async function testCardPayment() {
             const purchaseType = getPurchaseType();
-            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            let endpoint;
+            
+            if (purchaseType === 'unified') {
+                endpoint = '/checkout/unified/initiate';
+            } else {
+                endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            }
             
             const payload = {
                 email: getCustomerEmail(),
@@ -416,7 +425,13 @@
         
         async function testNequiPayment() {
             const purchaseType = getPurchaseType();
-            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            let endpoint;
+            
+            if (purchaseType === 'unified') {
+                endpoint = '/checkout/unified/initiate';
+            } else {
+                endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            }
             
             const payload = {
                 email: getCustomerEmail(),
@@ -432,7 +447,13 @@
         
         async function testPSEPayment() {
             const purchaseType = getPurchaseType();
-            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            let endpoint;
+            
+            if (purchaseType === 'unified') {
+                endpoint = '/checkout/unified/initiate';
+            } else {
+                endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            }
             
             const payload = {
                 email: getCustomerEmail(),
@@ -456,7 +477,13 @@
         
         async function testBancolombiaPayment() {
             const purchaseType = getPurchaseType();
-            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            let endpoint;
+            
+            if (purchaseType === 'unified') {
+                endpoint = '/checkout/unified/initiate';
+            } else {
+                endpoint = purchaseType === 'ticket' ? '/wompi/tickets/initiate' : '/wompi/menu/initiate';
+            }
             
             const payload = {
                 email: getCustomerEmail(),
@@ -557,8 +584,13 @@
             }
             
             const purchaseType = getPurchaseType();
-            // Use the status check endpoint instead of checkout
-            const endpoint = purchaseType === 'ticket' ? '/wompi/tickets/status' : '/wompi/menu/status';
+            let endpoint;
+            
+            if (purchaseType === 'unified') {
+                endpoint = '/checkout/unified/status';
+            } else {
+                endpoint = purchaseType === 'ticket' ? '/wompi/tickets/status' : '/wompi/menu/status';
+            }
             
             const responseDiv = document.getElementById('status-response');
             responseDiv.classList.remove('hidden');
@@ -571,8 +603,14 @@
                 if (response.ok) {
                     const data = await response.json();
                     responseDiv.className = 'response success';
+                    
+                    let statusIcon = '📊';
+                    if (data.status === 'APPROVED') statusIcon = '✅';
+                    else if (data.status === 'DECLINED') statusIcon = '❌';
+                    else if (data.status === 'PENDING') statusIcon = '⏳';
+                    
                     responseDiv.innerHTML = `
-                        <h4>📊 Transaction Details</h4>
+                        <h4>${statusIcon} Transaction Details</h4>
                         <p><strong>Transaction ID:</strong> ${data.transactionId}</p>
                         <p><strong>Status:</strong> ${data.status}</p>
                         <p><strong>Amount:</strong> $${data.amount}</p>
@@ -580,6 +618,8 @@
                         <p><strong>Customer Email:</strong> ${data.customerEmail}</p>
                         <p><strong>Created:</strong> ${data.createdAt}</p>
                         ${data.finalizedAt ? `<p><strong>Finalized:</strong> ${data.finalizedAt}</p>` : ''}
+                        ${data.isFreeCheckout ? `<p><strong>🎁 Free Checkout:</strong> Yes</p>` : ''}
+                        ${data.lineItemsCount ? `<p><strong>Line Items:</strong> ${data.lineItemsCount}</p>` : ''}
                         <pre>${JSON.stringify(data, null, 2)}</pre>
                     `;
                 } else {

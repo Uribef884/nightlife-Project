@@ -2,7 +2,7 @@ import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
 import { AuthenticatedRequest } from "../types/express";
-import { validateMenuTransaction } from "../utils/validateQRUtils";
+import { previewMenuTransaction, validateMenuTransaction } from "../utils/validateQRUtils";
 
 export async function previewMenuQR(
   req: AuthenticatedRequest,
@@ -17,7 +17,7 @@ export async function previewMenuQR(
     }
 
     const user = req.user!;
-    const validation = await validateMenuTransaction(qrCode, user);
+    const validation = await previewMenuTransaction(qrCode, user);
 
     if (!validation.isValid) {
       res.status(400).json({ error: validation.error });
