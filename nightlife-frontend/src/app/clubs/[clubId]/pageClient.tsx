@@ -8,12 +8,13 @@ import { ClubHeader } from "@/components/domain/club/ClubHeader";
 import { ClubAdsCarousel } from "@/components/domain/club/ClubAdsCarousel";
 import { ClubSocials } from "@/components/domain/club/ClubSocials";
 import MapGoogle from "@/components/domain/club/MapGoogle.client";
-import { ClubCalendar } from "@/components/domain/club/ClubCalendar";
+// NOTE: we no longer import ClubCalendar directly here; GlobalCalendarPortal owns it.
+// import { ClubCalendar } from "@/components/domain/club/ClubCalendar";
 import { ClubEvents } from "@/components/domain/club/ClubEvents";
 import TicketsGrid from "@/components/domain/club/TicketsGrid";
 import { PdfMenu } from "@/components/domain/club/PdfMenu";
 import { StructuredMenu } from "@/components/domain/club/menu/StructuredMenu";
-import { formatDayLong } from "@/lib/formatters";
+import GlobalCalendarPortal from "@/components/domain/club/GlobalCalendarPortal";
 
 import {
   getClubAdsCSR,
@@ -34,8 +35,6 @@ import { joinUrl, API_BASE_CSR } from "@/lib/env";
 
 type Props = { clubId: string; clubSSR: ClubDTO };
 type TabKey = "general" | "reservas" | "carta";
-
-
 
 /** Normalize event date fields into YYYY-MM-DD */
 function pickEventDate(e: any): string | null {
@@ -106,7 +105,6 @@ function normalizeMenuMeta(
   // If still unknown, assume none
   if (!type) {
     type = "none";
-    if (typeSource === "none") typeSource = "none";
   }
 
   const pdf = typeof rawPdf === "string" && rawPdf.trim().length > 0 ? rawPdf : null;
@@ -189,91 +187,67 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
   // Merged/normalized menu meta (CSR→SSR fallback)
   const menuMeta = useMemo(() => normalizeMenuMeta(club, clubSSR), [club, clubSSR]);
+  const isStructuredMenu = menuMeta.type === "structured";
+
+  // Active calendar host id for the portal
+  const calendarHostId =
+    tab === "reservas"
+      ? "calendar-host-reservas"
+      : tab === "carta" && isStructuredMenu
+      ? "calendar-host-carta"
+      : null;
 
   // Helper function to scroll to tickets section
   const scrollToTickets = () => {
-    // Try multiple times with increasing delays to ensure DOM is ready
     const attemptScroll = (attempt: number = 1) => {
       const maxAttempts = 5;
-      const delay = attempt * 100; // 100ms, 200ms, 300ms, 400ms, 500ms
-      
+      const delay = attempt * 100;
       setTimeout(() => {
-        // Try to find the tickets section first (most specific target)
-        const ticketsSection = document.getElementById('tickets-section');
+        const ticketsSection = document.getElementById("tickets-section");
         if (ticketsSection) {
           try {
-            ticketsSection.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'start' 
-            });
-          } catch (e) {
-            // Fallback: scroll to the element's position
+            ticketsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch {
             const rect = ticketsSection.getBoundingClientRect();
-            window.scrollTo({
-              top: window.pageYOffset + rect.top - 100, // 100px offset from top
-              behavior: 'smooth'
-            });
+            window.scrollTo({ top: window.pageYOffset + rect.top - 100, behavior: "smooth" });
           }
           return;
         }
-        
-        // If no tickets section, try to find events section
-        const eventsSection = document.getElementById('events-section');
+        const eventsSection = document.getElementById("events-section");
         if (eventsSection) {
           try {
-            eventsSection.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'start' 
-            });
-          } catch (e) {
+            eventsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch {
             const rect = eventsSection.getBoundingClientRect();
-            window.scrollTo({
-              top: window.pageYOffset + rect.top - 100,
-              behavior: 'smooth'
-            });
+            window.scrollTo({ top: window.pageYOffset + rect.top - 100, behavior: "smooth" });
           }
           return;
         }
-        
-        // Fallback to the entire reservas tab
         const reservasTab = document.querySelector('[data-tab="reservas"]');
         if (reservasTab) {
           try {
-            reservasTab.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'start' 
-            });
-          } catch (e) {
-            const rect = reservasTab.getBoundingClientRect();
-            window.scrollTo({
-              top: window.pageYOffset + rect.top - 100,
-              behavior: 'smooth'
-            });
+            (reservasTab as HTMLElement).scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch {
+            const rect = (reservasTab as HTMLElement).getBoundingClientRect();
+            window.scrollTo({ top: window.pageYOffset + rect.top - 100, behavior: "smooth" });
           }
           return;
         }
-        
-        // If still not found and we haven't exceeded max attempts, try again
-        if (attempt < maxAttempts) {
-          attemptScroll(attempt + 1);
-        }
+        if (attempt < maxAttempts) attemptScroll(attempt + 1);
       }, delay);
     };
-    
     attemptScroll();
   };
 
-  /* NEW: publish the effective menu type for global consumers (e.g., ClubTabs)
-     We show Carta ONLY when data-club-menu="structured" or "pdf". */
+  /* Publish effective menu type for global consumers (e.g., tabs CSS visibility) */
   useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
     const nextType = menuMeta?.type ?? "unknown";
-    
+
     if (root.getAttribute("data-club-menu") !== nextType) {
       root.setAttribute("data-club-menu", nextType);
     }
-    // optional: expose id for debugging/future
     if (root.getAttribute("data-club-id") !== String(clubId)) {
       root.setAttribute("data-club-id", String(clubId));
     }
@@ -283,71 +257,64 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     };
   }, [menuMeta?.type, clubId]);
 
-
-
-  /** Parse current URL and sync tab + date (NO hard redirect away from Carta). */
+  /** Parse current URL and sync tab + date (non-destructive for date). */
   const syncFromLocation = () => {
     const url = new URL(window.location.href);
     const sp = url.searchParams;
 
-    const rawHash = url.hash;
+    // Tab from hash or ?tab
     const hash = (url.hash || "").replace("#", "").toLowerCase();
-    
     let t: TabKey =
       hash === "reservas" || hash === "carta" || hash === "general"
         ? (hash as TabKey)
         : "general";
-
-    let fromQuery: string | null = null;
     if (t === "general") {
       const qtab = (sp.get("tab") || "").toLowerCase();
-      fromQuery = qtab || null;
       if (qtab === "reservas" || qtab === "reservations") t = "reservas";
       else if (qtab === "carta" || qtab === "menu") t = "carta";
     }
 
-    // NOTE: We intentionally DO NOT redirect away from "carta" anymore.
-    // If the club truly has no menu, the Carta view will show a friendly empty state.
-
-    // Canonicalize: remove ?tab=, keep hash
+    // Canonicalize ?tab away
     if (sp.has("tab")) {
       sp.delete("tab");
       const clean = `${url.pathname}${sp.toString() ? `?${sp}` : ""}${t ? `#${t}` : ""}`;
       history.replaceState({}, "", clean);
     }
 
-    const qdate = sp.get("date");
-    const date = qdate && /^\d{4}-\d{2}-\d{2}$/.test(qdate) ? qdate : todayLocal();
-
-    const prevTab = tab;
-    
     setTab((prev) => (prev !== t ? t : prev));
+
+    // Date from ?date (only when present); otherwise keep user's date (init once if null)
+    const qdate = sp.get("date");
+    const urlDate = qdate && /^\d{4}-\d{2}-\d{2}$/.test(qdate) ? qdate : null;
+
     setSelectedDate((prev) => {
-      if (prev !== date) {
+      if (urlDate && prev !== urlDate) {
+        // Reset caches only when date actually changes to avoid noise
         setAvailable(null);
         setAvailError(null);
         setDateCache({});
-        return date;
+        return urlDate;
+      }
+      if (prev == null) {
+        const today = todayLocal();
+        setAvailable(null);
+        setAvailError(null);
+        setDateCache({});
+        return today;
       }
       return prev;
     });
-
-
   };
 
   useEffect(() => {
     syncFromLocation();
     const off = installLocationObserver(syncFromLocation);
     return () => off();
-  }, [clubId, clubSSR]); // IMPORTANT: removed menuMeta dependency to avoid racey re-runs
-
-
+  }, [clubId, clubSSR]); // intentionally not depending on menuMeta to avoid loops
 
   // Test scroll function on mount when coming from ad
   useEffect(() => {
-    // Check if we're coming from an ad (has #reservas hash)
     if (typeof window !== "undefined" && window.location.hash === "#reservas") {
-      // Wait a bit for the DOM to be ready, then test scroll
       setTimeout(() => {
         scrollToTickets();
       }, 500);
@@ -358,22 +325,13 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   useEffect(() => {
     getClubByIdCSR(clubId)
       .then((c) => {
-        if (c) {
-          setClub((prev) => {
-            const merged = safeMergeClub(prev, c as Partial<ClubDTO>);
-            return merged;
-          });
-        }
+        if (c) setClub((prev) => safeMergeClub(prev, c as Partial<ClubDTO>));
       })
       .catch(() => {})
-      .finally(() => {
-        setClubFetchDone(true);
-      });
+      .finally(() => setClubFetchDone(true));
 
     getClubAdsCSR(clubId)
-      .then((data) => {
-        setAds(data ?? []);
-      })
+      .then((data) => setAds(data ?? []))
       .catch(() => {});
 
     (async () => {
@@ -393,14 +351,12 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
             setEvents(Array.isArray(data) ? (data as EventDTO[]) : []);
           }
         }
-      } catch (err) {
+      } catch {
         // Silent fail
       }
     })();
 
-            // Removed getTicketsForClubCSR call - it was interfering with dynamic pricing
-        // Calendar coloring now only uses getAvailableTicketsForDate and calendar endpoint
-
+    // We color the calendar via an aggregated calendar endpoint
     (async () => {
       try {
         const url = joinUrl(API_BASE_CSR, `/tickets/calendar/${encodeURIComponent(clubId)}`);
@@ -414,7 +370,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
           const arr = data?.tickets ?? [];
           setCalendarTickets(Array.isArray(arr) ? (arr as TicketDTO[]) : []);
         }
-      } catch (err) {
+      } catch {
         // Silent fail
       }
     })();
@@ -422,7 +378,6 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
   // Safety: coerce arrays
   const safeEvents: EventDTO[] = Array.isArray(events) ? events : [];
-  // Removed safeTickets - no longer needed
   const safeCalendarTickets: TicketDTO[] = Array.isArray(calendarTickets) ? calendarTickets : [];
 
   // Calendar colors: Event dates
@@ -434,8 +389,6 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     const dates = filtered.map((e) => pickEventDate(e)).filter((d): d is string => !!d);
     return new Set<string>(dates);
   }, [safeEvents, clubId]);
-
-
 
   // Calendar colors: Free ticket dates (with availability + cache)
   const freeDates = useMemo(() => {
@@ -470,8 +423,6 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
     return s;
   }, [safeCalendarTickets, clubId, eventDates, available, dateCache]);
-
-
 
   const openDays = useMemo(
     () => new Set((club.openDays || []).map((d: string) => d.toLowerCase())),
@@ -594,28 +545,8 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
               <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
                 <h3 className="text-white font-semibold mb-3">Selecciona la fecha</h3>
 
-                <ClubCalendar
-                  monthOffset={0}
-                  eventDates={eventDates}
-                  freeDates={freeDates}
-                  openDays={openDays}
-                  onSelect={(val: unknown) => {
-                    // Normalize Date|string → 'YYYY-MM-DD'
-                    let iso: string | null = null;
-                    if (val instanceof Date) {
-                      const y = val.getFullYear();
-                      const m = String(val.getMonth() + 1).padStart(2, "0");
-                      const d = String(val.getDate()).padStart(2, "0");
-                      iso = `${y}-${m}-${d}`;
-                    } else if (typeof val === "string") {
-                      const m = val.match(/^\d{4}-\d{2}-\d{2}/);
-                      if (m) iso = m[0];
-                    }
-                    if (iso) setSelectedDate(iso);
-                  }}
-                  selectedDate={selectedDate}
-                />
-
+                {/* Host for the single global calendar (rendered via portal) */}
+                <div id="calendar-host-reservas" />
               </div>
 
               {/* Events list; expands the selected event card on event days */}
@@ -632,9 +563,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                         }
                       : undefined
                   }
-                  onChooseDate={(d) => {
-                    setSelectedDate(d);
-                  }}
+                  onChooseDate={(d) => setSelectedDate(d)}
                 />
               </div>
 
@@ -670,32 +599,22 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
             <motion.section key="tab-carta" data-tab="carta" {...tabMotion} className="space-y-6">
               {(() => {
                 const hasPdf = menuMeta.type === "pdf" && Boolean(menuMeta.pdf);
-                const isStructured = menuMeta.type === "structured";
 
                 if (hasPdf) {
                   // Generate a fallback menuId if the new field doesn't exist yet
                   let fallbackMenuId = (club as any)?.pdfMenuId ?? (clubSSR as any)?.pdfMenuId;
-                  
                   if (!fallbackMenuId) {
-                    // Extract menuId from existing PDF URL or filename
                     const pdfUrl = menuMeta.pdf as string;
                     const pdfName = (club as any)?.pdfMenuName ?? (clubSSR as any)?.pdfMenuName;
-                    
-                    if (pdfUrl && pdfUrl.includes('/menu/')) {
-                      // Extract from URL: .../menu/menu-1234567890.pdf
+                    if (pdfUrl && pdfUrl.includes("/menu/")) {
                       const urlMatch = pdfUrl.match(/\/menu\/([^\/]+)\.pdf/);
-                      if (urlMatch) {
-                        fallbackMenuId = urlMatch[1]; // menu-1234567890
-                      }
-                    } else if (pdfName && pdfName.startsWith('menu-')) {
-                      // Extract from filename: menu-1234567890.pdf
-                      fallbackMenuId = pdfName.replace('.pdf', '');
+                      if (urlMatch) fallbackMenuId = urlMatch[1];
+                    } else if (pdfName && pdfName.startsWith("menu-")) {
+                      fallbackMenuId = pdfName.replace(".pdf", "");
                     } else {
-                      // Last resort: generate from timestamp
                       fallbackMenuId = `menu-${Date.now()}`;
                     }
                   }
-                  
                   return (
                     <PdfMenu
                       url={menuMeta.pdf as string}
@@ -707,8 +626,21 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                   );
                 }
 
-                if (isStructured) {
-                  return <StructuredMenu clubId={String((club as any).id)} selectedDate={selectedDate || undefined} />;
+                if (isStructuredMenu) {
+                  return (
+                    <>
+                      <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
+                        <h3 className="text-white font-semibold mb-3">Fecha para la carta</h3>
+                        {/* Host for the same single global calendar */}
+                        <div id="calendar-host-carta" />
+                      </div>
+
+                      <StructuredMenu
+                        clubId={String((club as any).id)}
+                        selectedDate={selectedDate || undefined}
+                      />
+                    </>
+                  );
                 }
 
                 // Empty state (no redirect): friendly message for deep links or missing menu
@@ -740,6 +672,28 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
             </motion.section>
           )}
         </AnimatePresence>
+
+        {/* Single calendar instance rendered into whichever tab is active */}
+        <GlobalCalendarPortal
+          hostId={calendarHostId}
+          eventDates={eventDates}
+          freeDates={freeDates}
+          openDays={openDays}
+          selectedDate={selectedDate}
+          onSelect={(val: unknown) => {
+            let iso: string | null = null;
+            if (val instanceof Date) {
+              const y = val.getFullYear();
+              const m = String(val.getMonth() + 1).padStart(2, "0");
+              const d = String(val.getDate()).padStart(2, "0");
+              iso = `${y}-${m}-${d}`;
+            } else if (typeof val === "string") {
+              const m = val.match(/^\d{4}-\d{2}-\d{2}/);
+              if (m) iso = m[0];
+            }
+            if (iso) setSelectedDate(iso);
+          }}
+        />
       </div>
     </div>
   );
