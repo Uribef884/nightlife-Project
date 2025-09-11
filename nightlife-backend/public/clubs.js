@@ -4,6 +4,7 @@ const CLUB_DETAIL_API = id => `/clubs/${id}`;
 const CLUB_TICKETS_API = id => `/tickets/club/${id}`;
 const CLUB_MENU_API = id => `/menu/items/club/${id}/public`;
 const CLUB_EVENTS_API = id => `/events/club/${id}`;
+const CLUB_ADS_API = id => `/ads/club/${id}`;
 
 // --- DOM elements ---
 const clubListEl = document.getElementById('club-list');
@@ -254,6 +255,64 @@ function loadMenuItemImage(item, canvasId, imageId) {
   }
 }
 
+function loadAdImage(ad, canvasId, imageId) {
+  const canvas = document.getElementById(canvasId);
+  const image = document.getElementById(imageId);
+  
+  if (!canvas || !image) return;
+  
+  // Set canvas size for BlurHash
+  const containerWidth = 400; // Match container width
+  const containerHeight = 120; // Match container height
+  canvas.width = containerWidth;
+  canvas.height = containerHeight;
+  
+  // Render BlurHash if available
+  if (ad.imageBlurhash && typeof BlurHash !== 'undefined') {
+    try {
+      const pixels = BlurHash.decode(ad.imageBlurhash, containerWidth, containerHeight);
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.createImageData(containerWidth, containerHeight);
+      imageData.data.set(pixels);
+      ctx.putImageData(imageData, 0, 0);
+    } catch (error) {
+      console.warn('Failed to decode BlurHash for ad', ad.id, error);
+      // Fallback: solid color background
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#333';
+      ctx.fillRect(0, 0, containerWidth, containerHeight);
+    }
+  } else {
+    // Fallback: solid color background
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#333';
+    ctx.fillRect(0, 0, containerWidth, containerHeight);
+  }
+  
+  // Load actual image if available
+  if (ad.imageUrl) {
+    image.onload = function() {
+      // Show the image
+      image.style.display = 'block';
+      image.classList.remove('loading');
+      // Hide the BlurHash after a brief delay for smooth transition
+      setTimeout(() => {
+        canvas.classList.add('hidden');
+      }, 100);
+    };
+    
+    image.onerror = function() {
+      console.warn('Failed to load image for ad', ad.id, ad.imageUrl);
+      // Keep BlurHash visible if image fails to load
+    };
+    
+    image.src = ad.imageUrl;
+  } else {
+    // No image URL, keep BlurHash visible
+    console.log('No image URL for ad', ad.id);
+  }
+}
+
 // --- Club detail view ---
 
 function formatLocalDate(dateStr) {
@@ -286,23 +345,26 @@ async function showClubDetail(clubId) {
     const ticketsUrl = CLUB_TICKETS_API(clubId);
     const menuUrl = CLUB_MENU_API(clubId);
     const eventsUrl = CLUB_EVENTS_API(clubId);
-    const [clubRes, ticketsRes, menuRes, eventsRes] = await Promise.all([
+    const adsUrl = CLUB_ADS_API(clubId);
+    const [clubRes, ticketsRes, menuRes, eventsRes, adsRes] = await Promise.all([
       fetch(clubDetailUrl),
       fetch(ticketsUrl),
       fetch(menuUrl),
       fetch(eventsUrl),
+      fetch(adsUrl),
     ]);
     const club = await clubRes.json();
     const ticketsData = await ticketsRes.json();
     const menu = await menuRes.json();
     const events = await eventsRes.json();
-    renderClubDetail(club, ticketsData.tickets || ticketsData, menu, events);
+    const ads = await adsRes.json();
+    renderClubDetail(club, ticketsData.tickets || ticketsData, menu, events, ads);
   } catch (err) {
     loadingEl.textContent = 'Failed to load club details.';
   }
 }
 
-function renderClubDetail(club, tickets, menu, events) {
+function renderClubDetail(club, tickets, menu, events, ads) {
   loadingEl.style.display = 'none';
   clubListEl.style.display = 'none';
   clubDetailEl.style.display = '';
@@ -479,6 +541,28 @@ function renderClubDetail(club, tickets, menu, events) {
         </ul>
       `).join('')}
     </div>
+    <div class="section">
+      <h2>Club Ads</h2>
+      <ul class="ad-list">
+        ${ads && ads.length ? ads.map(ad => {
+          const adCanvasId = `ad-blurhash-${ad.id}`;
+          const adImageId = `ad-image-${ad.id}`;
+          return `
+            <li class="ad-item" onclick="window.open('${ad.link || '#'}', '_blank')">
+              <div class="ad-image-container">
+                <canvas id="${adCanvasId}" class="ad-image-blurhash"></canvas>
+                <img id="${adImageId}" class="ad-image loading" alt="Ad" style="display: none;" />
+              </div>
+              <div class="ad-content">
+                <span class="ad-id">ID: ${ad.id}</span>
+                <div class="ad-target">Target: ${ad.targetType || 'None'} ${ad.targetId ? `(${ad.targetId})` : ''}</div>
+                <div class="ad-link">Link: ${ad.link || 'No link'}</div>
+              </div>
+            </li>
+          `;
+        }).join('') : '<li style="color:#666;padding:20px;text-align:center;">No ads found for this club.</li>'}
+      </ul>
+    </div>
   `;
   document.getElementById('back-to-clubs-btn').onclick = renderClubList;
   
@@ -504,6 +588,17 @@ function renderClubDetail(club, tickets, menu, events) {
       }
     });
   });
+  
+  // Load ad images
+  if (ads && ads.length) {
+    ads.forEach(ad => {
+      if (ad.imageUrl) {
+        const adCanvasId = `ad-blurhash-${ad.id}`;
+        const adImageId = `ad-image-${ad.id}`;
+        loadAdImage(ad, adCanvasId, adImageId);
+      }
+    });
+  }
 }
 
 // --- Initial load ---

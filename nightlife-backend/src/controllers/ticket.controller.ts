@@ -1186,9 +1186,9 @@ export async function getAvailableTicketsForDate(req: Request, res: Response): P
       });
       
       // Filter free tickets by category only (not price === 0)
+      // Include tickets with quantity = 0 so they show as "AGOTADO"
       const validFreeTickets = freeTickets.filter(ticket => 
-        ticket.category === TicketCategory.FREE && 
-        (ticket.quantity === null || (ticket.quantity !== undefined && ticket.quantity > 0))
+        ticket.category === TicketCategory.FREE
       );
       
       // Filter general tickets by club open status and 3-week limit

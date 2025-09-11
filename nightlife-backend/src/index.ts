@@ -57,9 +57,40 @@ app.use(attachSessionId); // injects sessionId or user
 
 // CORS must allow the Next.js dev app and send cookies
 const FRONTEND = process.env.FRONTEND_URL ?? "http://localhost:3000";
+// Allow both localhost and IP-based access for mobile testing
+const allowedOrigins = [
+  FRONTEND,
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  // Allow any local IP for development (no hardcoding)
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
+];
+
 app.use(
   cors({
-    origin: FRONTEND, // e.g., http://localhost:3000
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // For development, allow any localhost or IP-based origin
+      if (process.env.NODE_ENV !== "production") {
+        const isLocalhost = origin.includes("localhost") || origin.includes("127.0.0.1");
+        const isLocalIP = /^http:\/\/192\.168\.\d+\.\d+:\d+$/.test(origin) || 
+                         /^http:\/\/10\.\d+\.\d+\.\d+:\d+$/.test(origin) ||
+                         /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:\d+$/.test(origin);
+        
+        if (isLocalhost || isLocalIP) {
+          return callback(null, true);
+        }
+      }
+      
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true, // allow cookies
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "X-CSRF-Token", "Authorization"],
@@ -79,8 +110,15 @@ app.use(
         scriptSrc: ["'self'", "https://unpkg.com", "https://cdn.jsdelivr.net", ...(isDev ? ["'unsafe-inline'", "'unsafe-eval'"] : [])],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:", "blob:"],
-        // Allow the Next dev app + websockets + your own API
-        connectSrc: ["'self'", "http://localhost:3000", "ws:", "wss:"],
+        // Allow the Next dev app + websockets + your own API + mobile access
+        connectSrc: [
+          "'self'", 
+          "http://localhost:3000", 
+          "http://127.0.0.1:3000", 
+          "ws:", 
+          "wss:",
+          ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
+        ],
         // Disallow being framed
         frameAncestors: ["'none'"],
         baseUri: ["'self'"],

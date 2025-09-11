@@ -198,6 +198,71 @@
       display: flex;
       align-items: flex-start;
     }
+    .ad-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .ad-item {
+      background: #18192a;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      padding: 0;
+      border-left: 4px solid #a78bfa;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .ad-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(167, 139, 250, 0.3);
+    }
+    .ad-image-container {
+      position: relative;
+      width: 100%;
+      height: 120px;
+      overflow: hidden;
+    }
+    .ad-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: opacity 0.3s ease;
+    }
+    .ad-image.loading {
+      opacity: 0;
+    }
+    .ad-image-blurhash {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      filter: blur(0);
+      transition: opacity 0.3s ease;
+    }
+    .ad-image-blurhash.hidden {
+      opacity: 0;
+    }
+    .ad-content {
+      padding: 12px 14px;
+    }
+    .ad-id {
+      font-size: 0.8em;
+      color: #a78bfa;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .ad-target {
+      font-size: 0.9em;
+      color: #f472b6;
+      margin-bottom: 4px;
+    }
+    .ad-link {
+      font-size: 0.85em;
+      color: #c7c7c7;
+      word-break: break-all;
+    }
     .back-btn {
       background: #a78bfa;
       color: #18192a;

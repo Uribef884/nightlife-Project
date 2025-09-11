@@ -13,10 +13,10 @@ import { validateExternalUrlWithResponse } from "../utils/validateExternalUrl";
 
 function buildAdLink(ad: Ad): string | null {
   if (ad.targetType === "event" && ad.targetId) {
-    return `/clubs.html?event=${ad.targetId}`;
+    return `event:${ad.targetId}`;
   }
   if (ad.targetType === "ticket" && ad.targetId) {
-    return `/clubs.html?ticket=${ad.targetId}`;
+    return `ticket:${ad.targetId}`;
   }
   if (ad.targetType === "external" && ad.externalUrl) {
     return ad.externalUrl;
@@ -182,9 +182,14 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
       }
       clubId = req.user.clubId;
     }
-    // Rate limiting: max 7 ads per club
+    // Rate limiting: max 7 ads per club (only count club-labeled ads)
     const adRepo = AppDataSource.getRepository(Ad);
-    const adCount = await adRepo.count({ where: { clubId } });
+    const adCount = await adRepo.count({ 
+      where: { 
+        clubId, 
+        label: "club" // Only count ads with "club" label, not global ads
+      } 
+    });
     if (adCount >= 7) {
       res.status(400).json({ error: "You have reached the maximum of 7 ads for your club. Please delete an existing ad before uploading a new one." });
       return;
@@ -441,6 +446,7 @@ export const getClubAds = async (req: Request, res: Response): Promise<void> => 
     
     let whereCondition: any = { 
       clubId, 
+      label: "club", // Only show club-specific ads, not global ads
       isDeleted: false 
     };
     
