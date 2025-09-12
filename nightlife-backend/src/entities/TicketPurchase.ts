@@ -10,7 +10,7 @@ import {
 import { Ticket } from "./Ticket";
 import { User } from "./User";
 import { Club } from "./Club";
-import { PurchaseTransaction } from "./TicketPurchaseTransaction";
+import { UnifiedPurchaseTransaction } from "./UnifiedPurchaseTransaction";
 
 @Entity()
 export class TicketPurchase {
@@ -40,11 +40,6 @@ export class TicketPurchase {
   @Column({ type: 'date' })
   date!: Date;
 
-  @Column({ nullable: true })
-  buyerName?: string;
-
-  @Column({ nullable: true })
-  buyerIdNumber?: string;
 
   @Column()
   email!: string;
@@ -87,12 +82,12 @@ export class TicketPurchase {
   @Column("numeric")
   platformFeeApplied!: number; // Platform fee percentage applied
 
-  @ManyToOne(() => PurchaseTransaction, (t) => t.purchases)
-  @JoinColumn({ name: "purchaseTransactionId" })
-  transaction!: PurchaseTransaction;
+  @ManyToOne(() => UnifiedPurchaseTransaction)
+  @JoinColumn({ name: "transactionId" })
+  transaction!: UnifiedPurchaseTransaction;
 
   @Column()
-  purchaseTransactionId!: string;
+  transactionId!: string;
 
   @CreateDateColumn()
   createdAt!: Date;

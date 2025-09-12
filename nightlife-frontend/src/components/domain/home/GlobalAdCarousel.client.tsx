@@ -215,16 +215,15 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
                   hover:scale-[1.01] will-change-transform
                 "
               >
-                {/* IG Stories feel on mobile; fixed heights on sm+ */}
+                {/* Compact ads for homepage - mobile optimized */}
                 <div
                   className="
                     relative
-                    aspect-[9/16] max-h-[75vh]   /* mobile: portrait story */
-                    sm:aspect-auto sm:max-h-none /* reset story lock on sm+ */
-                    sm:h-64
-                    md:h-72
-                    lg:h-80
-                    xl:h-96
+                    h-[35vh] w-full
+                    sm:h-36 sm:w-full
+                    md:h-40
+                    lg:h-44
+                    xl:h-48
                   "
                 >
                   <Image
@@ -232,7 +231,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
                     alt="Anuncio"
                     fill
                     sizes="(max-width: 640px) 70vw, (max-width: 768px) 52vw, (max-width: 1024px) 42vw, 34vw"
-                    className="object-cover"
+                    className="object-cover w-full h-full"
                     priority={displayIndex === (cloneCount || 0)}
                   />
                 </div>

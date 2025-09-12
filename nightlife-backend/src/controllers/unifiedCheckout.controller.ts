@@ -297,7 +297,7 @@ export class UnifiedCheckoutController {
       
       const existingTransaction = await transactionRepo.findOne({
         where: { id: transactionId },
-        relations: ['lineItems']
+        relations: ['ticketPurchases', 'menuPurchases']
       });
 
       if (existingTransaction) {
@@ -318,7 +318,7 @@ export class UnifiedCheckoutController {
           createdAt: existingTransaction.createdAt,
           finalizedAt: existingTransaction.updatedAt,
           isFreeCheckout: existingTransaction.paymentProvider === 'free',
-          lineItemsCount: existingTransaction.lineItems?.length || 0
+          lineItemsCount: (existingTransaction.ticketPurchases?.length || 0) + (existingTransaction.menuPurchases?.length || 0)
         });
         return;
       }

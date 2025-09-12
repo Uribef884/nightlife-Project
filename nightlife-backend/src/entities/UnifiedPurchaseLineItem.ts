@@ -8,7 +8,7 @@ export class UnifiedPurchaseLineItem {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @ManyToOne(() => UnifiedPurchaseTransaction, transaction => transaction.lineItems)
+  @ManyToOne(() => UnifiedPurchaseTransaction)
   @JoinColumn({ name: "transactionId" })
   transaction!: UnifiedPurchaseTransaction;
 

@@ -12,7 +12,7 @@ import { wompiService } from "../services/wompi.service";
 import { WOMPI_CONFIG } from "../config/wompi";
 import { generateTransactionSignature } from "../utils/generateWompiSignature";
 import { PurchaseTransaction } from "../entities/TicketPurchaseTransaction";
-import { processWompiSuccessfulCheckout } from "./ticketCheckoutWompi.controller";
+// import { processWompiSuccessfulCheckout } from "./ticketCheckoutWompi.controller"; // DEPRECATED
 import { lockAndValidateCart, updateCartLockTransactionId, unlockCart } from "../utils/cartLock";
 
 // In-memory store for temporary transaction data (in production, use Redis)
@@ -105,18 +105,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
 
   if (isFreeCheckout) {
     console.log("[WOMPI-TICKET-INITIATE] Free checkout detected. Processing immediately.");
-    // Import the checkout function
-    const { processWompiSuccessfulCheckout } = require("./ticketCheckoutWompi.controller");
-    
-    // Process free checkout immediately (no payment needed)
-    return await processWompiSuccessfulCheckout({ 
-      userId, 
-      sessionId, 
-      email, 
-      req, 
-      res,
-      isFreeCheckout: true 
-    });
+    throw new Error('This endpoint has been deprecated. Use the unified checkout system instead.');
   }
 
   // Get payment method from request
@@ -606,16 +595,8 @@ async function startAutomaticTicketCheckout(transactionId: string, req: Request,
             json: (data: any) => console.log(`[MOCK-RESPONSE]:`, data)
           } as any;
           
-          // Process the successful checkout
-          await processWompiSuccessfulCheckout({
-            userId: storedData.userId,
-            sessionId: storedData.sessionId,
-            email: storedData.email,
-            req,
-            res: mockRes, // Use mock response for background process
-            transactionId,
-            cartItems: storedData.cartItems,
-          });
+          // Process the successful checkout - DEPRECATED
+          throw new Error('This endpoint has been deprecated. Use the unified checkout system instead.');
           
           // Remove stored data AFTER checkout is complete and cart is unlocked
           removeStoredTransactionData(transactionId);

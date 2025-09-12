@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 import { User } from './User';
-import { UnifiedPurchaseLineItem } from './UnifiedPurchaseLineItem';
+import { TicketPurchase } from './TicketPurchase';
+import { MenuPurchase } from './MenuPurchase';
 
 @Entity()
 export class UnifiedPurchaseTransaction {
@@ -90,13 +91,22 @@ export class UnifiedPurchaseTransaction {
   @Column({ nullable: true })
   paymentMethod?: string;
 
+  @Column('text', { nullable: true })
+  qrPayload?: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 
   @UpdateDateColumn()
   updatedAt!: Date;
 
-  @OneToMany(() => UnifiedPurchaseLineItem, lineItem => lineItem.transaction)
-  lineItems!: UnifiedPurchaseLineItem[];
+  @Column({ type: 'timestamp', nullable: true })
+  processedAt?: Date | null;
+
+  @OneToMany(() => TicketPurchase, ticketPurchase => ticketPurchase.transaction)
+  ticketPurchases!: TicketPurchase[];
+
+  @OneToMany(() => MenuPurchase, menuPurchase => menuPurchase.transaction)
+  menuPurchases!: MenuPurchase[];
 }
 

@@ -178,8 +178,8 @@ export function ClubAdsCarouselClient({ ads }: { ads: ClubAdClient[] }) {
                 hover:border-nl-secondary/40 transition hover:scale-[1.01] will-change-transform
               ">
                 <div className="
-                  relative aspect-[9/16] max-h-[75vh]
-                  sm:aspect-auto sm:max-h-none sm:h-64 md:h-72 lg:h-80 xl:h-96
+                  relative aspect-[9/16] max-h-[50vh]
+                  sm:aspect-auto sm:max-h-none sm:h-48 md:h-52 lg:h-56 xl:h-64
                 ">
                   <Image
                     src={ad.imageUrl}

@@ -1,12 +1,8 @@
-
 import { AppDataSource } from '../config/data-source';
 import { UnifiedCartItem } from '../entities/UnifiedCartItem';
 import { UnifiedPurchaseTransaction } from '../entities/UnifiedPurchaseTransaction';
-import { UnifiedPurchaseLineItem } from '../entities/UnifiedPurchaseLineItem';
 import { TicketPurchase } from '../entities/TicketPurchase';
 import { MenuPurchase } from '../entities/MenuPurchase';
-import { MenuPurchaseTransaction } from '../entities/MenuPurchaseTransaction';
-import { PurchaseTransaction } from '../entities/TicketPurchaseTransaction';
 import { UnifiedCartService } from './unifiedCart.service';
 import { calculateFeeAllocation, validateFeeAllocation } from '../utils/feeAllocation';
 import { generateEncryptedQR } from '../utils/generateEncryptedQR';
@@ -66,17 +62,12 @@ export interface CheckoutInitiateWithWompiResult {
   redirectUrl?: string;
 }
 
-// Remove the CheckoutConfirmInput interface as we'll use a simpler approach
-
 export class UnifiedCheckoutService {
   private cartService = new UnifiedCartService();
   private cartRepo = AppDataSource.getRepository(UnifiedCartItem);
   private transactionRepo = AppDataSource.getRepository(UnifiedPurchaseTransaction);
-  private lineItemRepo = AppDataSource.getRepository(UnifiedPurchaseLineItem);
   private ticketPurchaseRepo = AppDataSource.getRepository(TicketPurchase);
   private menuPurchaseRepo = AppDataSource.getRepository(MenuPurchase);
-  private menuTransactionRepo = AppDataSource.getRepository(MenuPurchaseTransaction);
-  private ticketTransactionRepo = AppDataSource.getRepository(PurchaseTransaction);
 
   /**
    * Initiate unified checkout with Wompi integration
@@ -390,7 +381,7 @@ export class UnifiedCheckoutService {
 
     // Handle free checkout
     if (isFreeCheckout) {
-      await this.processFreeCheckout(savedTransaction, cartItems);
+      await this.processFreeCheckout(savedTransaction, cartItems, sessionId, userId);
       return {
         transactionId: savedTransaction.id,
         isFreeCheckout: true,
@@ -427,7 +418,7 @@ export class UnifiedCheckoutService {
     // Get transaction
     const transaction = await this.transactionRepo.findOne({
       where: { id: transactionId },
-      relations: ['lineItems']
+      relations: ['ticketPurchases', 'menuPurchases']
     });
 
     if (!transaction) {
@@ -437,7 +428,7 @@ export class UnifiedCheckoutService {
     // Check if it's a free checkout
     if (transaction.paymentProvider === 'free') {
       console.log(`[UNIFIED-CHECKOUT] 🎁 FREE checkout - processing directly`);
-      await this.processFreeCheckout(transaction, []);
+      await this.processFreeCheckout(transaction, [], sessionId, userId);
       return { success: true, message: 'Free checkout completed successfully' };
     }
 
@@ -458,24 +449,10 @@ export class UnifiedCheckoutService {
       await this.transactionRepo.save(transaction);
 
       if (finalStatus === 'APPROVED') {
-        // Get cart items
-        const cartItems = await this.cartService.getCartItemsWithDynamicPricing(userId, sessionId);
+        // Just update the transaction status - processing will be handled by the controller's automatic checkout flow
+        console.log(`[UNIFIED-CHECKOUT] Transaction approved, status updated. Processing will be handled by automatic checkout flow.`);
         
-        // Process successful checkout
-        await this.processSuccessfulCheckout(transaction, cartItems);
-        
-        // Clear cart
-        await this.cartService.clearCart(userId, sessionId);
-        
-        // 🔓 Unlock the cart after successful checkout
-        try {
-          await unlockCart(userId || null, sessionId || null);
-          console.log(`[UNIFIED-CHECKOUT] ✅ Cart unlocked successfully for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
-        } catch (unlockError) {
-          console.error(`[UNIFIED-CHECKOUT] ❌ Failed to unlock cart:`, unlockError);
-        }
-        
-        return { success: true, message: 'Checkout completed successfully' };
+        return { success: true, message: 'Payment approved, processing order...' };
       } else {
         // 🔓 Unlock the cart for failed checkout
         try {
@@ -559,8 +536,10 @@ export class UnifiedCheckoutService {
 
     const savedTransaction = await this.transactionRepo.save(transaction) as UnifiedPurchaseTransaction;
 
-    // Process as successful checkout
-    await this.processSuccessfulCheckout(savedTransaction, cartItems);
+    // ✅ Process within a DB transaction using the new path (atomic & safe)
+    await this.transactionRepo.manager.transaction(async (transactionalEntityManager) => {
+      await this.processSuccessfulCheckoutInTransaction(savedTransaction, cartItems, transactionalEntityManager, sessionId, userId);
+    });
 
     // Clear cart
     await this.cartService.clearCart(userId, sessionId);
@@ -576,15 +555,19 @@ export class UnifiedCheckoutService {
    */
   private async processFreeCheckout(
     transaction: UnifiedPurchaseTransaction,
-    cartItems: UnifiedCartItem[]
+    cartItems: UnifiedCartItem[],
+    sessionId?: string,
+    userId?: string
   ): Promise<void> {
     // Update transaction status
     transaction.paymentStatus = 'APPROVED';
     transaction.paymentProvider = 'free';
     await this.transactionRepo.save(transaction);
 
-    // Process as successful checkout
-    await this.processSuccessfulCheckout(transaction, cartItems);
+    // ✅ Process within a DB transaction using the new path (atomic & safe)
+    await this.transactionRepo.manager.transaction(async (transactionalEntityManager) => {
+      await this.processSuccessfulCheckoutInTransaction(transaction, cartItems, transactionalEntityManager, sessionId, userId);
+    });
   }
 
   /**
@@ -601,7 +584,7 @@ export class UnifiedCheckoutService {
     // Get transaction
     const transaction = await this.transactionRepo.findOne({
       where: { id: transactionId },
-      relations: ['lineItems']
+      relations: ['ticketPurchases', 'menuPurchases']
     });
 
     if (!transaction) {
@@ -637,13 +620,33 @@ export class UnifiedCheckoutService {
 
     // Update transaction status
     transaction.paymentStatus = 'APPROVED';
-    await this.transactionRepo.save(transaction);
+    const savedTransaction = await this.transactionRepo.save(transaction);
+    console.log(`[UNIFIED-CHECKOUT-SERVICE] Transaction saved with ID: ${savedTransaction.id}`);
 
-    // Process as successful checkout with merged cart items
-    await this.processSuccessfulCheckout(transaction, mergedCartItems);
+    // Process as successful checkout with merged cart items in a database transaction
+    try {
+      await this.transactionRepo.manager.transaction(async (transactionalEntityManager) => {
+        console.log(`[UNIFIED-CHECKOUT-SERVICE] Starting database transaction for checkout processing`);
+        
+        // Process successful checkout within the transaction
+        await this.processSuccessfulCheckoutInTransaction(savedTransaction, mergedCartItems, transactionalEntityManager, sessionId, userId);
+        
+        console.log(`[UNIFIED-CHECKOUT-SERVICE] Database transaction completed successfully`);
+      });
+      console.log(`[UNIFIED-CHECKOUT-SERVICE] ✅ Database transaction committed successfully`);
+    } catch (transactionError) {
+      console.error(`[UNIFIED-CHECKOUT-SERVICE] ❌ Database transaction failed:`, transactionError);
+      throw transactionError;
+    }
 
-    // Clear cart
-    await this.cartService.clearCart(userId, sessionId);
+    // Clear cart AFTER the database transaction is committed
+    try {
+      await this.cartService.clearCart(userId, sessionId);
+      console.log(`[UNIFIED-CHECKOUT-SERVICE] ✅ Cart cleared successfully`);
+    } catch (cartError) {
+      console.error(`[UNIFIED-CHECKOUT-SERVICE] ⚠️ Cart clearing failed (but checkout was successful):`, cartError);
+      // Don't throw here since the checkout was already successful
+    }
 
     // 🔓 Unlock the cart after successful checkout
     try {
@@ -657,51 +660,40 @@ export class UnifiedCheckoutService {
   }
 
   /**
-   * Process successful checkout - create purchases and send emails
+   * Process successful checkout within a database transaction
    */
-  private async processSuccessfulCheckout(
+  private async processSuccessfulCheckoutInTransaction(
     transaction: UnifiedPurchaseTransaction,
-    cartItems: any[]
+    cartItems: any[],
+    transactionalEntityManager: any,
+    sessionId?: string,
+    userId?: string
   ): Promise<void> {
-    const lineItems: UnifiedPurchaseLineItem[] = [];
+    // 🔐 Idempotency guard
+    if ((transaction as any).processedAt) {
+      console.log(`[UNIFIED-CHECKOUT-SERVICE] Skipping processing; transaction ${transaction.id} already marked processedAt=${(transaction as any).processedAt}`);
+      return;
+    }
 
-    // Process ticket items - create separate PurchaseTransaction for tickets
-    const ticketItems = cartItems.filter(item => item.itemType === 'ticket');
+    console.log(`[UNIFIED-CHECKOUT-SERVICE] Processing successful checkout with simplified 3-table approach in transaction`);
+    console.log(`[UNIFIED-CHECKOUT-SERVICE] Transaction ID: ${transaction.id}`);
+    
+    if (!transaction.id) {
+      throw new Error('Transaction ID is required for processing checkout');
+    }
+
+    // Process ticket items - create individual TicketPurchase records
+    const ticketItems = cartItems.filter((item: any) => item.itemType === 'ticket');
     if (ticketItems.length > 0) {
-      // Create a PurchaseTransaction for ticket purchases
-      const ticketTransaction = this.ticketTransactionRepo.create({
-        userId: transaction.userId || undefined,
-        clubId: transaction.clubId,
-        email: transaction.buyerEmail,
-        date: ticketItems[0].date, // Use the date from the first ticket item
-        totalPaid: transaction.ticketSubtotal,
-        clubReceives: transaction.ticketSubtotal,
-        platformReceives: transaction.platformFeeAppliedTickets,
-        gatewayFee: transaction.gatewayFee,
-        gatewayIVA: transaction.gatewayIVA,
-        retentionICA: transaction.retencionICA,
-        retentionIVA: transaction.retencionIVA,
-        retentionFuente: transaction.retencionFuente,
-        paymentProviderTransactionId: transaction.paymentProviderTransactionId,
-        paymentProvider: transaction.paymentProvider === 'free' ? 'free' : 'wompi',
-        paymentProviderReference: transaction.paymentProviderReference,
-        paymentStatus: transaction.paymentStatus === 'ERROR' ? 'DECLINED' : transaction.paymentStatus,
-        customerFullName: transaction.customerFullName,
-        customerPhoneNumber: transaction.customerPhoneNumber,
-        customerLegalId: transaction.customerLegalId,
-        customerLegalIdType: transaction.customerLegalIdType,
-        paymentMethod: transaction.paymentMethod
-      });
-
-      const savedTicketTransaction = await this.ticketTransactionRepo.save(ticketTransaction);
-
+      console.log(`[UNIFIED-CHECKOUT-SERVICE] Processing ${ticketItems.length} ticket items`);
+      
       // Calculate total tickets across all cart items for proper numbering
-      const totalTicketsInCart = ticketItems.reduce((sum, item) => sum + item.quantity, 0);
+      const totalTicketsInCart = ticketItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
       let globalTicketCounter = 0;
 
-    for (const cartItem of ticketItems) {
-        // For stored data, we need to load the ticket from database
-        const ticket = await this.ticketPurchaseRepo.manager.findOne('Ticket', {
+      for (const cartItem of ticketItems) {
+        // Load the ticket from database
+        const ticket = await transactionalEntityManager.findOne('Ticket', {
           where: { id: cartItem.ticketId },
           relations: ['club', 'event']
         }) as any;
@@ -711,63 +703,71 @@ export class UnifiedCheckoutService {
           continue;
         }
 
-      // Create individual ticket purchases (one per quantity unit)
-      for (let i = 0; i < cartItem.quantity; i++) {
-          globalTicketCounter++; // Increment global counter for each ticket
-        console.log(`[UNIFIED-CHECKOUT-SERVICE] Ticket pricing debug:`, {
-          ticketId: cartItem.ticketId,
-          ticketName: ticket.name,
-          basePrice: Number(ticket.price),
-          dynamicPrice: cartItem.dynamicPrice,
-          finalPrice: Number(cartItem.dynamicPrice || ticket.price),
-          dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== Number(ticket.price)
-        });
+        // Create individual ticket purchases (one per quantity unit)
+        for (let i = 0; i < cartItem.quantity; i++) {
+          globalTicketCounter++;
+          
+          console.log(`[UNIFIED-CHECKOUT-SERVICE] Ticket pricing debug:`, {
+            ticketId: cartItem.ticketId,
+            ticketName: ticket.name,
+            basePrice: Number(ticket.price),
+            dynamicPrice: cartItem.dynamicPrice,
+            finalPrice: Number(cartItem.dynamicPrice || ticket.price),
+            dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== Number(ticket.price)
+          });
 
-        const ticketPurchase = this.ticketPurchaseRepo.create({
-            transaction: savedTicketTransaction,
+          console.log(`[TICKET-PURCHASE] Creating ticket purchase with transaction ID: ${transaction.id}`);
+          console.log(`[TICKET-PURCHASE] Transaction details:`, {
+            id: transaction.id,
+            hasId: !!transaction.id,
+            isManaged: transactionalEntityManager.hasId(transaction)
+          });
+
+          const ticketPurchase = transactionalEntityManager.create('TicketPurchase', {
+            transaction: transaction,
+            transactionId: transaction.id,
             ticket: ticket,
-          date: cartItem.date!,
-          email: transaction.buyerEmail,
-          clubId: transaction.clubId,
-          userId: transaction.userId,
-          sessionId: null, // Clear session since this is now completed
+            date: cartItem.date!,
+            email: transaction.buyerEmail,
+            clubId: transaction.clubId,
+            userId: userId || null,
+            sessionId: sessionId || null,
             originalBasePrice: Number(ticket.price),
-            priceAtCheckout: Number(cartItem.dynamicPrice || ticket.price), // Use actual dynamic price from cart
-          dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== Number(ticket.price),
-            clubReceives: Number(ticket.price),
-            platformFee: Number(ticket.price) * 0.05, // TODO: Use actual fee calculation
-          platformFeeApplied: 0.05,
-          isUsed: false
-        });
+            priceAtCheckout: Number(cartItem.dynamicPrice || ticket.price),
+            dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== Number(ticket.price),
+            clubReceives: Number(cartItem.dynamicPrice || ticket.price),
+            platformFee: Number(cartItem.dynamicPrice || ticket.price) * 0.05, // TODO: Use actual fee calculation
+            platformFeeApplied: 0.05,
+            isUsed: false
+          });
 
-        const savedTicketPurchase = await this.ticketPurchaseRepo.save(ticketPurchase);
+          console.log(`[TICKET-PURCHASE] Before save - transactionId: ${ticketPurchase.transactionId}`);
+          console.log(`[TICKET-PURCHASE] Before save - hasTransaction: ${!!ticketPurchase.transaction}`);
 
-        // Generate QR code for ticket
-        const payload = {
-          id: savedTicketPurchase.id,
-          type: "ticket" as const
-        };
-        const encryptedPayload = await generateEncryptedQR(payload);
-        const qrDataUrl = await QRCode.toDataURL(encryptedPayload);
+          const savedTicketPurchase = await transactionalEntityManager.save('TicketPurchase', ticketPurchase);
+          
+          console.log(`[TICKET-PURCHASE] After save - ID: ${savedTicketPurchase.id}, transactionId: ${savedTicketPurchase.transactionId}`);
+          
+          // Direct database verification
+          const ticketDirectQuery = await transactionalEntityManager.query(
+            'SELECT id, "transactionId" FROM ticket_purchase WHERE id = $1',
+            [savedTicketPurchase.id]
+          );
+          console.log(`[TICKET-PURCHASE] Direct DB query result:`, ticketDirectQuery[0]);
 
-        savedTicketPurchase.qrCodeEncrypted = encryptedPayload;
-        await this.ticketPurchaseRepo.save(savedTicketPurchase);
+          // Generate QR code for ticket
+          const payload = {
+            id: savedTicketPurchase.id,
+            type: "ticket" as const
+          };
+          const encryptedPayload = await generateEncryptedQR(payload);
+          const qrDataUrl = await QRCode.toDataURL(encryptedPayload);
 
-        // Create line item
-        const lineItem = this.lineItemRepo.create({
-          transaction,
-          type: 'ticket',
-          ticketPurchase: savedTicketPurchase,
-            unitPrice: Number(ticket.price),
-          quantity: 1,
-            subtotal: Number(ticket.price),
-          clubId: transaction.clubId
-        });
-
-        lineItems.push(lineItem);
+          savedTicketPurchase.qrCodeEncrypted = encryptedPayload;
+          await transactionalEntityManager.save('TicketPurchase', savedTicketPurchase);
 
           // Get club name for email
-          const club = await this.ticketPurchaseRepo.manager.findOne('Club', {
+          const club = await transactionalEntityManager.findOne('Club', {
             where: { id: transaction.clubId }
           }) as any;
 
@@ -777,7 +777,7 @@ export class UnifiedCheckoutService {
           
           if (hasIncludedMenuItems) {
             // Get included menu items for this ticket
-            const ticketIncludedMenuItemRepo = this.ticketPurchaseRepo.manager.getRepository('TicketIncludedMenuItem');
+            const ticketIncludedMenuItemRepo = transactionalEntityManager.getRepository('TicketIncludedMenuItem');
             includedMenuItems = await ticketIncludedMenuItemRepo.find({
               where: { ticketId: ticket.id },
               relations: ["menuItem", "variant"]
@@ -797,7 +797,7 @@ export class UnifiedCheckoutService {
             const menuQrDataUrl = await QRCode.toDataURL(menuEncryptedPayload);
 
             // Create records for analytics
-            const menuItemFromTicketRepo = this.ticketPurchaseRepo.manager.getRepository('MenuItemFromTicket');
+            const menuItemFromTicketRepo = transactionalEntityManager.getRepository('MenuItemFromTicket');
             const menuItemFromTicketRecords = includedMenuItems.map(item => 
               menuItemFromTicketRepo.create({
                 ticketPurchaseId: savedTicketPurchase.id,
@@ -836,13 +836,13 @@ export class UnifiedCheckoutService {
             console.log(`[UNIFIED-CHECKOUT-SERVICE] ✅ Unified email sent for ticket ${globalTicketCounter}/${totalTicketsInCart} with menu`);
           } else {
             // Send regular ticket email (no menu included)
-        await sendTicketEmail({
-          to: transaction.buyerEmail,
+            await sendTicketEmail({
+              to: transaction.buyerEmail,
               ticketName: ticket.name,
               date: cartItem.date instanceof Date ? 
                 cartItem.date.toISOString().split('T')[0] : 
                 String(cartItem.date).split('T')[0],
-          qrImageDataUrl: qrDataUrl,
+              qrImageDataUrl: qrDataUrl,
               clubName: club?.name || "Your Club",
               index: globalTicketCounter,
               total: totalTicketsInCart
@@ -854,43 +854,16 @@ export class UnifiedCheckoutService {
       }
     }
 
-    // Process menu items
-    const menuItems = cartItems.filter(item => item.itemType === 'menu');
+    // Process menu items - create individual MenuPurchase records for standalone menu purchases
+    const menuItems = cartItems.filter((item: any) => item.itemType === 'menu');
     if (menuItems.length > 0) {
-      // Create menu transaction (for compatibility with existing menu system)
-      const menuTransaction = new MenuPurchaseTransaction();
-      menuTransaction.userId = transaction.userId || undefined;
-      menuTransaction.sessionId = undefined;
-      menuTransaction.clubId = transaction.clubId;
-      menuTransaction.totalPaid = transaction.menuSubtotal;
-      menuTransaction.clubReceives = transaction.menuSubtotal;
-      menuTransaction.platformReceives = transaction.platformFeeAppliedMenu;
-      menuTransaction.email = transaction.buyerEmail;
-      menuTransaction.paymentProviderTransactionId = transaction.paymentProviderTransactionId;
-      menuTransaction.paymentProvider = transaction.paymentProvider === 'free' ? 'mock' : transaction.paymentProvider;
-      menuTransaction.paymentStatus = transaction.paymentStatus === 'ERROR' ? 'DECLINED' : transaction.paymentStatus;
-      menuTransaction.customerFullName = transaction.customerFullName;
-      menuTransaction.customerPhoneNumber = transaction.customerPhoneNumber;
-      menuTransaction.customerLegalId = transaction.customerLegalId;
-      menuTransaction.customerLegalIdType = transaction.customerLegalIdType;
-      menuTransaction.paymentMethod = transaction.paymentMethod;
-      menuTransaction.gatewayFee = transaction.gatewayFee;
-      menuTransaction.gatewayIVA = transaction.gatewayIVA;
-      menuTransaction.retentionICA = transaction.retencionICA;
-      menuTransaction.retentionIVA = transaction.retencionIVA;
-      menuTransaction.retentionFuente = transaction.retencionFuente;
-      menuTransaction.isUsed = false;
-
-      const savedMenuTransaction = await this.menuTransactionRepo.save(menuTransaction);
+      console.log(`[UNIFIED-CHECKOUT-SERVICE] Processing ${menuItems.length} standalone menu items`);
       
-      // Ensure we have a single entity, not an array
-      const menuTransactionEntity = Array.isArray(savedMenuTransaction) ? savedMenuTransaction[0] : savedMenuTransaction;
-
-      // Create menu purchases for each item
-      const menuPurchases: MenuPurchase[] = [];
+      // Create menu purchases for each item - EXACTLY like tickets
+      const savedMenuPurchases: MenuPurchase[] = [];
       for (const cartItem of menuItems) {
-        // For stored data, we need to load the menu item and variant from database
-        const menuItem = await this.menuPurchaseRepo.manager.findOne('MenuItem', {
+        // Load the menu item and variant from database
+        const menuItem = await transactionalEntityManager.findOne('MenuItem', {
           where: { id: cartItem.menuItemId },
           relations: ['club']
         }) as any;
@@ -902,7 +875,7 @@ export class UnifiedCheckoutService {
 
         let variant: any = null;
         if (cartItem.variantId) {
-          variant = await this.menuPurchaseRepo.manager.findOne('MenuItemVariant', {
+          variant = await transactionalEntityManager.findOne('MenuItemVariant', {
             where: { id: cartItem.variantId }
           }) as any;
         }
@@ -921,33 +894,64 @@ export class UnifiedCheckoutService {
           dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== basePrice
         });
 
-        const menuPurchase = this.menuPurchaseRepo.create({
+        console.log(`[MENU-PURCHASE] Creating menu purchase with transaction ID: ${transaction.id}`);
+        console.log(`[MENU-PURCHASE] Transaction details:`, {
+          id: transaction.id,
+          hasId: !!transaction.id,
+          isManaged: transactionalEntityManager.hasId(transaction)
+        });
+
+        const menuPurchase = transactionalEntityManager.create('MenuPurchase', {
+          transaction: transaction,
+          transactionId: transaction.id,
           menuItemId: cartItem.menuItemId!,
           variantId: cartItem.variantId || undefined,
-          userId: transaction.userId || undefined,
-          sessionId: null,
+          userId: userId || null,
+          sessionId: sessionId || null,
           clubId: transaction.clubId,
           email: transaction.buyerEmail,
           quantity: cartItem.quantity,
           originalBasePrice: basePrice,
-          priceAtCheckout: Number(cartItem.dynamicPrice || basePrice), // Use actual dynamic price from cart
+          priceAtCheckout: Number(cartItem.dynamicPrice || basePrice),
           dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== basePrice,
-          clubReceives: basePrice * cartItem.quantity,
-          platformFee: (basePrice * cartItem.quantity) * 0.025, // TODO: Use actual fee calculation
+          clubReceives: Number(cartItem.dynamicPrice || basePrice) * cartItem.quantity,
+          platformFee: (Number(cartItem.dynamicPrice || basePrice) * cartItem.quantity) * 0.025, // TODO: Use actual fee calculation
           platformFeeApplied: 0.025,
-          isUsed: false,
-          purchaseTransactionId: menuTransactionEntity.id,
-          transaction: menuTransactionEntity
+          isUsed: false
         });
 
-        menuPurchases.push(menuPurchase);
+        console.log(`[MENU-PURCHASE] Before save - transactionId: ${menuPurchase.transactionId}`);
+        console.log(`[MENU-PURCHASE] Before save - hasTransaction: ${!!menuPurchase.transaction}`);
+
+        const savedMenuPurchase = await transactionalEntityManager.save('MenuPurchase', menuPurchase);
+        
+        console.log(`[MENU-PURCHASE] After save - ID: ${savedMenuPurchase.id}, transactionId: ${savedMenuPurchase.transactionId}`);
+        
+        // Direct database verification
+        const menuDirectQuery = await transactionalEntityManager.query(
+          'SELECT id, "transactionId" FROM menu_purchase WHERE id = $1',
+          [savedMenuPurchase.id]
+        );
+        console.log(`[MENU-PURCHASE] Direct DB query result:`, menuDirectQuery[0]);
+        
+        savedMenuPurchases.push(savedMenuPurchase);
       }
 
-      await this.menuPurchaseRepo.save(menuPurchases);
+      console.log(`[UNIFIED-CHECKOUT-SERVICE] Saved ${savedMenuPurchases.length} menu purchases individually`);
+      
+      // Additional debugging - check if the relationship is working
+      if (savedMenuPurchases.length > 0) {
+        const verificationPurchase = await transactionalEntityManager.findOne('MenuPurchase', {
+          where: { id: savedMenuPurchases[0]?.id },
+          relations: ['transaction']
+        });
+        console.log(`[UNIFIED-CHECKOUT-SERVICE] Verification - transactionId: ${verificationPurchase?.transactionId}`);
+        console.log(`[UNIFIED-CHECKOUT-SERVICE] Verification - transaction exists: ${!!verificationPurchase?.transaction}`);
+      }
 
-      // Generate QR code for menu transaction
+      // Generate QR code for menu transaction (transaction-level QR for standalone menu purchases)
       const menuPayload = {
-        id: menuTransactionEntity.id,
+        id: transaction.id,
         clubId: transaction.clubId,
         type: "menu" as const
       };
@@ -955,44 +959,32 @@ export class UnifiedCheckoutService {
       const menuEncryptedPayload = await generateEncryptedQR(menuPayload);
       const menuQrDataUrl = await QRCode.toDataURL(menuEncryptedPayload);
 
-      menuTransactionEntity.qrPayload = menuEncryptedPayload;
-      await this.menuTransactionRepo.save(menuTransactionEntity);
-
-      // Create line item for menu transaction
-      const menuLineItem = this.lineItemRepo.create({
-        transaction,
-        type: 'menu',
-        menuPurchase: menuPurchases[0], // Link to first menu purchase
-        unitPrice: transaction.menuSubtotal,
-        quantity: 1,
-        subtotal: transaction.menuSubtotal,
-        clubId: transaction.clubId
-      });
-
-      lineItems.push(menuLineItem);
+      // Store QR in transaction for menu redemption
+      transaction.qrPayload = menuEncryptedPayload;
+      await transactionalEntityManager.update('UnifiedPurchaseTransaction', { id: transaction.id }, { qrPayload: menuEncryptedPayload });
 
       // Get club information for menu email
-      const club = await this.ticketPurchaseRepo.manager.findOne('Club', {
+      const club = await transactionalEntityManager.findOne('Club', {
         where: { id: transaction.clubId }
       }) as any;
 
-      // Send menu summary email
-      const menuEmailItems = await Promise.all(menuItems.map(async (item) => {
+      // Send menu summary email (SEPARATE from ticket emails)
+      const menuEmailItems = await Promise.all(menuItems.map(async (item: any) => {
         // Load menu item from database to get the name
-        const menuItem = await this.menuPurchaseRepo.manager.findOne('MenuItem', {
+        const menuItem = await transactionalEntityManager.findOne('MenuItem', {
           where: { id: item.menuItemId }
         }) as any;
         
         let variant = null;
         if (item.variantId) {
-          variant = await this.menuPurchaseRepo.manager.findOne('MenuItemVariant', {
+          variant = await transactionalEntityManager.findOne('MenuItemVariant', {
             where: { id: item.variantId }
           }) as any;
         }
         
         const menuItemName = menuItem?.name || 'Unknown Item';
-        const variantName = variant?.name || null;
-        const unitPrice = variant ? Number(variant.price) : Number(menuItem?.price || 0);
+        const variantName = (variant as any)?.name || null;
+        const unitPrice = variant ? Number((variant as any).price) : Number(menuItem?.price || 0);
         
         return {
           name: menuItemName,
@@ -1002,6 +994,7 @@ export class UnifiedCheckoutService {
         };
       }));
 
+      // Send separate menu email for standalone menu purchases
       await sendMenuEmail({
         to: transaction.buyerEmail,
         qrImageDataUrl: menuQrDataUrl,
@@ -1009,16 +1002,15 @@ export class UnifiedCheckoutService {
         items: menuEmailItems,
         total: transaction.menuSubtotal
       });
-    }
 
-    // Save all line items
-    await this.lineItemRepo.save(lineItems);
+      console.log(`[UNIFIED-CHECKOUT-SERVICE] ✅ Separate menu email sent for ${menuItems.length} standalone menu items`);
+    }
 
     // Send transaction invoice email (only if not free checkout)
     if (transaction.totalPaid > 0) {
       try {
         // Get club information for invoice
-        const club = await this.ticketPurchaseRepo.manager.findOne('Club', {
+        const club = await transactionalEntityManager.findOne('Club', {
           where: { id: transaction.clubId }
         }) as any;
 
@@ -1028,7 +1020,7 @@ export class UnifiedCheckoutService {
         // Add ticket items with actual prices (use stored dynamic prices from cart)
         if (ticketItems.length > 0) {
           for (const cartItem of ticketItems) {
-            const ticket = await this.ticketPurchaseRepo.manager.findOne('Ticket', {
+            const ticket = await transactionalEntityManager.findOne('Ticket', {
               where: { id: cartItem.ticketId }
             }) as any;
             
@@ -1050,7 +1042,7 @@ export class UnifiedCheckoutService {
         // Add menu items with actual prices (use stored dynamic prices from cart)
         if (menuItems.length > 0) {
           for (const cartItem of menuItems) {
-            const menuItem = await this.menuPurchaseRepo.manager.findOne('MenuItem', {
+            const menuItem = await transactionalEntityManager.findOne('MenuItem', {
               where: { id: cartItem.menuItemId },
               relations: ['club']
             }) as any;
@@ -1058,7 +1050,7 @@ export class UnifiedCheckoutService {
             if (menuItem) {
               let variant: any = null;
               if (cartItem.variantId) {
-                variant = await this.menuPurchaseRepo.manager.findOne('MenuItemVariant', {
+                variant = await transactionalEntityManager.findOne('MenuItemVariant', {
                   where: { id: cartItem.variantId }
                 }) as any;
               }
@@ -1138,5 +1130,21 @@ export class UnifiedCheckoutService {
     } else {
       console.log(`[UNIFIED-CHECKOUT-SERVICE] 🎁 FREE checkout - skipping invoice email (no payment)`);
     }
+
+    // ✅ Mark as processed for idempotency
+    (transaction as any).processedAt = new Date();
+    // Save only the transaction without cascading to avoid relationship issues
+    await transactionalEntityManager.update('UnifiedPurchaseTransaction', { id: transaction.id }, { processedAt: new Date() });
+  }
+
+  // 🚫 HARD-DEPRECATED: Do not call this method. It corrupts data by writing outside of the active transaction.
+  private async processSuccessfulCheckout(
+    _transaction: UnifiedPurchaseTransaction,
+    _cartItems: any[]
+  ): Promise<void> {
+    throw new Error(
+      'DEPRECATED: processSuccessfulCheckout(...) has been removed. ' +
+      'Use processSuccessfulCheckoutInTransaction(transaction, cartItems, transactionalEntityManager) instead.'
+    );
   }
 }

@@ -29,7 +29,7 @@ export const AppDataSource = new DataSource({
   username: process.env.DB_USER,
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
-  synchronize: true,  //cambiar esta linea false
+  synchronize: true,  // Auto-sync schema changes
   logging: false,
   entities: [
     Club, 

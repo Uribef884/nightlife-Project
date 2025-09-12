@@ -11,7 +11,7 @@ import { MenuItem } from "./MenuItem";
 import { MenuItemVariant } from "./MenuItemVariant";
 import { User } from "./User";
 import { Club } from "./Club";
-import { MenuPurchaseTransaction } from "./MenuPurchaseTransaction";
+import { UnifiedPurchaseTransaction } from "./UnifiedPurchaseTransaction";
 
 @Entity()
 export class MenuPurchase {
@@ -45,17 +45,10 @@ export class MenuPurchase {
   @Column()
   clubId!: string;
 
-  @Column({ nullable: true })
-  buyerName?: string;
-
-  @Column({ nullable: true })
-  buyerIdNumber?: string;
 
   @Column()
   email!: string;
 
-  @Column({ nullable: true })
-  qrCodeEncrypted?: string;
 
   @Column({ default: false })
   isUsed!: boolean;
@@ -89,12 +82,12 @@ export class MenuPurchase {
   @Column('decimal')
   platformFeeApplied!: number; // Platform fee percentage applied
 
-  @ManyToOne(() => MenuPurchaseTransaction, (t) => t.purchases)
-  @JoinColumn({ name: "purchaseTransactionId" })
-  transaction!: MenuPurchaseTransaction;
+  @ManyToOne(() => UnifiedPurchaseTransaction)
+  @JoinColumn({ name: "transactionId" })
+  transaction!: UnifiedPurchaseTransaction;
 
   @Column()
-  purchaseTransactionId!: string;
+  transactionId!: string;
 
   @CreateDateColumn()
   createdAt!: Date;

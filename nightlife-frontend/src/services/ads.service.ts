@@ -45,6 +45,12 @@ function toYMD(raw: string): string {
   return m ? m[0] : new Date(raw).toISOString().slice(0, 10);
 }
 
+function isDateInPast(dateYMD: string | null): boolean {
+  if (!dateYMD) return false;
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return dateYMD < today;
+}
+
 // --- API fetchers (env-based; no hard-coding) ---
 export async function fetchTicketById(id: string): Promise<TicketDTO> {
   if (!isIdLike(id)) throw new Error("bad ticket id");
@@ -91,14 +97,22 @@ export async function resolveAdCTA(
     // 1) explicit targeting
     if (ad.targetType === "ticket" && ad.targetId) {
       const t = await fetchTicketById(ad.targetId);
+      // Don't show CTA if ticket is inactive or deleted
+      if (!t.isActive || t.isDeleted) return null;
       const ymd = toYMD(t.availableDate ?? new Date().toISOString());
+      // Don't show CTA if ticket date is in the past
+      if (isDateInPast(ymd)) return null;
       return { label: `Ir a Reservas – ${ymd}`, href: reservasHref(t.clubId, ymd, t.id) };
     }
     if (ad.targetType === "event" && ad.targetId) {
       const e = await fetchEventById(ad.targetId);
+      // Don't show CTA if event is inactive or deleted
+      if (!e.isActive || e.isDeleted) return null;
       const raw = e.availableDate ?? e.date;
       if (!raw) return null;
       const ymd = toYMD(raw);
+      // Don't show CTA if event date is in the past
+      if (isDateInPast(ymd)) return null;
       return { label: `Ir a Reservas – ${ymd}`, href: reservasHref(e.clubId, ymd) };
     }
     if (ad.targetType === "club" && ad.clubId) {
@@ -114,15 +128,27 @@ export async function resolveAdCTA(
     const inferred = parseTargetFromLink(ad.link);
     if (inferred?.type === "ticket") {
       const t = await fetchTicketById(inferred.id);
+      // Don't show CTA if ticket is inactive or deleted
+      if (!t.isActive || t.isDeleted) return null;
       const ymd = toYMD(t.availableDate ?? new Date().toISOString());
+      // Don't show CTA if ticket date is in the past
+      if (isDateInPast(ymd)) return null;
       return { label: `Ir a Reservas – ${ymd}`, href: reservasHref(t.clubId, ymd, t.id) };
     }
     if (inferred?.type === "event") {
-      const e = await fetchEventById(inferred.id);
-      const raw = e.availableDate ?? e.date;
-      if (!raw) return null;
-      const ymd = toYMD(raw);
-      return { label: `Ir a Reservas – ${ymd}`, href: reservasHref(e.clubId, ymd) };
+      try {
+        const e = await fetchEventById(inferred.id);
+        // Don't show CTA if event is inactive or deleted
+        if (!e.isActive || e.isDeleted) return null;
+        const raw = e.availableDate ?? e.date;
+        if (!raw) return null;
+        const ymd = toYMD(raw);
+        // Don't show CTA if event date is in the past
+        if (isDateInPast(ymd)) return null;
+        return { label: `Ir a Reservas – ${ymd}`, href: reservasHref(e.clubId, ymd) };
+      } catch (error) {
+        return null;
+      }
     }
 
     return null;

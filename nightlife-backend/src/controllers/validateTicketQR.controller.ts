@@ -36,8 +36,6 @@ export async function previewTicketQR(
       purchaseDate: purchase.createdAt,
       clubId: purchase.clubId,
       purchaseId: purchase.id,
-      buyerName: purchase.buyerName,
-      buyerIdNumber: purchase.buyerIdNumber,
       isFutureEvent: validation.isFutureEvent // Include future event indicator
     };
 
@@ -95,8 +93,6 @@ export async function confirmTicketQR(
       purchaseDate: purchase.createdAt,
       clubId: purchase.clubId,
       purchaseId: purchase.id,
-      buyerName: purchase.buyerName,
-      buyerIdNumber: purchase.buyerIdNumber
     };
 
     res.json(response);

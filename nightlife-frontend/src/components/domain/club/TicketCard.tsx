@@ -262,7 +262,12 @@ export default function TicketCard({
       )}
 
       {/* Meta */}
-      <div className="mt-2 text-[11px] text-white/60">
+      <div className="mt-2 text-[11px] text-white/60 flex items-center gap-3">
+        {available != null && (
+          <span>
+            Disponible(s): <span className="text-white/80 font-medium">{available}</span>
+          </span>
+        )}
         {maxPerUser != null && (
           <span>
             Máx: <span className="text-white/80">{maxPerUser}</span>
@@ -312,7 +317,7 @@ export default function TicketCard({
                 : "bg-green-600 hover:bg-green-500 text-white",
             ].join(" ")}
           >
-            {soldOut ? "Agotado" : "Agregar al carrito"}
+            {soldOut ? "AGOTADO" : "Agregar al carrito"}
           </button>
         )}
       </div>

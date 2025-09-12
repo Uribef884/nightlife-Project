@@ -11,7 +11,7 @@ import { getMenuCommissionRate } from "../config/fees";
 import { wompiService } from "../services/wompi.service";
 import { WOMPI_CONFIG } from "../config/wompi";
 import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
-import { processWompiSuccessfulMenuCheckout } from "./menuCheckoutWompi.controller";
+// import { processWompiSuccessfulMenuCheckout } from "./menuCheckoutWompi.controller"; // DEPRECATED
 import { generateTransactionSignature } from "../utils/generateWompiSignature";
 import { lockAndValidateCart, updateCartLockTransactionId, unlockCart } from "../utils/cartLock";
 
@@ -101,19 +101,7 @@ export const initiateWompiMenuCheckout = async (req: Request, res: Response) => 
 
   if (isFreeCheckout) {
     console.log("[WOMPI-MENU-INITIATE] 🎁 Free checkout detected. Processing immediately.");
-    
-    // Import the checkout function
-    const { processWompiSuccessfulMenuCheckout } = require("./menuCheckoutWompi.controller");
-    
-    // Process free checkout immediately (no payment needed)
-    return await processWompiSuccessfulMenuCheckout({ 
-      userId, 
-      sessionId, 
-      email, 
-      req, 
-      res,
-      isFreeCheckout: true 
-    });
+    throw new Error('This endpoint has been deprecated. Use the unified checkout system instead.');
   }
 
   // Get payment method from request
@@ -606,16 +594,8 @@ async function startAutomaticMenuCheckout(transactionId: string, req: Request, r
             json: (data: any) => console.log(`[MOCK-RESPONSE]:`, data)
           } as any;
           
-          // Process the successful checkout
-          await processWompiSuccessfulMenuCheckout({
-            userId: storedData.userId,
-            sessionId: storedData.sessionId,
-            email: storedData.email,
-            req,
-            res: mockRes, // Use mock response for background process
-            transactionId,
-            cartItems: storedData.cartItems,
-          });
+          // Process the successful checkout - DEPRECATED
+          throw new Error('This endpoint has been deprecated. Use the unified checkout system instead.');
           
           console.log(`[WOMPI-MENU-AUTO-CHECKOUT] ✅ Checkout completed successfully for transaction: ${transactionId}`);
           return;

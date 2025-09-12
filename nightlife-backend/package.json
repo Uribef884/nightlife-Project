@@ -8,7 +8,10 @@
     "start": "node dist/index.js",
     "refresh-recurring": "ts-node src/scripts/refreshRecurringTickets.ts",
     "auto-deactivate": "ts-node src/scripts/autoDeactivateTickets.ts",
-    "fix-descriptions": "ts-node src/scripts/fixClubDescriptions.ts"
+    "fix-descriptions": "ts-node src/scripts/fixClubDescriptions.ts",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/config/data-source.ts",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/config/data-source.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/data-source.ts"
   },
   "keywords": [],
   "author": "",

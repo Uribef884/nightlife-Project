@@ -20,6 +20,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Allow external access for mobile testing
+  experimental: {
+    serverComponentsExternalPackages: [],
+  },
+  
   images: {
     remotePatterns: [
       // Your S3 buckets
