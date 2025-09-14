@@ -21,12 +21,14 @@ export function VariantRow({
   variant,
   qtyInCart = 0,
   cartLineId = "",
+  selectedDate,
   onAdd,
   onChangeQty,
 }: {
   variant: MenuVariantDTO;
   qtyInCart?: number;
   cartLineId?: string;
+  selectedDate?: string | null;
   onAdd: () => void;
   onChangeQty: (cartLineId: string, nextQty: number) => void;
 }) {
@@ -34,13 +36,16 @@ export function VariantRow({
   const basePrice = toNum((variant as any)?.price);
   const dynamicPrice = toNum((variant as any)?.dynamicPrice);
   
-  // Use dynamic price if available and enabled, otherwise use base price
-  const priceNow = (variant.dynamicPricingEnabled && dynamicPrice != null && !isNaN(dynamicPrice)) 
+  // Only show dynamic pricing if date is selected and valid
+  const showDynamicPricing = selectedDate && variant.dynamicPricingEnabled;
+  
+  // Use dynamic price if available and enabled and date is valid, otherwise use base price
+  const priceNow = (showDynamicPricing && dynamicPrice != null && !isNaN(dynamicPrice)) 
     ? dynamicPrice 
     : basePrice;
   
-  // Show strike-through only when dynamic price is cheaper than base price
-  const compareAt = (variant.dynamicPricingEnabled && dynamicPrice != null && basePrice != null && dynamicPrice < basePrice) 
+  // Show strike-through only when dynamic price is cheaper than base price and date is valid
+  const compareAt = (showDynamicPricing && dynamicPrice != null && basePrice != null && dynamicPrice < basePrice) 
     ? basePrice 
     : null;
   const maxPerPerson = (variant as any)?.maxPerPerson as number | null | undefined;
@@ -95,10 +100,15 @@ export function VariantRow({
       ) : (
         <button
           type="button"
-          onClick={onAdd}
-          className="rounded-full bg-green-600 hover:bg-green-500 text-white text-sm font-semibold px-3 py-1.5 shrink-0"
+          onClick={selectedDate ? onAdd : undefined}
+          disabled={!selectedDate}
+          className={`rounded-full text-sm font-semibold px-3 py-1.5 shrink-0 ${
+            selectedDate 
+              ? "bg-green-600 hover:bg-green-500 text-white cursor-pointer" 
+              : "bg-gray-500 text-gray-300 cursor-not-allowed"
+          }`}
         >
-          Agregar
+          {selectedDate ? "Agregar" : "Selecciona fecha"}
         </button>
       )}
     </div>

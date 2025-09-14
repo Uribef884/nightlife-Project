@@ -4,6 +4,7 @@ import { MenuCartItem } from "../entities/MenuCartItem";
 import { MenuItem } from "../entities/MenuItem";
 import { Club } from "../entities/Club";
 import { computeDynamicPrice } from "../utils/dynamicPricing";
+import { UnifiedCartService } from "../services/unifiedCart.service";
 import { AuthenticatedRequest } from "../types/express";
 import { CartItem } from "../entities/TicketCartItem";
 import { summarizeCartTotals } from "../utils/cartSummary";
@@ -278,7 +279,7 @@ export const getMenuCartItems = async (req: AuthenticatedRequest, res: Response)
     });
 
     // Calculate dynamic prices for each item
-    const itemsWithDynamicPrices = items.map(item => {
+    const itemsWithDynamicPrices = await Promise.all(items.map(async item => {
       const { menuItem, variant } = item;
       const club = menuItem.club;
       const basePrice = menuItem.hasVariants
@@ -289,20 +290,24 @@ export const getMenuCartItems = async (req: AuthenticatedRequest, res: Response)
 
       if (menuItem.hasVariants && variant) {
         if (variant.dynamicPricingEnabled && club) {
-          dynamicPrice = computeDynamicPrice({
+          const cartService = new UnifiedCartService();
+          dynamicPrice = await cartService.calculateMenuDynamicPrice({
             basePrice,
             clubOpenDays: club.openDays,
             openHours: club.openHours,
-            useDateBasedLogic: false,
+            selectedDate: undefined, // No specific date for cart display
+            clubId: club.id,
           });
         }
       } else {
         if (menuItem.dynamicPricingEnabled && club) {
-          dynamicPrice = computeDynamicPrice({
+          const cartService = new UnifiedCartService();
+          dynamicPrice = await cartService.calculateMenuDynamicPrice({
             basePrice,
             clubOpenDays: club.openDays,
             openHours: club.openHours,
-            useDateBasedLogic: false,
+            selectedDate: undefined, // No specific date for cart display
+            clubId: club.id,
           });
         }
       }
@@ -315,7 +320,7 @@ export const getMenuCartItems = async (req: AuthenticatedRequest, res: Response)
           dynamicPrice: dynamicPrice
         }
       };
-    });
+    }));
 
     res.status(200).json(itemsWithDynamicPrices);
   } catch (err) {
@@ -343,7 +348,7 @@ export const getMenuCartSummary = async (req: AuthenticatedRequest, res: Respons
       order: { createdAt: "DESC" },
     });
 
-    const pricingInfo = items.map(item => {
+    const pricingInfo = await Promise.all(items.map(async item => {
       const { menuItem, variant } = item;
       const club = menuItem.club;
       const basePrice = menuItem.hasVariants
@@ -354,20 +359,24 @@ export const getMenuCartSummary = async (req: AuthenticatedRequest, res: Respons
 
       if (menuItem.hasVariants && variant) {
         if (variant.dynamicPricingEnabled && club) {
-          dynamicPrice = computeDynamicPrice({
+          const cartService = new UnifiedCartService();
+          dynamicPrice = await cartService.calculateMenuDynamicPrice({
             basePrice,
             clubOpenDays: club.openDays,
             openHours: club.openHours,
-            useDateBasedLogic: false,
+            selectedDate: undefined, // No specific date for cart summary
+            clubId: club.id,
           });
         }
       } else {
         if (menuItem.dynamicPricingEnabled && club) {
-          dynamicPrice = computeDynamicPrice({
+          const cartService = new UnifiedCartService();
+          dynamicPrice = await cartService.calculateMenuDynamicPrice({
             basePrice,
             clubOpenDays: club.openDays,
             openHours: club.openHours,
-            useDateBasedLogic: false,
+            selectedDate: undefined, // No specific date for cart summary
+            clubId: club.id,
           });
         }
       }
@@ -375,7 +384,7 @@ export const getMenuCartSummary = async (req: AuthenticatedRequest, res: Respons
       return {
         itemTotal: dynamicPrice * item.quantity
       };
-    });
+    }));
 
     const summary = summarizeCartTotals(pricingInfo, "menu");
     res.status(200).json(summary);

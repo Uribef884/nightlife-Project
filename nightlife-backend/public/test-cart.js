@@ -665,7 +665,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const menuItemName = button.dataset.menuItemName;
         const menuItemPrice = parseFloat(button.dataset.menuItemPrice);
         const menuItemDynamicPrice = parseFloat(button.dataset.menuItemDynamicPrice);
-        addMenuItemToCart(menuItemId, null, menuItemName, menuItemPrice, menuItemDynamicPrice);
+        addMenuItemToCart(menuItemId, null, menuItemName, menuItemPrice, menuItemDynamicPrice, selectedDate);
         break;
       case 'add-menu-item-variant':
         const menuItemIdVar = button.dataset.menuItemId;
@@ -673,7 +673,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const menuItemNameVar = button.dataset.menuItemName;
         const variantPrice = parseFloat(button.dataset.variantPrice);
         const variantDynamicPrice = parseFloat(button.dataset.variantDynamicPrice);
-        addMenuItemToCart(menuItemIdVar, variantId, menuItemNameVar, variantPrice, variantDynamicPrice);
+        addMenuItemToCart(menuItemIdVar, variantId, menuItemNameVar, variantPrice, variantDynamicPrice, selectedDate);
         break;
       case 'toggle-breakdown':
         const breakdownItemId = button.dataset.itemId;
@@ -859,7 +859,7 @@ document.addEventListener("DOMContentLoaded", () => {
               allEvents = [];
 
               if (dateSelectionStatus) {
-                dateSelectionStatus.textContent = '🎯 Select a club and click on a calendar date to see available tickets and events';
+                dateSelectionStatus.textContent = '🎯 Select a club and click on a calendar date to see available tickets, events, and menu items';
                 dateSelectionStatus.className = 'date-selection-status info';
               }
               renderCalendar();
@@ -928,7 +928,15 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </div>
       `;
-      menuItemsList.innerHTML = '<div class="loading">Loading menu items...</div>';
+      menuItemsList.innerHTML = `
+        <div class="no-items">
+          <div style="text-align: center; padding: 20px; color: #6c757d;">
+            <div style="font-size: 2rem; margin-bottom: 10px;">📅</div>
+            <div style="font-weight: 600; margin-bottom: 5px;">No Date Selected</div>
+            <div style="font-size: 0.9rem;">Please select a date above to see available menu items</div>
+          </div>
+        </div>
+      `;
 
       // Load club details
       const club = clubs.find(c => c.id === clubId);
@@ -954,21 +962,26 @@ document.addEventListener("DOMContentLoaded", () => {
         allTickets = [];
       }
 
-      // Load menu items
+      // Load menu items (store for later use when date is selected)
       const menuRes = await fetch(`/menu/items/club/${clubId}/public`);
       
       if (menuRes.ok) {
         const menuData = await menuRes.json();
-        renderMenuItems(menuData);
+        // Store menu data globally for use when date is selected
+        window.currentMenuData = menuData;
+        console.log(`✅ Loaded menu data for club ${clubId}`);
       } else {
         // Try alternative endpoint
         const menuRes2 = await fetch(`/menu/items/club/${clubId}`);
         
         if (menuRes2.ok) {
           const menuData = await menuRes2.json();
-          renderMenuItems(menuData);
+          // Store menu data globally for use when date is selected
+          window.currentMenuData = menuData;
+          console.log(`✅ Loaded menu data for club ${clubId} (alternative endpoint)`);
         } else {
-          menuItemsList.innerHTML = '<div class="no-items">Failed to load menu items</div>';
+          window.currentMenuData = null;
+          console.error('❌ Failed to load menu items');
         }
       }
 
@@ -989,7 +1002,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Reset date selection status
       selectedDate = null;
-      updateDateSelectionStatus('🎯 Click on a calendar date above to see available tickets and events', 'info');
+      updateDateSelectionStatus('🎯 Click on a calendar date above to see available tickets, events, and menu items', 'info');
       
       // Refresh calendar with new data
       renderCalendar();
@@ -1133,7 +1146,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Clear content
       clearContent();
-      updateDateSelectionStatus('🎯 Click on a calendar date to see available tickets and events', 'info');
+      updateDateSelectionStatus('🎯 Click on a calendar date to see available tickets, events, and menu items', 'info');
       console.log('📅 Date unselected, content cleared');
       return;
     }
@@ -1182,6 +1195,17 @@ document.addEventListener("DOMContentLoaded", () => {
       events: filteredEvents.map(e => ({ id: e.id, name: e.name, date: e.date || e.availableDate }))
     });
     renderEvents(filteredEvents);
+    
+    // Load menu items for the selected date
+    if (window.currentMenuData) {
+      console.log(`📅 Rendering menu items for ${dateStr}:`, {
+        menuData: window.currentMenuData
+      });
+      renderMenuItems(window.currentMenuData);
+    } else {
+      console.log('📅 No menu data available for selected date');
+      renderMenuItems(null);
+    }
   }
 
   function clearContent() {
@@ -1203,6 +1227,17 @@ document.addEventListener("DOMContentLoaded", () => {
           <div style="font-size: 2rem; margin-bottom: 10px;">📅</div>
           <div style="font-weight: 600; margin-bottom: 5px;">No Date Selected</div>
           <div style="font-size: 0.9rem;">Please select a date above to see available events</div>
+        </div>
+      </div>
+    `;
+    
+    // Clear menu items
+    menuItemsList.innerHTML = `
+      <div class="no-items">
+        <div style="text-align: center; padding: 20px; color: #6c757d;">
+          <div style="font-size: 2rem; margin-bottom: 10px;">📅</div>
+          <div style="font-weight: 600; margin-bottom: 5px;">No Date Selected</div>
+          <div style="font-size: 0.9rem;">Please select a date above to see available menu items</div>
         </div>
       </div>
     `;
@@ -1408,8 +1443,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Render menu items with "Add to Cart" buttons
   function renderMenuItems(menuData) {
+    // Check if date is selected
+    if (!selectedDate) {
+      menuItemsList.innerHTML = `
+        <div class="no-items">
+          <div style="text-align: center; padding: 20px; color: #6c757d;">
+            <div style="font-size: 2rem; margin-bottom: 10px;">📅</div>
+            <div style="font-weight: 600; margin-bottom: 5px;">No Date Selected</div>
+            <div style="font-size: 0.9rem;">Please select a date above to see available menu items</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
     if (!menuData || menuData.length === 0) {
-      menuItemsList.innerHTML = '<div class="no-items">No menu items available</div>';
+      menuItemsList.innerHTML = '<div class="no-items">No menu items available for this date</div>';
       return;
     }
 
@@ -1839,12 +1888,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Add menu item to cart
-  async function addMenuItemToCart(menuItemId, variantId, itemName, basePrice, dynamicPrice) {
+  async function addMenuItemToCart(menuItemId, variantId, itemName, basePrice, dynamicPrice, date) {
     try {
+      // Validate date is provided
+      if (!date) {
+        showStatus(checkoutStatus, "❌ Please select a date before adding menu items", "error");
+        return;
+      }
+
       const payload = {
         itemType: 'menu',
         menuItemId: menuItemId,
-        quantity: 1
+        quantity: 1,
+        date: date // Include date for menu items
       };
 
       if (variantId) {
@@ -1860,8 +1916,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (res.ok) {
         const data = await res.json();
-        logResult({ message: 'Menu item added to unified cart', itemName, data });
-        showStatus(checkoutStatus, `✅ Added "${itemName}" to cart`, "success");
+        logResult({ message: 'Menu item added to unified cart', itemName, date, data });
+        showStatus(checkoutStatus, `✅ Added "${itemName}" to cart for ${date}`, "success");
         
         // Refresh cart display
         await handleViewCart();

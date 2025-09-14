@@ -638,6 +638,9 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                       <StructuredMenu
                         clubId={String((club as any).id)}
                         selectedDate={selectedDate || undefined}
+                        openDays={openDays}
+                        eventDates={eventDates}
+                        freeDates={freeDates}
                       />
                     </>
                   );

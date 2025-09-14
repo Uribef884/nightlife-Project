@@ -222,6 +222,123 @@ export function computeDynamicPrice(input: DynamicPriceInput): number {
 }
 
 /**
+ * Dynamic pricing for menu items on normal (non-event) days
+ * - Club Closed Days: 30% discount
+ * - Club Open Days, 3+ hours before opening: 30% discount  
+ * - Club Open Days, < 3 hours before opening: 10% discount
+ * - During Club Open Hours: Base price (no discount)
+ */
+export function computeDynamicMenuNormalPrice(input: {
+  basePrice: number;
+  clubOpenDays: string[];
+  openHours: { day: string, open: string, close: string }[];
+  selectedDate?: Date;
+}): number {
+  const { basePrice, clubOpenDays, openHours, selectedDate } = input;
+
+  if (!basePrice || basePrice <= 0) {
+    return 0;
+  }
+
+  // Use the selected date if provided, otherwise use current time
+  let referenceDate: Date;
+  if (selectedDate) {
+    if (selectedDate instanceof Date) {
+      referenceDate = selectedDate;
+    } else {
+      // Parse date string and force to noon to avoid timezone issues
+      const dateStr = String(selectedDate);
+      if (dateStr.includes('T')) {
+        referenceDate = new Date(dateStr);
+      } else {
+        // If it's just a date string like "2025-09-14", append noon time
+        referenceDate = new Date(dateStr + 'T12:00:00');
+      }
+    }
+  } else {
+    referenceDate = new Date();
+  }
+  
+  // Check if the selected date is an open day
+  const dayIndex = referenceDate.getDay();
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayName = dayNames[dayIndex];
+  
+  const isOpenDay = clubOpenDays.includes(dayName);
+  
+  console.log(`[MENU-DP-NORMAL] Normal day pricing calculation:`, {
+    selectedDate: referenceDate.toISOString(),
+    dayName,
+    isOpenDay,
+    clubOpenDays,
+    basePrice
+  });
+  
+  if (!isOpenDay) {
+    // Club Closed Days: 30% discount
+    const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
+    console.log(`[MENU-DP-NORMAL] Club closed day: ${basePrice} * 0.7 = ${finalPrice}`);
+    return finalPrice;
+  }
+  
+  // Club is open on this day - check hours
+  const hours = openHours.find(h => h.day === dayName);
+  if (!hours) {
+    // No hours defined for this day, treat as closed
+    const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
+    console.log(`[MENU-DP-NORMAL] No hours defined for ${dayName}: ${basePrice} * 0.7 = ${finalPrice}`);
+    return finalPrice;
+  }
+  
+  // Parse opening hours
+  const [openHour, openMinute] = hours.open.split(':').map(Number);
+  const [closeHour, closeMinute] = hours.close.split(':').map(Number);
+  
+  // Create opening time for the selected date
+  const openTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), openHour, openMinute);
+  let closeTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), closeHour, closeMinute);
+  
+  // Handle cross-midnight
+  if (closeTime <= openTime) {
+    closeTime.setDate(closeTime.getDate() + 1);
+  }
+  
+  const now = new Date();
+  const minutesUntilOpen = Math.round((openTime.getTime() - now.getTime()) / 60000);
+  const isCurrentlyOpen = now >= openTime && now < closeTime;
+  
+  console.log(`[MENU-DP-NORMAL] Time calculation:`, {
+    currentTime: now.toISOString(),
+    openTime: openTime.toISOString(),
+    closeTime: closeTime.toISOString(),
+    minutesUntilOpen,
+    isCurrentlyOpen,
+    hours: `${hours.open} - ${hours.close}`
+  });
+  
+  if (isCurrentlyOpen) {
+    // During Club Open Hours: Base price (no discount)
+    console.log(`[MENU-DP-NORMAL] Currently open: ${basePrice} (no discount)`);
+    return basePrice;
+  } else if (minutesUntilOpen > 180) {
+    // Club Open Days, 3+ hours before opening: 30% discount
+    const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
+    console.log(`[MENU-DP-NORMAL] 3+ hours before opening: ${basePrice} * 0.7 = ${finalPrice} (${minutesUntilOpen}min away)`);
+    return finalPrice;
+  } else if (minutesUntilOpen > 0) {
+    // Club Open Days, < 3 hours before opening: 10% discount
+    const finalPrice = Math.round(basePrice * 0.9 * 100) / 100;
+    console.log(`[MENU-DP-NORMAL] <3 hours before opening: ${basePrice} * 0.9 = ${finalPrice} (${minutesUntilOpen}min away)`);
+    return finalPrice;
+  } else {
+    // Club is closed for the day (after hours)
+    const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
+    console.log(`[MENU-DP-NORMAL] After hours: ${basePrice} * 0.7 = ${finalPrice} (${minutesUntilOpen}min past close)`);
+    return finalPrice;
+  }
+}
+
+/**
  * Dynamic pricing for general covers (non-event tickets)
  */
 export function computeDynamicCoverPrice(input: Omit<DynamicPriceInput, 'useDateBasedLogic'>): number {
@@ -340,6 +457,81 @@ export function getEventTicketDynamicPricingReason(eventDate: Date, eventOpenHou
   
   // Event has passed grace period: blocked
   return "event_expired";
+}
+
+/**
+ * Dynamic pricing for menu items on event dates
+ * - Menu items can get discounts but NEVER surcharges (floor at base price)
+ * - Uses event time windows but caps at base price
+ */
+export function computeDynamicMenuEventPrice(basePrice: number, eventDate: Date, eventOpenHours?: { open: string, close: string }): number {
+  if (!basePrice || basePrice <= 0 || isNaN(basePrice) || !(eventDate instanceof Date) || isNaN(eventDate.getTime())) {
+    return 0;
+  }
+  if (basePrice === 0) {
+    return 0;
+  }
+  
+  // Combine event date with event open time to get the actual event start time
+  let eventStartTime = new Date(eventDate);
+  
+  if (eventOpenHours && eventOpenHours.open) {
+    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
+    
+    // Handle the case where eventDate is a date string from database (like "2025-07-29")
+    if (eventDate.toISOString().includes('T00:00:00')) {
+      // This is a date-only string from database, create proper event time
+      const dateStr = eventDate.toISOString().split('T')[0];
+      const [year, month, day] = dateStr.split('-').map(Number);
+      
+      // Create event start time in local timezone (Colombian time)
+      eventStartTime = new Date(year, month - 1, day, openHour, openMinute, 0, 0);
+    } else {
+      // This is already a proper datetime, just set the hours
+      eventStartTime = new Date(eventDate);
+      eventStartTime.setHours(openHour, openMinute, 0, 0);
+    }
+  }
+  
+  const now = new Date();
+  const hoursUntilEvent = Math.floor(
+    (eventStartTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+  );
+  
+  console.log(`[MENU-DP-EVENT] Event pricing calculation:`, {
+    eventStartTime: eventStartTime.toISOString(),
+    currentTime: now.toISOString(),
+    hoursUntilEvent,
+    basePrice,
+    eventOpenHours
+  });
+  
+  if (isNaN(hoursUntilEvent)) {
+    console.log(`[MENU-DP-EVENT] Invalid hours calculation, returning base price`);
+    return basePrice;
+  }
+  
+  let multiplier: number;
+  
+  if (hoursUntilEvent >= 48) {
+    // 48+ hours away: 30% discount
+    multiplier = DYNAMIC_PRICING.EVENT.HOURS_48_PLUS; // 0.7
+    console.log(`[MENU-DP-EVENT] Using 48+ hours rule: ${multiplier} (${hoursUntilEvent}h away)`);
+  } else if (hoursUntilEvent >= 24) {
+    // 24-48 hours away: base price
+    multiplier = DYNAMIC_PRICING.EVENT.HOURS_24_48; // 1.0
+    console.log(`[MENU-DP-EVENT] Using 24-48 hours rule: ${multiplier} (${hoursUntilEvent}h away)`);
+  } else {
+    // <24 hours: base price (NEVER apply surcharges to menu items)
+    multiplier = DYNAMIC_PRICING.EVENT.HOURS_24_48; // 1.0 (base price, not surcharge)
+    console.log(`[MENU-DP-EVENT] Using <24 hours rule: ${multiplier} (${hoursUntilEvent}h away)`);
+  }
+  
+  // Calculate price and clamp to never exceed base price
+  const calculatedPrice = Math.round(basePrice * multiplier * 100) / 100;
+  const finalPrice = Math.min(calculatedPrice, basePrice); // Floor at base price
+  console.log(`[MENU-DP-EVENT] Final calculation: ${basePrice} * ${multiplier} = ${calculatedPrice} → ${finalPrice}`);
+  return finalPrice;
 }
 
 /**

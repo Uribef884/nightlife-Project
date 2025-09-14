@@ -8,6 +8,7 @@ import { computeDynamicPrice } from "../utils/dynamicPricing";
 import { sanitizeInput } from "../utils/sanitizeInput";
 import { calculatePlatformFee, calculateGatewayFees } from "../utils/menuFeeUtils";
 import { getMenuCommissionRate } from "../config/fees";
+import { UnifiedCartService } from "../services/unifiedCart.service";
 import { wompiService } from "../services/wompi.service";
 import { WOMPI_CONFIG } from "../config/wompi";
 import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
@@ -221,19 +222,25 @@ export const initiateWompiMenuCheckout = async (req: Request, res: Response) => 
     if (hasVariants && item.variant) {
       // For variants, check variant's dynamic pricing setting
       if (item.variant.dynamicPricingEnabled) {
-        dynamicPrice = computeDynamicPrice({
+        const cartService = new UnifiedCartService();
+        dynamicPrice = await cartService.calculateMenuDynamicPrice({
           basePrice,
           clubOpenDays: club.openDays,
-          openHours: club.openHours, // Pass the array directly, not a string
+          openHours: club.openHours,
+          selectedDate: item.date ? new Date(item.date) : undefined,
+          clubId: club.id,
         });
       }
     } else {
       // For regular menu items, check menu item's dynamic pricing setting
       if (item.menuItem.dynamicPricingEnabled) {
-        dynamicPrice = computeDynamicPrice({
+        const cartService = new UnifiedCartService();
+        dynamicPrice = await cartService.calculateMenuDynamicPrice({
           basePrice,
           clubOpenDays: club.openDays,
-          openHours: club.openHours, // Pass the array directly, not a string
+          openHours: club.openHours,
+          selectedDate: item.date ? new Date(item.date) : undefined,
+          clubId: club.id,
         });
       }
     }

@@ -1335,7 +1335,7 @@
           </div>
           
           <div id="dateSelectionStatus" class="date-selection-status info">
-            🎯 Current day is transparent purple. Click on any calendar date to select it and see available tickets and events
+            🎯 Current day is transparent purple. Click on any calendar date to select it and see available tickets, events, and menu items
           </div>
         </div>
         
@@ -1375,8 +1375,14 @@
 
         <!-- Menu Items Section (Now Bottom Left) -->
         <div class="items-section" style="margin-top: 20px;">
-          <h3>🍽️ Menu Items</h3>
-          <div id="menuItemsList" class="loading">Loading menu items...</div>
+          <h3>🍽️ Menu Items for Selected Date</h3>
+          <div id="menuItemsList" class="no-items">
+            <div style="text-align: center; padding: 20px; color: #6c757d;">
+              <div style="font-size: 2rem; margin-bottom: 10px;">📅</div>
+              <div style="font-weight: 600; margin-bottom: 5px;">No Date Selected</div>
+              <div style="font-size: 0.9rem;">Please select a date above to see available menu items</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1418,7 +1424,7 @@
       <div class="section checkout-section">
         <h2>💳 Unified Checkout</h2>
         <div id="checkoutStatus" class="status info">
-          ℹ️ Unified cart supports both tickets and menu items together
+          ℹ️ Unified cart supports both tickets and menu items together. All items must be for the same date and club.
         </div>
         <button id="ticketCheckoutBtn" class="btn btn-success">🛒 Unified Checkout</button>
         <button id="menuCheckoutBtn" class="btn btn-success">🛒 Unified Checkout (Alt)</button>

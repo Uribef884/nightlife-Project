@@ -22,7 +22,7 @@ export class UnifiedPurchaseTransaction {
   buyerEmail!: string; // for anonymous delivery of QRs
 
   @Column({ type: 'date', nullable: true })
-  ticketDate?: Date; // applies to ticket lines
+  date?: Date; // applies to all items in transaction (tickets and menu)
 
   // Financial (totals and category splits)
   @Column('decimal')

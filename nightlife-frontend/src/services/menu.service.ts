@@ -16,6 +16,7 @@ export type MenuVariantDTO = {
   name: string;
   price: number | string; // API sometimes returns string
   dynamicPricingEnabled?: boolean;
+  dynamicPrice?: number | string; // API sometimes returns string
   maxPerPerson?: number | null;
   isActive?: boolean;
   isDeleted?: boolean;
@@ -29,6 +30,7 @@ export type MenuItemDTO = {
   imageBlurhash?: string | null;
   price: number | null;                 // null if hasVariants
   dynamicPricingEnabled?: boolean;
+  dynamicPrice?: number | string | null; // API sometimes returns string
   clubId: string;
   categoryId: string;
   category?: MenuCategoryDTO | null;    // may be present
@@ -49,6 +51,23 @@ export type MenuCartSummary = {
   }>;
 };
 
+export type AvailableMenuResponse = {
+  clubId: string;
+  date: string; // YYYY-MM-DD
+  dateHasEvent: boolean;
+  event: {
+    id: string;
+    name: string;
+    availableDate: string; // YYYY-MM-DD
+    bannerUrl: string | null;
+  } | null;
+  categories: Array<{
+    id: string;
+    name: string;
+    items: MenuItemDTO[];
+  }>;
+};
+
 /** GET public menu items for a club */
 export async function getMenuItemsForClubCSR(clubId: string, selectedDate?: string): Promise<MenuItemDTO[]> {
   const url = selectedDate 
@@ -63,6 +82,87 @@ export async function getMenuItemsForClubCSR(clubId: string, selectedDate?: stri
   if (!res.ok) throw new Error("No se pudo cargar el menú.");
   const data = await res.json();
   return Array.isArray(data) ? (data as MenuItemDTO[]) : [];
+}
+
+/**
+ * Fetch menu items available for a club on a given local date (YYYY-MM-DD) with event information.
+ * - Uses no-store to avoid stale cache while selecting dates
+ * - Throws on non-2xx status so callers can handle/display errors
+ * - Returns event information and properly priced menu items
+ */
+export async function getAvailableMenuForDate(
+  clubId: string,
+  dateISO: string
+): Promise<AvailableMenuResponse> {
+  if (!clubId || !dateISO) {
+    throw new Error("clubId and dateISO are required");
+  }
+
+  const url = joinUrl(API_BASE_CSR, `/menu/items/available/${encodeURIComponent(clubId)}/${encodeURIComponent(dateISO)}`);
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Failed to fetch available menu (${res.status}): ${text || res.statusText}`
+    );
+  }
+
+  const data = (await res.json()) as AvailableMenuResponse;
+
+  // Normalize menu items defensively and ensure dynamic pricing is properly structured
+  const normalizeMenuItem = (item: any): MenuItemDTO => ({
+    id: String(item.id),
+    name: String(item.name),
+    description: item.description ?? null,
+    imageUrl: item.imageUrl ?? null,
+    imageBlurhash: item.imageBlurhash ?? null,
+    price: item.price ?? null,
+    dynamicPricingEnabled: !!item.dynamicPricingEnabled,
+    dynamicPrice: item.dynamicPrice ?? null,
+    clubId: String(item.clubId),
+    categoryId: String(item.categoryId),
+    category: item.category ? {
+      id: String(item.category.id),
+      name: String(item.category.name),
+      clubId: String(item.category.clubId),
+      isActive: !!item.category.isActive,
+    } : null,
+    maxPerPerson: item.maxPerPerson ? Number(item.maxPerPerson) : null,
+    hasVariants: !!item.hasVariants,
+    isActive: !!item.isActive,
+    isDeleted: !!item.isDeleted,
+    variants: Array.isArray(item.variants)
+      ? item.variants.map((variant: any) => ({
+          id: String(variant.id),
+          name: String(variant.name),
+          price: variant.price,
+          dynamicPricingEnabled: !!variant.dynamicPricingEnabled,
+          dynamicPrice: variant.dynamicPrice ?? null,
+          maxPerPerson: variant.maxPerPerson ? Number(variant.maxPerPerson) : null,
+          isActive: !!variant.isActive,
+          isDeleted: !!variant.isDeleted,
+        }))
+      : [],
+  });
+
+  // Normalize categories and their items
+  data.categories = Array.isArray(data.categories) 
+    ? data.categories.map((category: any) => ({
+        id: String(category.id),
+        name: String(category.name),
+        items: Array.isArray(category.items) 
+          ? category.items.map(normalizeMenuItem)
+          : [],
+      }))
+    : [];
+
+  return data;
 }
 
 /** MENU CART — Add (no variant) */

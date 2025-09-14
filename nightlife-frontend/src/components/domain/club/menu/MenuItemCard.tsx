@@ -60,6 +60,7 @@ export function MenuItemCard({
   qtyInCartForItem = 0,
   cartLineIdForItem = "",
   qtyByVariantId = new Map<string, { qty: number; id: string }>(),
+  selectedDate,
   onAddItem,
   onAddVariant,
   onChangeQty,
@@ -68,6 +69,7 @@ export function MenuItemCard({
   qtyInCartForItem?: number;
   cartLineIdForItem?: string;
   qtyByVariantId?: Map<string, { qty: number; id: string }>;
+  selectedDate?: string | null;
   onAddItem: () => void; // only for items without variants
   onAddVariant: (variant: MenuVariantDTO) => void;
   onChangeQty: (cartLineId: string, nextQty: number) => void;
@@ -81,13 +83,16 @@ export function MenuItemCard({
   const basePrice = toNum((item as any).price);
   const dynamicPrice = toNum((item as any)?.dynamicPrice);
   
-  // Use dynamic price if available and enabled, otherwise use base price
-  const priceNow = (item.dynamicPricingEnabled && dynamicPrice != null && !isNaN(dynamicPrice)) 
+  // Only show dynamic pricing if date is selected and valid
+  const showDynamicPricing = selectedDate && item.dynamicPricingEnabled;
+  
+  // Use dynamic price if available and enabled and date is valid, otherwise use base price
+  const priceNow = (showDynamicPricing && dynamicPrice != null && !isNaN(dynamicPrice)) 
     ? dynamicPrice 
     : basePrice;
   
-  // Show strike-through only when dynamic price is cheaper than base price
-  const compareAt = (item.dynamicPricingEnabled && dynamicPrice != null && basePrice != null && dynamicPrice < basePrice) 
+  // Show strike-through only when dynamic price is cheaper than base price and date is valid
+  const compareAt = (showDynamicPricing && dynamicPrice != null && basePrice != null && dynamicPrice < basePrice) 
     ? basePrice 
     : null;
 
@@ -254,19 +259,32 @@ export function MenuItemCard({
           ) : (
             <button
               type="button"
-              onClick={onAddItem}
-              className="w-full rounded-full bg-green-600 hover:bg-green-500 text-white py-2 font-semibold text-sm sm:text-base"
+              onClick={selectedDate ? onAddItem : undefined}
+              disabled={!selectedDate}
+              className={`w-full rounded-full py-2 font-semibold text-sm sm:text-base ${
+                selectedDate 
+                  ? "bg-green-600 hover:bg-green-500 text-white cursor-pointer" 
+                  : "bg-gray-500 text-gray-300 cursor-not-allowed"
+              }`}
             >
-              Agregar al carrito
+              {selectedDate ? "Agregar al carrito" : "Selecciona fecha"}
             </button>
           )
         ) : (
           <button
             type="button"
-            onClick={() => setShowVariants((v) => !v)}
-            className="w-full rounded-full bg-white/10 hover:bg-white/15 text-white py-2 font-semibold text-sm sm:text-base"
+            onClick={selectedDate ? () => setShowVariants((v) => !v) : undefined}
+            disabled={!selectedDate}
+            className={`w-full rounded-full py-2 font-semibold text-sm sm:text-base ${
+              selectedDate 
+                ? "bg-white/10 hover:bg-white/15 text-white cursor-pointer" 
+                : "bg-gray-500 text-gray-300 cursor-not-allowed"
+            }`}
           >
-            {showVariants ? "Ocultar opciones" : "Ver opciones"}
+            {selectedDate 
+              ? (showVariants ? "Ocultar opciones" : "Ver opciones")
+              : "Selecciona fecha"
+            }
           </button>
         )}
       </div>
@@ -298,6 +316,7 @@ export function MenuItemCard({
                       variant={variant}
                       qtyInCart={inCart?.qty ?? 0}
                       cartLineId={inCart?.id ?? ""}
+                      selectedDate={selectedDate}
                       onAdd={() => onAddVariant(variant)}
                       onChangeQty={onChangeQty}
                     />

@@ -9,6 +9,7 @@ import {
   getItemsForMyClub,
   getMenuForClub,
   getPublicMenuForClub,
+  getAvailableMenuForDate,
   toggleMenuItemDynamicPricing
 } from "../controllers/menuItem.controller";
 import { authMiddleware, requireClubOwnerOrAdmin } from "../middlewares/authMiddleware";
@@ -20,6 +21,7 @@ const router = Router();
 router.get("/all", getAllMenuItems);  //Returns all menu items across all clubs (only active items, with active variants).
 router.get("/club/:clubId", getMenuForClub);
 router.get("/club/:clubId/public", getPublicMenuForClub); // ✅ new route for grouped public menu
+router.get("/available/:clubId/:date", getAvailableMenuForDate); // ✅ new route for available menu with event info
 router.get("/:id", getMenuItemById);
 
 // Clubowner routes

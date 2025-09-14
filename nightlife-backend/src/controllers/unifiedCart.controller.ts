@@ -41,13 +41,13 @@ export class UnifiedCartController {
         );
       } else if (itemType === 'menu') {
         // Validate menu input
-        if (!menuItemId || quantity == null || quantity <= 0) {
-          res.status(400).json({ error: "Missing or invalid fields for menu: menuItemId and quantity are required" });
+        if (!menuItemId || quantity == null || quantity <= 0 || !date) {
+          res.status(400).json({ error: "Missing or invalid fields for menu: menuItemId, quantity, and date are required" });
           return;
         }
 
         cartItem = await this.cartService.addMenuToCart(
-          { menuItemId, variantId, quantity },
+          { menuItemId, variantId, quantity, date },
           userId,
           sessionId
         );

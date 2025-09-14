@@ -13,6 +13,7 @@ import { validateImageUrlWithResponse } from "../utils/validateImageUrl";
 import { S3Service } from "../services/s3Service";
 import { ImageService } from "../services/imageService";
 import { cleanupMenuItemS3Files } from "../utils/s3Cleanup";
+import { UnifiedCartService } from "../services/unifiedCart.service";
 
 export const createMenuItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -311,28 +312,36 @@ export const getAllMenuItems = async (req: AuthenticatedRequest, res: Response):
       
       let dynamicPrice = null;
       if (item.dynamicPricingEnabled && !item.hasVariants && club) {
-        dynamicPrice = computeDynamicPrice({
+        // Use the new event-aware dynamic pricing logic
+        const cartService = new UnifiedCartService();
+        dynamicPrice = await cartService.calculateMenuDynamicPrice({
           basePrice: Number(item.price),
           clubOpenDays: club.openDays,
           openHours: club.openHours,
+          selectedDate: undefined, // No specific date for general menu display
+          clubId: club.id,
         });
       }
       let variants = item.variants;
       if (item.hasVariants && variants && club) {
-        variants = variants.map(variant => {
+        variants = await Promise.all(variants.map(async variant => {
           let vDynamicPrice = variant.price;
           if (variant.dynamicPricingEnabled) {
-            vDynamicPrice = computeDynamicPrice({
+            // Use the new event-aware dynamic pricing logic for variants
+            const cartService = new UnifiedCartService();
+            vDynamicPrice = await cartService.calculateMenuDynamicPrice({
               basePrice: Number(variant.price),
               clubOpenDays: club.openDays,
               openHours: club.openHours,
+              selectedDate: undefined, // No specific date for general menu display
+              clubId: club.id,
             });
           }
           return {
             ...variant,
             dynamicPrice: vDynamicPrice,
           };
-        });
+        }));
       }
       return {
         ...item,
@@ -537,38 +546,46 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
         }
       });
 
-      const itemsWithDynamic = items.map(item => {
+      const itemsWithDynamic = await Promise.all(items.map(async item => {
         let dynamicPrice = null;
         if (item.dynamicPricingEnabled && !item.hasVariants && club) {
-          dynamicPrice = computeDynamicPrice({
-            basePrice: Number(item.price),
-            clubOpenDays: club.openDays,
-            openHours: club.openHours,
-          });
+        // Use the new event-aware dynamic pricing logic
+        const cartService = new UnifiedCartService();
+        dynamicPrice = await cartService.calculateMenuDynamicPrice({
+          basePrice: Number(item.price),
+          clubOpenDays: club.openDays,
+          openHours: club.openHours,
+          selectedDate: undefined, // No specific date for general menu display
+          clubId: club.id,
+        });
         }
         let variants = item.variants;
         if (item.hasVariants && variants && club) {
-          variants = variants.map(variant => {
+          variants = await Promise.all(variants.map(async variant => {
             let vDynamicPrice = variant.price;
             if (variant.dynamicPricingEnabled) {
-              vDynamicPrice = computeDynamicPrice({
-                basePrice: Number(variant.price),
-                clubOpenDays: club.openDays,
-                openHours: club.openHours,
-              });
+            // Use the new event-aware dynamic pricing logic for variants
+            const cartService = new UnifiedCartService();
+            vDynamicPrice = await cartService.calculateMenuDynamicPrice({
+              basePrice: Number(variant.price),
+              clubOpenDays: club.openDays,
+              openHours: club.openHours,
+              selectedDate: undefined, // No specific date for general menu display
+              clubId: club.id,
+            });
             }
             return {
               ...variant,
               dynamicPrice: vDynamicPrice,
             };
-          });
+          }));
         }
         return {
           ...item,
           dynamicPrice,
           variants,
         };
-      });
+      }));
 
       res.json(itemsWithDynamic);
     } catch (err) {
@@ -615,7 +632,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
     // Filter inactive and soft-deleted variants and group by category
     const grouped: Record<string, any> = {};
 
-    items.forEach(item => {
+    await Promise.all(items.map(async item => {
       const variants = item.variants?.filter(v => v.isActive && !v.isDeleted) ?? [];
       let dynamicPrice = null;
       if (item.dynamicPricingEnabled && !item.hasVariants && club) {
@@ -626,12 +643,14 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
           availableDate = new Date(year, month - 1, day);
         }
         
-        dynamicPrice = computeDynamicPrice({
+        // Use the new event-aware dynamic pricing logic
+        const cartService = new UnifiedCartService();
+        dynamicPrice = await cartService.calculateMenuDynamicPrice({
           basePrice: Number(item.price),
           clubOpenDays: club.openDays,
           openHours: club.openHours,
-          availableDate,
-          useDateBasedLogic: false,
+          selectedDate: availableDate,
+          clubId: club.id,
         });
       }
       const publicItem = {
@@ -643,7 +662,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
         dynamicPricingEnabled: item.dynamicPricingEnabled,
         dynamicPrice,
         variants: item.hasVariants
-          ? variants.map(v => {
+          ? await Promise.all(variants.map(async v => {
               let vDynamicPrice = v.price;
               if (v.dynamicPricingEnabled && club) {
                 // Parse the selected date if provided, otherwise use current time
@@ -653,12 +672,14 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
                   availableDate = new Date(year, month - 1, day);
                 }
                 
-                vDynamicPrice = computeDynamicPrice({
+                // Use the new event-aware dynamic pricing logic for variants
+                const cartService = new UnifiedCartService();
+                vDynamicPrice = await cartService.calculateMenuDynamicPrice({
                   basePrice: Number(v.price),
                   clubOpenDays: club.openDays,
                   openHours: club.openHours,
-                  availableDate,
-                  useDateBasedLogic: false,
+                  selectedDate: availableDate,
+                  clubId: club.id,
                 });
               }
               return {
@@ -668,7 +689,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
                 dynamicPricingEnabled: v.dynamicPricingEnabled,
                 dynamicPrice: vDynamicPrice,
               };
-            })
+            }))
           : [],
       };
 
@@ -681,7 +702,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
         };
       }
       grouped[catKey].items.push(publicItem);
-    });
+    }));
 
     const result = Object.values(grouped);
 
@@ -689,6 +710,173 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
   } catch (err) {
     console.error("Error loading public menu:", err);
     res.status(500).json({ error: "Failed to load public menu" });
+  }
+};
+
+/**
+ * Get available menu items for a club on a specific date with event information
+ * Similar to getAvailableTicketsForDate but for menu items
+ */
+export const getAvailableMenuForDate = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { clubId, date } = req.params;
+
+    if (!clubId || !date) {
+      res.status(400).json({ error: "clubId and date are required" });
+      return;
+    }
+
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      res.status(400).json({ error: "Date must be in YYYY-MM-DD format" });
+      return;
+    }
+
+    const repo = AppDataSource.getRepository(MenuItem);
+    const clubRepo = AppDataSource.getRepository(Club);
+    const eventRepo = AppDataSource.getRepository('Event');
+
+    // Get club
+    const club = await clubRepo.findOne({
+      where: { id: clubId, isActive: true, isDeleted: false }
+    });
+
+    if (!club) {
+      res.status(404).json({ error: "Club not found or inactive" });
+      return;
+    }
+
+    // Check if there's an event on this date
+    const eventDate = new Date(date);
+    const event = await eventRepo.findOne({
+      where: {
+        clubId: clubId,
+        availableDate: eventDate,
+        isActive: true,
+        isDeleted: false
+      }
+    });
+
+    // Get menu items for the club
+    const items = await repo.find({
+      where: { 
+        clubId: clubId, 
+        isActive: true, 
+        isDeleted: false 
+      },
+      relations: ["variants", "category"],
+      order: { name: "ASC" },
+    });
+
+    // Filter out inactive and soft-deleted variants
+    const itemsWithDynamic = await Promise.all(items.map(async item => {
+      if (item.variants) {
+        item.variants = item.variants.filter(v => v.isActive && !v.isDeleted);
+      }
+      
+      let dynamicPrice = null;
+      if (item.dynamicPricingEnabled && !item.hasVariants) {
+        // Use the new event-aware dynamic pricing logic
+        const cartService = new UnifiedCartService();
+        dynamicPrice = await cartService.calculateMenuDynamicPrice({
+          basePrice: Number(item.price),
+          clubOpenDays: club.openDays,
+          openHours: club.openHours,
+          selectedDate: eventDate,
+          clubId: club.id,
+        });
+      }
+      
+      let variants = item.variants;
+      if (item.hasVariants && variants) {
+        variants = await Promise.all(variants.map(async variant => {
+          let vDynamicPrice = variant.price;
+          if (variant.dynamicPricingEnabled) {
+            // Use the new event-aware dynamic pricing logic for variants
+            const cartService = new UnifiedCartService();
+            vDynamicPrice = await cartService.calculateMenuDynamicPrice({
+              basePrice: Number(variant.price),
+              clubOpenDays: club.openDays,
+              openHours: club.openHours,
+              selectedDate: eventDate,
+              clubId: club.id,
+            });
+          }
+          return {
+            ...variant,
+            dynamicPrice: vDynamicPrice,
+          } as any;
+        }));
+      }
+
+      return {
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        imageUrl: item.imageUrl,
+        imageBlurhash: item.imageBlurhash,
+        price: item.hasVariants ? null : item.price,
+        dynamicPricingEnabled: item.dynamicPricingEnabled,
+        dynamicPrice,
+        clubId: item.clubId,
+        categoryId: item.categoryId,
+        category: item.category ? {
+          id: item.category.id,
+          name: item.category.name,
+          clubId: item.category.clubId,
+          isActive: item.category.isActive,
+        } : null,
+        maxPerPerson: item.hasVariants ? null : item.maxPerPerson,
+        hasVariants: item.hasVariants,
+        isActive: item.isActive,
+        isDeleted: item.isDeleted,
+        variants: item.hasVariants
+          ? variants.map((v: any) => ({
+              id: v.id,
+              name: v.name,
+              price: v.price,
+              dynamicPricingEnabled: v.dynamicPricingEnabled,
+              dynamicPrice: v.dynamicPrice,
+              maxPerPerson: v.maxPerPerson,
+              isActive: v.isActive,
+              isDeleted: v.isDeleted,
+            }))
+          : [],
+      };
+    }));
+
+    // Group items by category
+    const grouped: Record<string, any> = {};
+    itemsWithDynamic.forEach(item => {
+      const catKey = item.category?.id || "uncategorized";
+      if (!grouped[catKey]) {
+        grouped[catKey] = {
+          id: item.category?.id || null,
+          name: item.category?.name || "Uncategorized",
+          items: []
+        };
+      }
+      grouped[catKey].items.push(item);
+    });
+
+    const result = {
+      clubId: club.id,
+      date: date,
+      dateHasEvent: !!event,
+      event: event ? {
+        id: event.id,
+        name: event.name,
+        availableDate: event.availableDate.toISOString().split('T')[0],
+        bannerUrl: event.bannerUrl,
+      } : null,
+      categories: Object.values(grouped),
+    };
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error loading available menu for date:", err);
+    res.status(500).json({ error: "Failed to load available menu" });
   }
 };
 

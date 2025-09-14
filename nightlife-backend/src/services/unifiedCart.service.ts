@@ -3,7 +3,7 @@ import { UnifiedCartItem } from '../entities/UnifiedCartItem';
 import { Ticket, TicketCategory } from '../entities/Ticket';
 import { MenuItem } from '../entities/MenuItem';
 import { MenuItemVariant } from '../entities/MenuItemVariant';
-import { computeDynamicPrice, computeDynamicEventPrice } from '../utils/dynamicPricing';
+import { computeDynamicPrice, computeDynamicEventPrice, computeDynamicMenuEventPrice, computeDynamicMenuNormalPrice } from '../utils/dynamicPricing';
 import { calculateFeeAllocation } from '../utils/feeAllocation';
 
 export interface AddTicketToCartInput {
@@ -16,6 +16,7 @@ export interface AddMenuToCartInput {
   menuItemId: string;
   variantId?: string;
   quantity: number;
+  date: string; // YYYY-MM-DD - required for menu items
 }
 
 export interface CartValidationResult {
@@ -193,7 +194,7 @@ export class UnifiedCartService {
     userId?: string,
     sessionId?: string
   ): Promise<UnifiedCartItem> {
-    const { menuItemId, variantId, quantity } = input;
+    const { menuItemId, variantId, quantity, date } = input;
 
     // Validate ownership
     if (!userId && !sessionId) {
@@ -203,6 +204,20 @@ export class UnifiedCartService {
     // Validate quantity
     if (quantity <= 0) {
       throw new Error('Quantity must be greater than 0');
+    }
+
+    // Validate date - use UTC for consistent validation regardless of server location
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    if (date < todayStr) {
+      throw new Error('Cannot select a past date');
+    }
+
+    // Validate date is not more than 21 days in the future
+    const maxDateStr = new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0];
+    if (date > maxDateStr) {
+      throw new Error('Cannot select a date more than 21 days in the future');
     }
 
     // Get existing cart items for validation
@@ -228,6 +243,24 @@ export class UnifiedCartService {
       throw new Error('Club must be in structured menu mode to add menu items');
     }
 
+    // Check if there's an event on this date - if so, bypass openDays validation
+    const eventRepo = AppDataSource.getRepository('Event');
+    const event = await eventRepo.findOne({
+      where: {
+        clubId: menuItem.clubId,
+        availableDate: new Date(`${date}T00:00:00`),
+        isActive: true
+      }
+    });
+
+    // Only check openDays if there's no event (events bypass openDays validation)
+    if (!event) {
+      const selectedDay = new Date(`${date}T12:00:00`).toLocaleString("en-US", { weekday: "long" });
+      if (!(menuItem.club.openDays || []).includes(selectedDay)) {
+        throw new Error(`This club is not open on ${selectedDay}`);
+      }
+    }
+
     // Validate variant requirements
     if (menuItem.hasVariants && !variantId) {
       throw new Error('Variant is required for this menu item');
@@ -247,13 +280,14 @@ export class UnifiedCartService {
     }
 
     // Validate cart consistency
-    await this.validateCartConsistency(existingItems, menuItem.clubId, undefined, 'menu');
+    await this.validateCartConsistency(existingItems, menuItem.clubId, date, 'menu');
 
     // Check for existing menu item in cart
     const existingMenuItem = existingItems.find(
       item => item.itemType === 'menu' && 
                item.menuItemId === menuItemId && 
-               item.variantId === (variantId || null)
+               item.variantId === (variantId || null) &&
+               item.date?.toISOString().split('T')[0] === date
     );
 
     if (existingMenuItem) {
@@ -280,6 +314,7 @@ export class UnifiedCartService {
         menuItemId,
         variantId: variantId || undefined,
         quantity,
+        date: date, // Store as string to match ticket behavior
         clubId: menuItem.clubId,
         userId: userId || undefined,
         sessionId: sessionId || undefined
@@ -381,21 +416,23 @@ export class UnifiedCartService {
         if (item.menuItem.hasVariants && item.variant) {
           // For items with variants, check variant's dynamic pricing
           if (item.variant.dynamicPricingEnabled && item.menuItem.club) {
-            dynamicPrice = computeDynamicPrice({
+            dynamicPrice = await this.calculateMenuDynamicPrice({
               basePrice,
               clubOpenDays: item.menuItem.club.openDays,
               openHours: item.menuItem.club.openHours,
-              useDateBasedLogic: false,
+              selectedDate: item.date ? new Date(item.date) : undefined,
+              clubId: item.clubId,
             });
           }
         } else {
           // For items without variants, check menu item's dynamic pricing
           if (item.menuItem.dynamicPricingEnabled && item.menuItem.club) {
-            dynamicPrice = computeDynamicPrice({
+            dynamicPrice = await this.calculateMenuDynamicPrice({
               basePrice,
               clubOpenDays: item.menuItem.club.openDays,
               openHours: item.menuItem.club.openHours,
-              useDateBasedLogic: false,
+              selectedDate: item.date ? new Date(item.date) : undefined,
+              clubId: item.clubId,
             });
           }
         }
@@ -648,28 +685,120 @@ export class UnifiedCartService {
       }
     }
 
-    // Rule 2: For tickets, all must be for the same date (unless they're event tickets from the same event)
-    if (newItemType === 'ticket' && newDate) {
-      const existingTicketItems = existingItems.filter(item => item.itemType === 'ticket');
-      for (const item of existingTicketItems) {
+    // Rule 2: All items (tickets and menu) must be for the same date
+    if (newDate) {
+      for (const item of existingItems) {
         const itemDate = item.date ? 
           (item.date instanceof Date ? item.date.toISOString().split('T')[0] : String(item.date).split('T')[0]) : 
           null;
         
         if (itemDate !== newDate) {
           // Allow different dates only if both are event tickets from the same event
-          const isNewTicketEvent = newTicketCategory === 'event';
-          const isExistingTicketEvent = item.ticket?.category === 'event';
+          const isNewTicketEvent = newItemType === 'ticket' && newTicketCategory === 'event';
+          const isExistingTicketEvent = item.itemType === 'ticket' && item.ticket?.category === 'event';
           
           if (isNewTicketEvent && isExistingTicketEvent) {
             // Allow different dates for event tickets (they might be multi-day events)
             continue;
           } else {
-            throw new Error('All tickets in cart must be for the same date');
+            const itemDateDisplay = itemDate || 'unknown date';
+            throw new Error(`All items in cart must be for the same date. Current cart has items for ${itemDateDisplay}, but you're trying to add an item for ${newDate}. Please clear your cart or select the same date.`);
           }
         }
       }
     }
+  }
+
+  /**
+   * Calculate dynamic pricing for menu items with event date support
+   */
+  public async calculateMenuDynamicPrice(input: {
+    basePrice: number;
+    clubOpenDays: string[];
+    openHours: string | { day: string, open: string, close: string }[];
+    selectedDate?: Date;
+    clubId: string;
+  }): Promise<number> {
+    const { basePrice, clubOpenDays, openHours, selectedDate, clubId } = input;
+
+    if (!basePrice || basePrice <= 0) {
+      return 0;
+    }
+
+    // Check if there's an event on the selected date and get event details
+    const event = await this.getEventForDate(selectedDate, clubId);
+    
+    
+    if (event && selectedDate) {
+      // For event dates, use centralized event-based pricing for menu items
+      // Use the event's availableDate (like tickets do) instead of selectedDate
+      let eventDate: Date;
+      if (typeof event.availableDate === "string") {
+        const [year, month, day] = event.availableDate.split("-").map(Number);
+        eventDate = new Date(year, month - 1, day);
+      } else {
+        eventDate = new Date(event.availableDate);
+      }
+      
+      console.log(`[CART-DP] Using EVENT pricing for ${selectedDate.toISOString()}:`, {
+        eventName: event.name,
+        eventDate: eventDate.toISOString(),
+        basePrice
+      });
+      
+      return computeDynamicMenuEventPrice(basePrice, eventDate, event.openHours);
+    } else {
+      // For non-event dates, use menu-specific normal day pricing logic
+      console.log(`[CART-DP] Using NORMAL pricing for ${selectedDate?.toISOString() || 'no date'}:`, {
+        basePrice,
+        clubOpenDays,
+        hasOpenHours: Array.isArray(openHours) && openHours.length > 0
+      });
+      
+      return computeDynamicMenuNormalPrice({
+        basePrice,
+        clubOpenDays,
+        openHours: Array.isArray(openHours) ? openHours : [],
+        selectedDate: selectedDate ? new Date(selectedDate.toISOString().split('T')[0] + 'T12:00:00') : undefined,
+      });
+    }
+  }
+
+  /**
+   * Get event details for a given date and club
+   */
+  private async getEventForDate(date: Date | undefined, clubId: string): Promise<any | null> {
+    if (!date) return null;
+    
+    try {
+      // Query the Event entity to get event details on this date for this club
+      const eventRepo = AppDataSource.getRepository('Event');
+      
+      // Convert date to string format for database comparison
+      const dateString = date.toISOString().split('T')[0]; // "2025-09-15"
+      
+      const event = await eventRepo.findOne({
+        where: {
+          clubId: clubId,
+          availableDate: dateString,
+          isActive: true,
+          isDeleted: false
+        }
+      });
+      
+      return event;
+    } catch (error) {
+      console.error('[UNIFIED-CART] Error fetching event for date:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a given date is an event date for a specific club
+   */
+  private async isEventDate(date: Date | undefined, clubId: string): Promise<boolean> {
+    const event = await this.getEventForDate(date, clubId);
+    return !!event;
   }
 
   /**
@@ -766,21 +895,23 @@ export class UnifiedCartService {
         if (item.menuItem.hasVariants && item.variant) {
           // For items with variants, check variant's dynamic pricing
           if (item.variant.dynamicPricingEnabled && item.menuItem.club) {
-            dynamicPrice = computeDynamicPrice({
+            dynamicPrice = await this.calculateMenuDynamicPrice({
               basePrice,
               clubOpenDays: item.menuItem.club.openDays,
               openHours: item.menuItem.club.openHours,
-              useDateBasedLogic: false,
+              selectedDate: item.date ? new Date(item.date) : undefined,
+              clubId: item.clubId,
             });
           }
         } else {
           // For items without variants, check menu item's dynamic pricing
           if (item.menuItem.dynamicPricingEnabled && item.menuItem.club) {
-            dynamicPrice = computeDynamicPrice({
+            dynamicPrice = await this.calculateMenuDynamicPrice({
               basePrice,
               clubOpenDays: item.menuItem.club.openDays,
               openHours: item.menuItem.club.openHours,
-              useDateBasedLogic: false,
+              selectedDate: item.date ? new Date(item.date) : undefined,
+              clubId: item.clubId,
             });
           }
         }

@@ -45,6 +45,8 @@ export class MenuPurchase {
   @Column()
   clubId!: string;
 
+  @Column({ type: 'date', nullable: true })
+  date?: Date; // date for which the menu item was purchased
 
   @Column()
   email!: string;

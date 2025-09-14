@@ -123,7 +123,7 @@ export class UnifiedCheckoutService {
 
     // Get club ID from cart items (all should be the same)
     const clubId = cartItems[0].clubId;
-    const ticketDate = cartItems.find(item => item.itemType === 'ticket')?.date;
+    const transactionDate = cartItems[0]?.date; // All items should have the same date
 
     // 🚫 Validate minimum transaction amount (Wompi requirement: 1500 COP)
     if (feeAllocation.totalPaid < 1500) {
@@ -191,7 +191,7 @@ export class UnifiedCheckoutService {
         userId: userId || undefined,
         clubId,
         buyerEmail: email,
-        ticketDate: ticketDate || undefined,
+        date: transactionDate || undefined,
         totalPaid: feeAllocation.totalPaid,
         ticketSubtotal: feeAllocation.ticketSubtotal,
         menuSubtotal: feeAllocation.menuSubtotal,
@@ -214,7 +214,7 @@ export class UnifiedCheckoutService {
         paymentMethod: customerInfo.paymentMethod
       });
 
-      const savedTransaction = await this.transactionRepo.save(transaction) as UnifiedPurchaseTransaction;
+      const savedTransaction = await this.transactionRepo.save(transaction);
       console.log("[UNIFIED-CHECKOUT-SERVICE] Unified transaction saved", { id: savedTransaction.id, reference: savedTransaction.paymentProviderReference });
 
       // Add redirect URL if provided
@@ -348,14 +348,14 @@ export class UnifiedCheckoutService {
 
     // Get club ID from cart items (all should be the same)
     const clubId = cartItems[0].clubId;
-    const ticketDate = cartItems.find(item => item.itemType === 'ticket')?.date;
+    const transactionDate = cartItems[0]?.date; // All items should have the same date
 
     // Create unified transaction
     const transaction = this.transactionRepo.create({
       userId: userId || undefined,
       clubId,
       buyerEmail: email,
-      ticketDate: ticketDate || undefined,
+      date: transactionDate || undefined,
       totalPaid: feeAllocation.totalPaid,
       ticketSubtotal: feeAllocation.ticketSubtotal,
       menuSubtotal: feeAllocation.menuSubtotal,
@@ -377,7 +377,7 @@ export class UnifiedCheckoutService {
       paymentMethod
     });
 
-    const savedTransaction = await this.transactionRepo.save(transaction) as UnifiedPurchaseTransaction;
+    const savedTransaction = await this.transactionRepo.save(transaction);
 
     // Handle free checkout
     if (isFreeCheckout) {
@@ -504,14 +504,14 @@ export class UnifiedCheckoutService {
 
     // Get club ID from cart items
     const clubId = cartItems[0].clubId;
-    const ticketDate = cartItems.find(item => item.itemType === 'ticket')?.date;
+    const transactionDate = cartItems[0]?.date; // All items should have the same date
 
     // Create unified transaction for free checkout
     const transaction = this.transactionRepo.create({
       userId: userId || undefined,
       clubId,
       buyerEmail: email,
-      ticketDate: ticketDate || undefined,
+      date: transactionDate || undefined,
       totalPaid: 0,
       ticketSubtotal: feeAllocation.ticketSubtotal,
       menuSubtotal: feeAllocation.menuSubtotal,
@@ -534,7 +534,7 @@ export class UnifiedCheckoutService {
       paymentMethod: customerInfo.paymentMethod
     });
 
-    const savedTransaction = await this.transactionRepo.save(transaction) as UnifiedPurchaseTransaction;
+    const savedTransaction = await this.transactionRepo.save(transaction);
 
     // ✅ Process within a DB transaction using the new path (atomic & safe)
     await this.transactionRepo.manager.transaction(async (transactionalEntityManager) => {
@@ -909,6 +909,7 @@ export class UnifiedCheckoutService {
           userId: userId || null,
           sessionId: sessionId || null,
           clubId: transaction.clubId,
+          date: cartItem.date ? new Date(cartItem.date) : undefined, // Convert string date to Date object
           email: transaction.buyerEmail,
           quantity: cartItem.quantity,
           originalBasePrice: basePrice,

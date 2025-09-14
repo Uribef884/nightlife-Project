@@ -6,21 +6,44 @@ import {
   addMenuItemToCart,
   addMenuVariantToCart,
   getMenuItemsForClubCSR,
+  getAvailableMenuForDate,
   getMenuCartSummaryCSR,
   clearTicketCartForMenuCSR, // clears OTHER cart (tickets) when adding menu
   updateMenuCartQty,
   removeMenuCartItem,
   type MenuItemDTO,
   type MenuVariantDTO,
+  type AvailableMenuResponse,
 } from "@/services/menu.service";
 import { getTicketCartSummary } from "@/services/cart.service";
 import { MenuItemCard } from "./MenuItemCard";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 /** Sticky category pill nav + sections + animated variants */
-export function StructuredMenu({ clubId, selectedDate }: { clubId: string; selectedDate?: string }) {
+export function StructuredMenu({ 
+  clubId, 
+  selectedDate, 
+  openDays, 
+  eventDates, 
+  freeDates 
+}: { 
+  clubId: string; 
+  selectedDate?: string;
+  openDays?: Set<string>;
+  eventDates?: Set<string>;
+  freeDates?: Set<string>;
+}) {
   const [items, setItems] = useState<MenuItemDTO[]>([]);
   const [loading, setLoading] = useState(true);
+  const [eventInfo, setEventInfo] = useState<{
+    dateHasEvent: boolean;
+    event: {
+      id: string;
+      name: string;
+      availableDate: string;
+      bannerUrl: string | null;
+    } | null;
+  } | null>(null);
 
   // Cart summaries
   const [menuCart, setMenuCart] = useState<{
@@ -31,6 +54,35 @@ export function StructuredMenu({ clubId, selectedDate }: { clubId: string; selec
   // Confirm modal: clear ticket cart before adding menu
   const [askClearTickets, setAskClearTickets] = useState<null | { proceed: () => Promise<void> }>(null);
 
+  // Helper function to validate if a date is a valid/open day
+  const isValidDate = (date: string | null | undefined): boolean => {
+    if (!date) return false;
+    
+    const openDaysSet = openDays || new Set<string>();
+    const eventDatesSet = eventDates || new Set<string>();
+    const freeDatesSet = freeDates || new Set<string>();
+    
+    // Check if it's an event date, free date, or regular open day
+    if (eventDatesSet.has(date) || freeDatesSet.has(date)) {
+      return true;
+    }
+    
+    // Check if it's a regular open day
+    // Fix timezone issue: append noon time to ensure local date parsing
+    const dateObj = new Date(date + 'T12:00:00');
+    const weekdayFull = [
+      "sunday",
+      "monday", 
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday"
+    ][dateObj.getDay()];
+    
+    return openDaysSet.has(weekdayFull);
+  };
+
 
 
   useEffect(() => {
@@ -38,15 +90,42 @@ export function StructuredMenu({ clubId, selectedDate }: { clubId: string; selec
     (async () => {
       try {
         setLoading(true);
-        const [data, m, t] = await Promise.all([
-          getMenuItemsForClubCSR(clubId, selectedDate),
-          getMenuCartSummaryCSR(),
-          getTicketCartSummary(),
-        ]);
-        if (!alive) return;
-        setItems((data ?? []).filter((it) => (it as any)?.isActive !== false));
-        setMenuCart(m as any);
-        setTicketCart(t as any);
+        
+        // Use the new event-aware menu service if we have a selected date
+        if (selectedDate) {
+          const [menuData, m, t] = await Promise.all([
+            getAvailableMenuForDate(clubId, selectedDate),
+            getMenuCartSummaryCSR(),
+            getTicketCartSummary(),
+          ]);
+          if (!alive) return;
+          
+          // Extract menu items from categories
+          const allItems: MenuItemDTO[] = [];
+          menuData.categories.forEach(category => {
+            allItems.push(...category.items);
+          });
+          
+          setItems(allItems.filter((it) => (it as any)?.isActive !== false));
+          setEventInfo({
+            dateHasEvent: menuData.dateHasEvent,
+            event: menuData.event
+          });
+          setMenuCart(m as any);
+          setTicketCart(t as any);
+        } else {
+          // Fallback to old service when no date is selected
+          const [data, m, t] = await Promise.all([
+            getMenuItemsForClubCSR(clubId),
+            getMenuCartSummaryCSR(),
+            getTicketCartSummary(),
+          ]);
+          if (!alive) return;
+          setItems((data ?? []).filter((it) => (it as any)?.isActive !== false));
+          setEventInfo(null);
+          setMenuCart(m as any);
+          setTicketCart(t as any);
+        }
       } finally {
         if (alive) setLoading(false);
       }
@@ -267,8 +346,30 @@ export function StructuredMenu({ clubId, selectedDate }: { clubId: string; selec
     );
   }
 
+  // Event information display
+  const renderEventInfo = () => {
+    if (!eventInfo || !eventInfo.dateHasEvent || !eventInfo.event) return null;
+
+    return (
+      <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 mb-5">
+        <div className="flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+          <div>
+            <h3 className="text-white font-semibold text-lg">{eventInfo.event.name}</h3>
+            <p className="text-white/70 text-sm">
+              Evento especial • Precios con descuento por reserva anticipada
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-5">
+      {/* Event information */}
+      {renderEventInfo()}
+      
       {/* Sticky category pill */}
       <div className="sticky z-30 -mx-4 px-4 top-[var(--nl-sticky-top,64px)]">
         <div
@@ -332,6 +433,7 @@ export function StructuredMenu({ clubId, selectedDate }: { clubId: string; selec
                     qtyInCartForItem={itemInCart?.qty ?? 0}
                     cartLineIdForItem={itemInCart?.id ?? ""}
                     qtyByVariantId={qtyByVariantId}
+                    selectedDate={isValidDate(selectedDate) ? selectedDate : null}
                     onAddItem={() => handleAddItem(itemId)}
                     onAddVariant={(v) => handleAddVariant(itemId, v)}
                     onChangeQty={handleChangeQty}
