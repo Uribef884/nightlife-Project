@@ -5,6 +5,7 @@ import Footer from "@/components/layout/Footer";
 import { Providers } from "./providers";
 import { Quicksand } from "next/font/google";
 import RouteTransitions from "@/components/common/RouteTransitions"; // client wrapper
+import { GlobalModal } from "@/components/ui/GlobalModal";
 
 const quicksand = Quicksand({
   subsets: ["latin"],
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </main>
             <Footer />
           </div>
+          <GlobalModal />
         </Providers>
       </body>
     </html>

@@ -71,6 +71,7 @@ export default function LoginForm() {
             type="email"
             inputMode="email"
             autoComplete="email"
+            tabIndex={-1}
             className="mt-1 block w-full rounded-xl bg-white text-gray-900 px-3 py-2 shadow-sm 
                        placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
             placeholder="correo@ejemplo.com"
@@ -89,6 +90,7 @@ export default function LoginForm() {
               id="password"
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
+              tabIndex={-1}
               className="mt-1 block w-full rounded-xl bg-white text-gray-900 px-3 py-2 pr-10 shadow-sm 
                          placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
               placeholder="Tu contraseña"
@@ -96,6 +98,7 @@ export default function LoginForm() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
+              tabIndex={-1}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
               aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             >
@@ -116,6 +119,7 @@ export default function LoginForm() {
         <button
           type="submit"
           disabled={isLoading}
+          tabIndex={-1}
           className="w-full rounded-full bg-purple-600 py-2 font-semibold text-white shadow-sm 
                      hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-purple-500 disabled:opacity-60"
         >
@@ -157,6 +161,7 @@ export default function LoginForm() {
       <div className="mt-4 flex justify-center">
         <Link
           href="/auth/forgot-password"
+          tabIndex={-1}
           className="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium
                      text-purple-100 bg-white/5 hover:bg-white/10 border border-white/10"
         >

@@ -6,6 +6,7 @@ import {
   logout,
   forgotPassword,
   resetPassword,
+  changePassword,
   getCurrentUser,
   googleAuth,
   googleCallback,
@@ -35,6 +36,7 @@ router.post("/google/token", rateLimiter, googleTokenAuth);
 
 // Authenticated user routes
 router.post("/logout", requireAuth, logout);
+router.post("/change-password", requireAuth, changePassword);
 router.delete("/me", requireAuth, deleteOwnUser);
 router.get("/me", requireAuth, getCurrentUser); // New route to test something in mock frontend
 router.get("/me/deletion-status", requireAuth, checkUserDeletionStatus);

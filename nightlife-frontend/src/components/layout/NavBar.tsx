@@ -8,6 +8,8 @@ import { LogIn, ShoppingCart, Menu as MenuIcon, X, User } from "lucide-react";
 import { ClubTabs } from "@/components/domain/club/ClubTabs";
 import { useAuthStore } from "@/stores/auth.store";
 import { saveRedirectPath } from "@/utils/redirect";
+import { scrollToTop } from "@/utils/scrollUtils";
+import { AnimatePresence, motion } from "framer-motion";
 
 type TabKey = "general" | "reservas" | "carta";
 
@@ -46,6 +48,32 @@ export default function NavBar() {
   useEffect(() => {
     setCurrentTab(resolveTabFromURL());
   }, [pathname]);
+
+  // Close mobile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: Event) => {
+      if (mobileOpen) {
+        const target = event.target as Element;
+        const mobileMenu = document.getElementById('mobile-menu');
+        const menuButton = document.getElementById('mobile-menu-button');
+        
+        // Check if click is outside the mobile menu and not on the menu button
+        if (mobileMenu && !mobileMenu.contains(target) && menuButton && !menuButton.contains(target)) {
+          setMobileOpen(false);
+        }
+      }
+    };
+
+    if (mobileOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [mobileOpen]);
 
   const onTabChange = (t: TabKey) => {
     if (typeof window !== "undefined") window.location.hash = t;
@@ -94,7 +122,10 @@ export default function NavBar() {
             ) : (
               <Link
                 href="/auth/login"
-                onClick={saveRedirectPath}
+                onClick={() => {
+                  saveRedirectPath();
+                  scrollToTop();
+                }}
                 className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
               >
                 <LogIn className="h-4 w-4" />
@@ -107,6 +138,7 @@ export default function NavBar() {
         {/* Only show mobile menu button if not on auth routes */}
         {!isAuthRoute && (
           <button
+            id="mobile-menu-button"
             className="rounded-md p-2 text-slate-200 hover:bg-slate-800 md:hidden"
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
@@ -128,9 +160,45 @@ export default function NavBar() {
       )}
 
       {/* Mobile sheet - only show if not on auth routes */}
-      {mobileOpen && !isAuthRoute && (
-        <div id="mobile-menu" className="md:hidden" role="dialog" aria-modal="true" aria-label="Mobile menu">
-          <div className="border-t border-slate-800/60 bg-slate-900 px-4 py-3">
+      <AnimatePresence>
+        {mobileOpen && !isAuthRoute && (
+          <>
+            {/* Backdrop/Overlay */}
+            <motion.div 
+              className="fixed inset-0 bg-black/20 z-30 md:hidden"
+              onClick={() => setMobileOpen(false)}
+              aria-hidden="true"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            />
+            
+            {/* Mobile Menu */}
+            <motion.div 
+              id="mobile-menu" 
+              className="relative z-40 md:hidden" 
+              role="dialog" 
+              aria-modal="true" 
+              aria-label="Mobile menu"
+              initial={{ y: -10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ 
+                y: -10, 
+                opacity: 0,
+                transition: {
+                  type: "tween",
+                  duration: 0.15,
+                  ease: "easeIn"
+                }
+              }}
+              transition={{ 
+                type: "tween",
+                duration: 0.3,
+                ease: "easeOut"
+              }}
+            >
+              <div className="border-t border-slate-800/60 bg-slate-900 px-4 py-3">
             <div className="flex items-center justify-between">
               <span className="text-slate-200 font-semibold">Menu</span>
               <button
@@ -143,7 +211,7 @@ export default function NavBar() {
             </div>
 
             <div className="mt-3 space-y-2">
-              <button className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 px-3 py-2 text-left text-slate-200 hover:bg-slate-800">
+              <button className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 px-3 py-2 text-left text-slate-200 hover:bg-slate-800 transition-colors duration-150">
                 <ShoppingCart className="h-4 w-4" />
                 Carrito
               </button>
@@ -151,7 +219,7 @@ export default function NavBar() {
               {isAuthenticated ? (
                 <Link
                   href="/dashboard"
-                  className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500"
+                  className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500 transition-colors duration-150"
                   onClick={() => setMobileOpen(false)}
                 >
                   <User className="h-4 w-4" />
@@ -160,10 +228,11 @@ export default function NavBar() {
               ) : (
                 <Link
                   href="/auth/login"
-                  className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500"
+                  className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500 transition-colors duration-150"
                   onClick={() => {
                     saveRedirectPath();
                     setMobileOpen(false);
+                    scrollToTop();
                   }}
                 >
                   <LogIn className="h-4 w-4" />
@@ -172,8 +241,10 @@ export default function NavBar() {
               )}
             </div>
           </div>
-        </div>
-      )}
+        </motion.div>
+        </>
+        )}
+      </AnimatePresence>
     </header>
   );
 }

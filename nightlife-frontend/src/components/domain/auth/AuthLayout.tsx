@@ -1,4 +1,3 @@
-// src/components/auth/AuthLayout.tsx
 'use client';
 
 import Link from 'next/link';
@@ -12,6 +11,11 @@ type Tab = 'login' | 'register';
  * - Tabs + headline pill
  * - Animated body keyed by the active TAB (no route jump)
  * - "Saltar por ahora → /" on the right
+ *
+ * iOS / Safari notes:
+ * - Use 100svh so the initial render matches the *visible* height (prevents hidden tabs on first paint)
+ * - Respect safe areas to avoid pushing UI down with generic padding
+ * - Contain overscroll so the page doesn’t bounce into a partially scrolled state
  */
 export default function AuthLayout({
   title,
@@ -36,8 +40,8 @@ export default function AuthLayout({
   const transition: Transition = { type: 'spring', stiffness: 420, damping: 32, mass: 0.9 };
 
   return (
-    <div className="min-h-screen flex items-start sm:items-center justify-center bg-[#07071a] py-10 sm:py-16 px-4">
-      <div className="w-full max-w-xl">
+    <div className="min-h-[100svh] overscroll-contain flex items-start justify-center bg-[#07071a] px-4 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      <div className="w-full max-w-xl py-8 sm:py-12">
         {/* Tabs */}
         <div className="flex items-end justify-between">
           <div className="flex-1">
@@ -45,8 +49,8 @@ export default function AuthLayout({
           </div>
         </div>
 
-        {/* Headline pill */}
-        <div className="mt-10 flex justify-center">
+        {/* Headline pill (reduced margin on small screens) */}
+        <div className="mt-6 sm:mt-10 flex justify-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}

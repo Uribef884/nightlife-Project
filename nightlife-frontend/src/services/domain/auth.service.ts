@@ -54,6 +54,18 @@ export const resetPasswordSchema = z.object({
     .regex(/[A-Z]/, 'Password must include at least one uppercase letter'),
 });
 
+export const changePasswordSchema = z.object({
+  oldPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must include at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must include at least one number'),
+  confirmPassword: z.string().min(1, 'Password confirmation is required'),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "New passwords do not match",
+  path: ["confirmPassword"],
+});
+
 import { ApiService } from '../shared/api.service';
 
 class AuthService extends ApiService {
@@ -92,6 +104,15 @@ class AuthService extends ApiService {
   // Reset password
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
     return this.post<{ message: string }>('/auth/reset-password', { token, newPassword });
+  }
+
+  // Change password
+  async changePassword(oldPassword: string, newPassword: string, confirmPassword: string): Promise<{ message: string }> {
+    return this.post<{ message: string }>('/auth/change-password', { 
+      oldPassword, 
+      newPassword, 
+      confirmPassword 
+    });
   }
 
   // Get current user

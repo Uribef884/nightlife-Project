@@ -84,6 +84,7 @@ export default function RegisterForm() {
             type="email"
             inputMode="email"
             autoComplete="email"
+            tabIndex={-1}
             className="mt-1 block w-full rounded-xl bg-white text-gray-900 px-3 py-2 shadow-sm 
                        placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
             placeholder="correo@ejemplo.com"
@@ -102,6 +103,7 @@ export default function RegisterForm() {
               id="password"
               type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
+              tabIndex={-1}
               className="mt-1 block w-full rounded-xl bg-white text-gray-900 px-3 py-2 pr-10 shadow-sm 
                          placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
               placeholder="Crea una contraseña"
@@ -109,6 +111,7 @@ export default function RegisterForm() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
+              tabIndex={-1}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
               aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             >
@@ -129,6 +132,7 @@ export default function RegisterForm() {
               id="confirmPassword"
               type={showConfirmPassword ? 'text' : 'password'}
               autoComplete="new-password"
+              tabIndex={-1}
               className="mt-1 block w-full rounded-xl bg-white text-gray-900 px-3 py-2 pr-10 shadow-sm 
                          placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
               placeholder="Repite la contraseña"
@@ -136,6 +140,7 @@ export default function RegisterForm() {
             <button
               type="button"
               onClick={() => setShowConfirmPassword((v) => !v)}
+              tabIndex={-1}
               className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
               aria-label={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
             >
@@ -179,6 +184,7 @@ export default function RegisterForm() {
         <button
           type="submit"
           disabled={isLoading}
+          tabIndex={-1}
           className="w-full rounded-full bg-purple-600 py-2.5 font-semibold text-white shadow-sm 
                      hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-0 focus:ring-purple-500 disabled:opacity-60"
         >
@@ -188,11 +194,11 @@ export default function RegisterForm() {
         {/* Terms and Privacy Policy Consent */}
         <p className="text-xs text-gray-400 text-center mt-3">
           Al crear una cuenta, aceptas nuestros{' '}
-          <Link href="/terms" className="text-purple-400 hover:text-purple-300 underline">
+          <Link href="/terms" tabIndex={-1} className="text-purple-400 hover:text-purple-300 underline">
             Términos
           </Link>{' '}
           y reconoces nuestra{' '}
-          <Link href="/privacy" className="text-purple-400 hover:text-purple-300 underline">
+          <Link href="/privacy" tabIndex={-1} className="text-purple-400 hover:text-purple-300 underline">
             Política de Privacidad
           </Link>
           .
@@ -219,11 +225,11 @@ export default function RegisterForm() {
       {/* Terms and Privacy Policy Consent for OAuth */}
       <p className="text-xs text-gray-400 text-center mt-3">
         Al crear una cuenta, aceptas nuestros{' '}
-        <Link href="/terms" className="text-purple-400 hover:text-purple-300 underline">
+        <Link href="/terms" tabIndex={-1} className="text-purple-400 hover:text-purple-300 underline">
           Términos
         </Link>{' '}
         y reconoces nuestra{' '}
-        <Link href="/privacy" className="text-purple-400 hover:text-purple-300 underline">
+        <Link href="/privacy" tabIndex={-1} className="text-purple-400 hover:text-purple-300 underline">
           Política de Privacidad
         </Link>
         .
@@ -232,7 +238,7 @@ export default function RegisterForm() {
       {/* Back to login */}
       <div className="mt-4 text-center text-sm text-purple-200">
         ¿Ya tienes una cuenta?{' '}
-        <Link href="/auth/login" className="underline underline-offset-4 hover:text-purple-100">
+        <Link href="/auth/login" tabIndex={-1} className="underline underline-offset-4 hover:text-purple-100">
           Inicia sesión
         </Link>
       </div>

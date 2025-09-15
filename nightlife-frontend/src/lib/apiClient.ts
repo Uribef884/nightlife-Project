@@ -104,7 +104,12 @@ export async function apiFetch<T = unknown>(url: string, opts: ApiOptions = {}):
       const text = await res.text().catch(() => "");
       if (text) message = text;
     }
-    const error: ApiError = { status: res.status, message, details };
+    
+    // Throw a regular Error object instead of ApiError to prevent page reconstruction
+    const error = new Error(message);
+    // Attach additional properties for debugging if needed
+    (error as any).status = res.status;
+    (error as any).details = details;
     throw error;
   }
 

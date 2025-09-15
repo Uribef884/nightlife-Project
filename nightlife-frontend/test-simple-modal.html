@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Modal Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: white; padding: 20px; border-radius: 5px; max-width: 400px; }
+        .hidden { display: none; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    </style>
+</head>
+<body>
+    <h1>Simple Modal Test</h1>
+    
+    <div class="test-section">
+        <h3>Test Modal Display</h3>
+        <button onclick="showErrorModal()">Show Error Modal</button>
+        <button onclick="showSuccessModal()">Show Success Modal</button>
+        <button onclick="hideModal()">Hide Modal</button>
+        <button onclick="testPasswordChange()">Test Password Change Flow</button>
+    </div>
+
+    <div class="test-section">
+        <h3>Current Modal State</h3>
+        <div id="modalState">No modal shown</div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content" id="modalContent">
+            <h3 id="modalTitle">Modal Title</h3>
+            <p id="modalMessage">Modal message</p>
+            <button onclick="hideModal()">Close</button>
+        </div>
+    </div>
+
+    <script>
+        let currentModal = { show: false, type: 'error', title: '', message: '' };
+        
+        function showErrorModal() {
+            currentModal = {
+                show: true,
+                type: 'error',
+                title: 'Error',
+                message: 'Current password is incorrect'
+            };
+            updateModalDisplay();
+            updateModalState();
+        }
+        
+        function showSuccessModal() {
+            currentModal = {
+                show: true,
+                type: 'success',
+                title: 'Success',
+                message: 'Password changed successfully'
+            };
+            updateModalDisplay();
+            updateModalState();
+        }
+        
+        function hideModal() {
+            currentModal.show = false;
+            updateModalDisplay();
+            updateModalState();
+        }
+        
+        function updateModalDisplay() {
+            const modal = document.getElementById('modal');
+            const modalContent = document.getElementById('modalContent');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+            
+            if (currentModal.show) {
+                modal.classList.remove('hidden');
+                modalTitle.textContent = currentModal.title;
+                modalMessage.textContent = currentModal.message;
+                
+                // Update styling based on type
+                modalContent.className = 'modal-content';
+                if (currentModal.type === 'error') {
+                    modalContent.classList.add('error');
+                } else if (currentModal.type === 'success') {
+                    modalContent.classList.add('success');
+                }
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+        
+        function updateModalState() {
+            const stateDiv = document.getElementById('modalState');
+            stateDiv.textContent = JSON.stringify(currentModal, null, 2);
+        }
+        
+        function testPasswordChange() {
+            // Simulate password change flow
+            console.log('Testing password change flow...');
+            
+            // Simulate API call
+            setTimeout(() => {
+                // Simulate error response
+                showErrorModal();
+                console.log('Error modal should be showing now');
+            }, 1000);
+        }
+        
+        // Initialize
+        updateModalState();
+    </script>
+</body>
+</html>

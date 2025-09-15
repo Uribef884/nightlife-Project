@@ -8,6 +8,7 @@ import { z } from 'zod';
 import Link from 'next/link';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { authService } from '@/services/domain/auth.service';
+import { scrollToTop } from '@/utils/scrollUtils';
 
 const resetPasswordSchema = z.object({
   newPassword: z.string()
@@ -28,6 +29,11 @@ export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Scroll to top when the reset password page loads (mobile-friendly)
+  useEffect(() => {
+    scrollToTop();
+  }, []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,7 +123,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-start sm:items-center justify-center bg-[#07071a] py-10 sm:py-16 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#07071a] py-4 px-4">
       <div className="w-full max-w-xl">
         {/* Back to login */}
         <div className="mb-6">

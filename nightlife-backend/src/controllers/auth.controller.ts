@@ -8,7 +8,7 @@ import { isDisposableEmail } from "../utils/disposableEmailValidator";
 import { clearAnonymousCart } from "../utils/clearAnonymousCart";
 import { AuthenticatedRequest } from "../types/express";
 import { CartItem } from "../entities/TicketCartItem";
-import { authSchemaRegister } from "../schemas/auth.schema";
+import { authSchemaRegister, changePasswordSchema } from "../schemas/auth.schema";
 import { forgotPasswordSchema, resetPasswordSchema } from "../schemas/forgot.schema";
 import { sendPasswordResetEmail } from "../services/emailService"; 
 import { MenuCartItem } from "../entities/MenuCartItem";
@@ -327,6 +327,73 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
   }
 }
 
+export async function changePassword(req: Request, res: Response): Promise<void> {
+  try {
+    const typedReq = req as AuthenticatedRequest;
+    const userId = typedReq.user?.id;
+
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const result = changePasswordSchema.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({
+        error: "Invalid input",
+        details: result.error.flatten(),
+      });
+      return;
+    }
+
+    const { oldPassword, newPassword } = result.data;
+
+    const repo = AppDataSource.getRepository(User);
+    const user = await repo.findOneBy({ id: userId });
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    // Check if user account is deleted
+    if (user.isDeleted) {
+      res.status(401).json({ error: "Account has been deleted" });
+      return;
+    }
+
+    // Check if user has a password (not OAuth user)
+    if (!user.password) {
+      res.status(400).json({ error: "Cannot change password for OAuth users" });
+      return;
+    }
+
+    // Verify old password
+    const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
+    if (!isOldPasswordValid) {
+      res.status(400).json({ error: "Current password is incorrect" });
+      return;
+    }
+
+    // Check if new password is different from old password
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      res.status(400).json({ error: "New password must be different from current password" });
+      return;
+    }
+
+    // Hash and save new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedNewPassword;
+    await repo.save(user);
+
+    res.status(200).json({ message: "Password changed successfully" });
+  } catch (error) {
+    console.error("❌ Error changing password:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
+
 export const getCurrentUser = async (
   req: AuthenticatedRequest,
   res: Response
@@ -344,8 +411,26 @@ export const getCurrentUser = async (
     return;
   }
 
-  const { id, email, role, clubId } = user;
-  res.json({ id, email, role, clubId });
+  // Get full user data from database to include isOAuthUser
+  const repo = AppDataSource.getRepository(User);
+  const fullUser = await repo.findOneBy({ id: user.id });
+  
+  if (!fullUser) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const { id, email, role, clubId, isOAuthUser, firstName, lastName, avatar } = fullUser;
+  res.json({ 
+    id, 
+    email, 
+    role, 
+    clubId, 
+    isOAuthUser,
+    firstName,
+    lastName,
+    avatar
+  });
 };
 
 // ================================

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modal Persistence Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal-content { background: white; padding: 20px; border-radius: 5px; max-width: 400px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Modal Persistence Test</h1>
+    
+    <div class="test-section">
+        <h3>Test localStorage Modal Persistence</h3>
+        <p>This tests if a modal state can survive page reloads using localStorage.</p>
+        
+        <button onclick="showTestModal()">Show Test Modal</button>
+        <button onclick="hideTestModal()">Hide Test Modal</button>
+        <button onclick="reloadPage()">Reload Page (Test Persistence)</button>
+        <button onclick="clearStorage()">Clear Storage</button>
+        
+        <div id="status">Status: No modal shown</div>
+    </div>
+
+    <div class="test-section">
+        <h3>Current localStorage State</h3>
+        <pre id="storage-display">No data</pre>
+        <button onclick="updateStorageDisplay()">Refresh Storage Display</button>
+    </div>
+
+    <!-- Test Modal -->
+    <div id="testModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Test Modal</h3>
+            <p>This modal should persist across page reloads if localStorage is working correctly.</p>
+            <p><strong>Time shown:</strong> <span id="modalTime"></span></p>
+            <button onclick="hideTestModal()">Close Modal</button>
+        </div>
+    </div>
+
+    <script>
+        const MODAL_KEY = 'changePasswordModal';
+        
+        function showTestModal() {
+            const modalData = {
+                show: true,
+                type: 'error',
+                title: 'Test Modal',
+                message: 'This is a test modal that should persist across page reloads.'
+            };
+            
+            localStorage.setItem(MODAL_KEY, JSON.stringify(modalData));
+            updateModalDisplay();
+            updateStatus('Modal shown and saved to localStorage');
+        }
+        
+        function hideTestModal() {
+            localStorage.removeItem(MODAL_KEY);
+            updateModalDisplay();
+            updateStatus('Modal hidden and removed from localStorage');
+        }
+        
+        function reloadPage() {
+            window.location.reload();
+        }
+        
+        function clearStorage() {
+            localStorage.clear();
+            updateModalDisplay();
+            updateStatus('localStorage cleared');
+        }
+        
+        function updateModalDisplay() {
+            const modal = document.getElementById('testModal');
+            const savedModal = localStorage.getItem(MODAL_KEY);
+            
+            if (savedModal) {
+                try {
+                    const modalData = JSON.parse(savedModal);
+                    if (modalData.show) {
+                        modal.classList.remove('hidden');
+                        document.getElementById('modalTime').textContent = new Date().toLocaleTimeString();
+                    } else {
+                        modal.classList.add('hidden');
+                    }
+                } catch (e) {
+                    console.error('Error parsing modal data:', e);
+                    modal.classList.add('hidden');
+                }
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+        
+        function updateStorageDisplay() {
+            const display = document.getElementById('storage-display');
+            const data = localStorage.getItem(MODAL_KEY);
+            display.textContent = data ? JSON.stringify(JSON.parse(data), null, 2) : 'No data';
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = 'Status: ' + message;
+        }
+        
+        // Initialize on page load
+        window.addEventListener('load', function() {
+            updateModalDisplay();
+            updateStorageDisplay();
+            
+            const savedModal = localStorage.getItem(MODAL_KEY);
+            if (savedModal) {
+                try {
+                    const modalData = JSON.parse(savedModal);
+                    if (modalData.show) {
+                        updateStatus('Modal restored from localStorage on page load');
+                    }
+                } catch (e) {
+                    updateStatus('Error parsing saved modal data');
+                }
+            } else {
+                updateStatus('No saved modal data found');
+            }
+        });
+    </script>
+</body>
+</html>

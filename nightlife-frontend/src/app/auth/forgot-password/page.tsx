@@ -1,12 +1,13 @@
 // src/app/(auth)/auth/forgot-password/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { authService } from '@/services/domain/auth.service';
+import { scrollToTop } from '@/utils/scrollUtils';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Ingresa un correo electrónico válido'),
@@ -18,6 +19,11 @@ export default function ForgotPasswordPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Scroll to top when the forgot password page loads (mobile-friendly)
+  useEffect(() => {
+    scrollToTop();
+  }, []);
 
   const {
     register,
@@ -42,7 +48,7 @@ export default function ForgotPasswordPage() {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen flex items-start sm:items-center justify-center bg-[#07071a] py-10 sm:py-16 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-[#07071a] py-4 px-4">
         <div className="w-full max-w-xl text-center">
           {/* Success Icon */}
           <div className="mb-8 flex justify-center">
@@ -98,7 +104,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-start sm:items-center justify-center bg-[#07071a] py-10 sm:py-16 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#07071a] py-4 px-4">
       <div className="w-full max-w-xl">
         {/* Purple pill headline */}
         <div className="mb-8 flex justify-center">

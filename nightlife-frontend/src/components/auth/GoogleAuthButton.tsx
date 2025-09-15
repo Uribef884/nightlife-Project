@@ -11,6 +11,7 @@ export default function GoogleAuthButton({ label, onClick, disabled }: Props) {
     <button
       onClick={onClick}
       disabled={disabled}
+      tabIndex={-1}
       className="w-full flex items-center justify-center gap-3 rounded-xl 
                  bg-[#1E2532] py-2.5 font-medium text-white shadow-sm 
                  hover:bg-[#2A3242] focus:outline-none focus:ring-2 

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Modal Test - React Style</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            margin: 0;
+            background: #f5f5f5;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+        }
+        button { 
+            padding: 10px 15px; 
+            margin: 5px; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 3px; 
+            cursor: pointer; 
+        }
+        button:hover { background: #0056b3; }
+        .error-btn { background: #dc3545; }
+        .error-btn:hover { background: #c82333; }
+        .success-btn { background: #28a745; }
+        .success-btn:hover { background: #218838; }
+        
+        /* Modal Styles */
+        .modal { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.5); 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            z-index: 1000; 
+        }
+        .modal-content { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            max-width: 400px; 
+            width: 90%; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .modal-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+        }
+        .modal-icon.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .modal-icon.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0;
+        }
+        .modal-message {
+            margin: 15px 0;
+            line-height: 1.5;
+        }
+        .modal-footer {
+            text-align: right;
+        }
+        .modal-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .modal-btn.success {
+            background: #28a745;
+            color: white;
+        }
+        .modal-btn.error {
+            background: #dc3545;
+            color: white;
+        }
+        .hidden { display: none; }
+        
+        .debug-panel {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Modal Test - Simulating React Component</h1>
+        
+        <div class="test-section">
+            <h3>Test Modal Display</h3>
+            <button class="error-btn" onclick="showErrorModal()">Show Error Modal</button>
+            <button class="success-btn" onclick="showSuccessModal()">Show Success Modal</button>
+            <button onclick="hideModal()">Hide Modal</button>
+            <button onclick="testPasswordChange()">Test Password Change Flow</button>
+        </div>
+
+        <div class="debug-panel">
+            <strong>Debug Info:</strong><br>
+            <div id="debugInfo">No modal shown</div>
+        </div>
+
+        <!-- Modal -->
+        <div id="modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div class="modal-icon" id="modalIcon">
+                        <span id="modalIconText">!</span>
+                    </div>
+                    <h3 class="modal-title" id="modalTitle">Modal Title</h3>
+                </div>
+                <div class="modal-message" id="modalMessage">Modal message</div>
+                <div class="modal-footer">
+                    <button class="modal-btn" id="modalButton" onclick="hideModal()">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentModal = { show: false, type: 'error', title: '', message: '' };
+        
+        function showErrorModal() {
+            console.log('🎭 Showing error modal');
+            currentModal = {
+                show: true,
+                type: 'error',
+                title: 'Error',
+                message: 'Current password is incorrect'
+            };
+            updateModalDisplay();
+            updateDebugInfo();
+        }
+        
+        function showSuccessModal() {
+            console.log('🎭 Showing success modal');
+            currentModal = {
+                show: true,
+                type: 'success',
+                title: 'Success',
+                message: 'Password changed successfully'
+            };
+            updateModalDisplay();
+            updateDebugInfo();
+        }
+        
+        function hideModal() {
+            console.log('🎭 Hiding modal');
+            currentModal.show = false;
+            updateModalDisplay();
+            updateDebugInfo();
+        }
+        
+        function updateModalDisplay() {
+            const modal = document.getElementById('modal');
+            const modalIcon = document.getElementById('modalIcon');
+            const modalIconText = document.getElementById('modalIconText');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+            const modalButton = document.getElementById('modalButton');
+            
+            if (currentModal.show) {
+                modal.classList.remove('hidden');
+                modalTitle.textContent = currentModal.title;
+                modalMessage.textContent = currentModal.message;
+                
+                // Update styling based on type
+                modalIcon.className = 'modal-icon ' + currentModal.type;
+                modalButton.className = 'modal-btn ' + currentModal.type;
+                
+                if (currentModal.type === 'error') {
+                    modalIconText.textContent = '!';
+                    modalButton.textContent = 'Entendido';
+                } else if (currentModal.type === 'success') {
+                    modalIconText.textContent = '✓';
+                    modalButton.textContent = 'Ir al perfil';
+                }
+                
+                console.log('🎭 Modal displayed:', currentModal);
+            } else {
+                modal.classList.add('hidden');
+                console.log('🎭 Modal hidden');
+            }
+        }
+        
+        function updateDebugInfo() {
+            const debugDiv = document.getElementById('debugInfo');
+            debugDiv.innerHTML = `
+                Modal: ${currentModal.show ? 'SHOW' : 'HIDE'}<br>
+                Type: ${currentModal.type}<br>
+                Title: ${currentModal.title}<br>
+                Message: ${currentModal.message}
+            `;
+        }
+        
+        function testPasswordChange() {
+            console.log('🔄 Testing password change flow...');
+            
+            // Simulate API call
+            setTimeout(() => {
+                console.log('📋 Simulating API error response');
+                showErrorModal();
+            }, 1000);
+        }
+        
+        // Initialize
+        updateDebugInfo();
+        console.log('🚀 Modal test page loaded');
+    </script>
+</body>
+</html>

@@ -52,6 +52,10 @@ export function AuthTabs({ current, onChange }: Props) {
     }
     onChange?.(t);
     if (current !== undefined) setActive(t);
+    // Scroll to top when switching tabs
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const tabs: Array<{ key: Tab; label: string }> = [
@@ -76,7 +80,7 @@ export function AuthTabs({ current, onChange }: Props) {
               key={t.key}
               role="tab"
               aria-selected={isActive}
-              tabIndex={isActive ? 0 : -1}
+              tabIndex={-1}
               onClick={() => handleChange(t.key)}
               className={[
                 'relative pb-2 text-lg font-semibold transition-colors',
