@@ -40,7 +40,7 @@ export const createMenuItem = async (req: AuthenticatedRequest, res: Response): 
     const maxPerPersonNum = maxPerPerson && maxPerPerson !== "" ? Number(maxPerPerson) : undefined;
 
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can create menu items" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden crear elementos de menú" });
       return;
     }
 
@@ -49,19 +49,19 @@ export const createMenuItem = async (req: AuthenticatedRequest, res: Response): 
     const club = await clubRepo.findOne({ where: { ownerId: user.id } });
     
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
     if (club.menuType !== "structured") {
       res.status(400).json({ 
-        error: "Club must be in structured menu mode to create menu items. Switch to structured mode first." 
+        error: "Club debe estar en modo de menú estructurado para crear elementos de menú. Cambia a modo estructurado primero." 
       });
       return;
     }
 
     if (!name) {
-      res.status(400).json({ error: "Name is required" });
+      res.status(400).json({ error: "El nombre es requerido" });
       return;
     }
 
@@ -71,47 +71,47 @@ export const createMenuItem = async (req: AuthenticatedRequest, res: Response): 
     });
 
     if (!category || category.club.id !== user.clubId) {
-      res.status(403).json({ error: "Invalid category or not owned by your club" });
+      res.status(403).json({ error: "Categoría inválida o no pertenece a tu club" });
       return;
     }
 
     if (hasVariantsBool && priceNum !== null && priceNum !== undefined) {
-      res.status(400).json({ error: "Price must be null when hasVariants is true" });
+      res.status(400).json({ error: "El precio debe ser null cuando hasVariants es true" });
       return;
     }
 
     if (!hasVariantsBool && (typeof priceNum !== "number" || priceNum <= 0)) {
-      res.status(400).json({ error: "Price must be a positive number (greater than 0) if hasVariants is false" });
+      res.status(400).json({ error: "El precio debe ser un número positivo (mayor que 0) si hasVariants es false" });
       return;
     }
 
     // Validate minimum cost for menu items (no free items allowed)
     if (!hasVariantsBool && priceNum !== undefined && priceNum < 1500) {
-      res.status(400).json({ error: "Price must be at least 1500 COP for menu items." });
+      res.status(400).json({ error: "El precio debe ser al menos 1500 COP para elementos de menú." });
       return;
     }
 
     if (hasVariantsBool && maxPerPersonNum !== null && maxPerPersonNum !== undefined) {
-      res.status(400).json({ error: "maxPerPerson must be null when hasVariants is true" });
+      res.status(400).json({ error: "maxPerPerson debe ser null cuando hasVariants es true" });
       return;
     }
 
     if (!hasVariantsBool && (typeof maxPerPersonNum !== "number" || maxPerPersonNum <= 0)) {
-      res.status(400).json({ error: "maxPerPerson must be a positive number if hasVariants is false" });
+      res.status(400).json({ error: "maxPerPerson debe ser un número positivo si hasVariants es false" });
       return;
     }
 
     // Enforce that parent menu items with variants cannot have dynamic pricing enabled
     if (hasVariantsBool && dynamicPricingEnabledBool) {
       res.status(400).json({ 
-        error: "Parent menu items with variants cannot have dynamic pricing enabled. Dynamic pricing should be configured on individual variants instead." 
+        error: "Los elementos de menú padre con variantes no pueden tener precios dinámicos habilitados. Los precios dinámicos deben configurarse en variantes individuales." 
       });
       return;
     }
 
     // Validate image file
     if (!req.file) {
-      res.status(400).json({ error: "Image file is required." });
+      res.status(400).json({ error: "Archivo de imagen requerido." });
       return;
     }
 
@@ -147,7 +147,7 @@ export const createMenuItem = async (req: AuthenticatedRequest, res: Response): 
     res.status(201).json(item);
   } catch (err) {
     console.error("Error creating menu item:", err);
-    res.status(500).json({ error: "Server error creating item" });
+    res.status(500).json({ error: "Error del servidor al crear elemento" });
   }
 };
 
@@ -177,7 +177,7 @@ export const updateMenuItem = async (req: AuthenticatedRequest, res: Response): 
     }
 
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can update menu items" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden actualizar elementos de menú" });
       return;
     }
 
@@ -188,19 +188,19 @@ export const updateMenuItem = async (req: AuthenticatedRequest, res: Response): 
     });
 
     if (!item || item.clubId !== user.clubId) {
-      res.status(403).json({ error: "Item not found or not owned by your club" });
+      res.status(403).json({ error: "Elemento no encontrado o no pertenece a tu club" });
       return;
     }
 
     if (typeof hasVariants === "boolean" && hasVariants !== item.hasVariants) {
-      res.status(400).json({ error: "Cannot change hasVariants after item creation" });
+      res.status(400).json({ error: "No se puede cambiar hasVariants después de la creación del elemento" });
       return;
     }
 
     if (typeof name === "string") {
       const sanitizedName = sanitizeInput(name);
       if (!sanitizedName) {
-        res.status(400).json({ error: "Name is required" });
+        res.status(400).json({ error: "El nombre es requerido" });
         return;
       }
       item.name = sanitizedName;
@@ -222,18 +222,18 @@ export const updateMenuItem = async (req: AuthenticatedRequest, res: Response): 
     // Only validate price if it's provided in the request
     if (price !== undefined) {
       if (hasVariantsBool && priceNum !== null && priceNum !== undefined) {
-        res.status(400).json({ error: "Price must be null when hasVariants is true" });
+        res.status(400).json({ error: "El precio debe ser null cuando hasVariants es true" });
         return;
       }
 
       if (!hasVariantsBool && (typeof priceNum !== "number" || priceNum <= 0)) {
-        res.status(400).json({ error: "Price must be a positive number (greater than 0) if hasVariants is false" });
+        res.status(400).json({ error: "El precio debe ser un número positivo (mayor que 0) si hasVariants es false" });
         return;
       }
 
       // Validate minimum cost for menu items (no free items allowed)
       if (!hasVariantsBool && priceNum !== undefined && priceNum < 1500) {
-        res.status(400).json({ error: "Price must be at least 1500 COP for menu items." });
+        res.status(400).json({ error: "El precio debe ser al menos 1500 COP para elementos de menú." });
         return;
       }
     }
@@ -241,12 +241,12 @@ export const updateMenuItem = async (req: AuthenticatedRequest, res: Response): 
     // Only validate maxPerPerson if it's provided in the request
     if (maxPerPerson !== undefined) {
       if (hasVariantsBool && maxPerPersonNum !== null && maxPerPersonNum !== undefined) {
-        res.status(400).json({ error: "maxPerPerson must be null when hasVariants is true" });
+        res.status(400).json({ error: "maxPerPerson debe ser null cuando hasVariants es true" });
         return;
       }
 
       if (!hasVariantsBool && (typeof maxPerPersonNum !== "number" || maxPerPersonNum <= 0)) {
-        res.status(400).json({ error: "maxPerPerson must be a positive number if hasVariants is false" });
+        res.status(400).json({ error: "maxPerPerson debe ser un número positivo si hasVariants es false" });
         return;
       }
     }
@@ -273,7 +273,7 @@ export const updateMenuItem = async (req: AuthenticatedRequest, res: Response): 
       // Enforce that parent menu items with variants cannot have dynamic pricing enabled
       if (item.hasVariants && dynamicPricingEnabled) {
         res.status(400).json({ 
-          error: "Parent menu items with variants cannot have dynamic pricing enabled. Dynamic pricing should be configured on individual variants instead." 
+          error: "Los elementos de menú padre con variantes no pueden tener precios dinámicos habilitados. Los precios dinámicos deben configurarse en variantes individuales." 
         });
         return;
       }
@@ -284,7 +284,7 @@ export const updateMenuItem = async (req: AuthenticatedRequest, res: Response): 
     res.json(item);
   } catch (err) {
     console.error("Error updating menu item:", err);
-    res.status(500).json({ error: "Server error updating item" });
+    res.status(500).json({ error: "Error del servidor al actualizar elemento" });
   }
 };
 
@@ -356,7 +356,7 @@ export const getAllMenuItems = async (req: AuthenticatedRequest, res: Response):
     res.json(filteredItems);
   } catch (err) {
     console.error("Error fetching all menu items:", err);
-    res.status(500).json({ error: "Failed to load menu items" });
+    res.status(500).json({ error: "Error al cargar elementos del menú" });
   }
 };
 
@@ -370,14 +370,14 @@ export const getMenuItemById = async (req: AuthenticatedRequest, res: Response):
     });
 
     if (!item) {
-      res.status(404).json({ error: "Menu item not found" });
+      res.status(404).json({ error: "Elemento de menú no encontrado" });
       return;
     }
 
     // Check if the item's club uses PDF menu
     if (item.club && item.club.menuType === "pdf") {
       res.status(400).json({ 
-        error: "This menu item belongs to a club that uses a PDF menu. Structured menu items are not available." 
+        error: "Este elemento de menú pertenece a un club que usa un menú PDF. Los elementos de menú estructurados no están disponibles." 
       });
       return;
     }
@@ -388,7 +388,7 @@ export const getMenuItemById = async (req: AuthenticatedRequest, res: Response):
     res.json(item);
   } catch (err) {
     console.error("Error fetching menu item by ID:", err);
-    res.status(500).json({ error: "Failed to load menu item" });
+    res.status(500).json({ error: "Error al cargar elemento del menú" });
   }
 };
 
@@ -396,7 +396,7 @@ export const getItemsForMyClub = async (req: AuthenticatedRequest, res: Response
   try {
     const user = req.user;
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can access this" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden acceder a esto" });
       return;
     }
 
@@ -420,7 +420,7 @@ export const getItemsForMyClub = async (req: AuthenticatedRequest, res: Response
     res.json(items);
   } catch (err) {
     console.error("Error fetching items for my club:", err);
-    res.status(500).json({ error: "Failed to load your menu items" });
+    res.status(500).json({ error: "Error al cargar tus elementos del menú" });
   }
 };
 
@@ -444,7 +444,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
     });
 
     if (!item || item.clubId !== user.clubId) {
-      res.status(403).json({ error: "Item not found or not owned by your club" });
+      res.status(403).json({ error: "Elemento no encontrado o no pertenece a tu club" });
       return;
     }
 
@@ -478,12 +478,12 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
       const s3CleanupResult = await cleanupMenuItemS3Files(item);
 
       res.json({ 
-        message: "Menu item soft deleted successfully", 
+        message: "Elemento de menú eliminado exitosamente (soft delete)", 
         deletedAt: item.deletedAt,
         includedInTickets,
         existingPurchases,
         s3CleanupResult,
-        note: "Menu item marked as deleted but preserved due to existing purchases or ticket bundles. S3 image has been cleaned up."
+        note: "Elemento de menú marcado como eliminado pero preservado debido a compras existentes o paquetes de tickets. La imagen S3 ha sido limpiada."
       });
     } else {
       // Hard delete - no associated ticket bundles, safe to completely remove
@@ -494,14 +494,14 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
       await itemRepo.remove(item);
 
       res.json({ 
-        message: "Menu item permanently deleted successfully",
+        message: "Elemento de menú eliminado permanentemente exitosamente",
         s3CleanupResult,
-        note: "No associated ticket bundles found, menu item completely removed. S3 image has been cleaned up."
+        note: "No se encontraron paquetes de tickets asociados, elemento de menú eliminado completamente. La imagen S3 ha sido limpiada."
       });
     }
   } catch (err) {
     console.error("Error deleting menu item:", err);
-    res.status(500).json({ error: "Failed to delete menu item" });
+      res.status(500).json({ error: "Error al eliminar elemento del menú" });
   }
 };
 
@@ -513,7 +513,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
       const club = await clubRepo.findOne({ where: { id: clubId } });
 
       if (!club) {
-        res.status(404).json({ error: "Club not found" });
+        res.status(404).json({ error: "Club no encontrado" });
         return;
       }
 
@@ -590,7 +590,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
       res.json(itemsWithDynamic);
     } catch (err) {
       console.error("Error loading menu for club:", err);
-      res.status(500).json({ error: "Failed to load club menu" });
+      res.status(500).json({ error: "Error al cargar el menú del club" });
     }
   };
 
@@ -604,14 +604,14 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
     const club = await clubRepo.findOne({ where: { id: clubId } });
 
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
     // Check if club uses PDF menu
     if (club.menuType === "pdf") {
       res.status(400).json({ 
-        error: "This club uses a PDF menu. Structured menu items are not available." 
+        error: "Este club usa un menú PDF. Los elementos de menú estructurados no están disponibles." 
       });
       return;
     }
@@ -709,7 +709,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
     res.json(result);
   } catch (err) {
     console.error("Error loading public menu:", err);
-    res.status(500).json({ error: "Failed to load public menu" });
+    res.status(500).json({ error: "Error al cargar el menú público" });
   }
 };
 
@@ -722,14 +722,14 @@ export const getAvailableMenuForDate = async (req: Request, res: Response): Prom
     const { clubId, date } = req.params;
 
     if (!clubId || !date) {
-      res.status(400).json({ error: "clubId and date are required" });
+      res.status(400).json({ error: "clubId y date son requeridos" });
       return;
     }
 
     // Validate date format (YYYY-MM-DD)
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
     if (!dateRegex.test(date)) {
-      res.status(400).json({ error: "Date must be in YYYY-MM-DD format" });
+      res.status(400).json({ error: "Date debe ser en formato YYYY-MM-DD" });
       return;
     }
 
@@ -743,7 +743,7 @@ export const getAvailableMenuForDate = async (req: Request, res: Response): Prom
     });
 
     if (!club) {
-      res.status(404).json({ error: "Club not found or inactive" });
+      res.status(404).json({ error: "Club no encontrado o inactivo" });
       return;
     }
 
@@ -876,7 +876,7 @@ export const getAvailableMenuForDate = async (req: Request, res: Response): Prom
     res.json(result);
   } catch (err) {
     console.error("Error loading available menu for date:", err);
-    res.status(500).json({ error: "Failed to load available menu" });
+    res.status(500).json({ error: "Error al cargar el menú disponible" });
   }
 };
 
@@ -886,25 +886,25 @@ export const toggleMenuItemDynamicPricing = async (req: AuthenticatedRequest, re
     const user = req.user;
     const { id } = req.params;
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can modify menu items" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden modificar elementos de menú" });
       return;
     }
     const repo = AppDataSource.getRepository(MenuItem);
     const item = await repo.findOne({ where: { id } });
     if (!item || item.clubId !== user.clubId) {
-      res.status(403).json({ error: "Item not found or not owned by your club" });
+      res.status(403).json({ error: "Elemento no encontrado o no pertenece a tu club" });
       return;
     }
     if (item.hasVariants) {
-      res.status(400).json({ error: "Cannot toggle dynamic pricing on menu items with variants. Use the variant toggle instead." });
+      res.status(400).json({ error: "No se pueden cambiar los precios dinámicos en elementos de menú con variantes. Usa el cambio de variante en su lugar." });
       return;
     }
     item.dynamicPricingEnabled = !item.dynamicPricingEnabled;
     await repo.save(item);
-    res.json({ message: "Menu item dynamic pricing toggled", dynamicPricingEnabled: item.dynamicPricingEnabled });
+    res.json({ message: "Precios dinámicos del elemento de menú cambiados", dynamicPricingEnabled: item.dynamicPricingEnabled });
   } catch (err) {
     console.error("Error toggling menu item dynamic pricing:", err);
-    res.status(500).json({ error: "Server error toggling dynamic pricing" });
+    res.status(500).json({ error: "Error del servidor cambiando precios dinámicos" });
   }
 };
 
@@ -917,7 +917,7 @@ export const updateMenuItemImage = async (req: AuthenticatedRequest, res: Respon
 
     // Only club owners can upload menu item images
     if (user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can upload menu item images" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden subir imágenes de elementos de menú" });
       return;
     }
 
@@ -926,7 +926,7 @@ export const updateMenuItemImage = async (req: AuthenticatedRequest, res: Respon
     const item = await itemRepo.findOne({ where: { id } });
 
     if (!item || item.clubId !== user.clubId) {
-      res.status(404).json({ error: 'Menu item not found or unauthorized' });
+      res.status(404).json({ error: 'Elemento de menú no encontrado o no autorizado' });
       return;
     }
 

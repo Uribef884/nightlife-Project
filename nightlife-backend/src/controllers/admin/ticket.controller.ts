@@ -149,7 +149,7 @@ export const getTicketsByClubAdmin = async (req: Request, res: Response): Promis
     
     hiddenFreeTicketsCount = formatted.length - visibleTickets.length;
     if (hiddenFreeTicketsCount > 0) {
-      hiddenFreeTicketsMessage = `${hiddenFreeTicketsCount} free ticket(s) hidden because events exist for the same date(s).`;
+      hiddenFreeTicketsMessage = `${hiddenFreeTicketsCount} ticket(s) gratuitos ocultos porque existen eventos para la(s) misma(s) fecha(s).`;
     }
     
     const response: any = { tickets: visibleTickets };
@@ -160,7 +160,7 @@ export const getTicketsByClubAdmin = async (req: Request, res: Response): Promis
     res.json(response);
   } catch (error) {
     console.error("❌ Error fetching tickets:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -173,7 +173,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
     const { clubId } = req.params;
     const user = req.user;
     if (!user) {
-      res.status(401).json({ error: "Unauthorized" });
+      res.status(401).json({ error: "No autorizado" });
       await queryRunner.rollbackTransaction();
       return;
     }
@@ -200,20 +200,20 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
     } = sanitizedBody;
 
     if (!name || price == null || maxPerPerson == null || priority == null || !category) {
-      res.status(400).json({ error: "Missing required fields" });
+      res.status(400).json({ error: "Campos requeridos faltantes" });
       await queryRunner.rollbackTransaction();
       return;
     }
 
     if (price < 0 || maxPerPerson < 0 || priority < 1) {
-      res.status(400).json({ error: "Invalid price, maxPerPerson, or priority" });
+      res.status(400).json({ error: "Precio, maxPerPerson o prioridad inválidos" });
       await queryRunner.rollbackTransaction();
       return;
     }
 
     // Validate minimum cost for paid tickets (exclude free tickets)
     if (price !== 0 && price < 1500) {
-      res.status(400).json({ error: "Price must be at least 1500 COP for paid tickets. Use price 0 for free tickets." });
+      res.status(400).json({ error: "El precio debe ser al menos 1500 COP para tickets pagos. Usa precio 0 para tickets gratuitos." });
       await queryRunner.rollbackTransaction();
       return;
     }
@@ -221,7 +221,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
     // Validate includesMenuItem and menuItems consistency
     if (includesMenuItem && (!menuItems || !Array.isArray(menuItems) || menuItems.length === 0)) {
       res.status(400).json({ 
-        error: "When includesMenuItem is true, menuItems array must be provided with at least one item" 
+        error: "Cuando includesMenuItem es true, se debe proporcionar el array menuItems con al menos un elemento" 
       });
       await queryRunner.rollbackTransaction();
       return;
@@ -229,7 +229,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
 
     if (!includesMenuItem && menuItems && menuItems.length > 0) {
       res.status(400).json({ 
-        error: "When includesMenuItem is false, menuItems should not be provided" 
+        error: "Cuando includesMenuItem es false, no se debe proporcionar menuItems" 
       });
       await queryRunner.rollbackTransaction();
       return;
@@ -239,7 +239,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
     const club = await clubRepo.findOne({ where: { id: clubId }, relations: ["owner"] });
     
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       await queryRunner.rollbackTransaction();
       return;
     }
@@ -256,7 +256,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
       });
 
       if (!event || event.clubId !== club.id) {
-        res.status(404).json({ error: "Event not found or not owned by this club" });
+        res.status(404).json({ error: "Evento no encontrado o no pertenece a este club" });
         await queryRunner.rollbackTransaction();
         return;
       }
@@ -271,7 +271,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       if (parsedDate < today) {
-        res.status(400).json({ error: "Available date cannot be in the past" });
+        res.status(400).json({ error: "La fecha disponible no puede ser en el pasado" });
         await queryRunner.rollbackTransaction();
         return;
       }
@@ -281,7 +281,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
      let dynamicPricing = false;
      if (category === TicketCategory.FREE || price == 0) {
        if (dynamicPricingEnabled) {
-         res.status(400).json({ error: "Dynamic pricing cannot be enabled for free tickets. Free tickets must always have a fixed price of 0." });
+         res.status(400).json({ error: "Los precios dinámicos no pueden habilitarse para tickets gratuitos. Los tickets gratuitos siempre deben tener un precio fijo de 0." });
          await queryRunner.rollbackTransaction();
          return;
        }
@@ -355,7 +355,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
            }
            
            res.status(400).json({ 
-             error: `Item "${itemName}${variantName}" is already included in this ticket combo` 
+             error: `Item "${itemName}${variantName}" ya está incluido en este combo de ticket` 
            });
            await queryRunner.rollbackTransaction();
            return;
@@ -368,7 +368,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
          // ❌ Ensure menu item belongs to the same club as the ticket
          if (menuItemEntity && menuItemEntity.clubId !== clubId) {
            res.status(400).json({ 
-             error: `Menu item "${itemName}" does not belong to the same club as this ticket` 
+             error: `Menu item "${itemName}" no pertenece al mismo club que este ticket` 
            });
            await queryRunner.rollbackTransaction();
            return;
@@ -377,7 +377,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
          // ❌ Prevent linking parent menu items with variants
          if (menuItemEntity?.hasVariants && !menuItem.variantId) {
            res.status(400).json({ 
-             error: `Cannot link parent menu item "${itemName}" directly. Please specify a variant instead.` 
+             error: `No se puede vincular el elemento de menú principal "${itemName}" directamente. Por favor, especifique una variante en su lugar.` 
            });
            await queryRunner.rollbackTransaction();
            return;
@@ -386,7 +386,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
          // ❌ Prevent linking menu items without variants when variant is specified
          if (menuItemEntity && !menuItemEntity.hasVariants && menuItem.variantId) {
            res.status(400).json({ 
-             error: `Menu item "${itemName}" does not have variants. Please remove the variantId.` 
+             error: `Menu item "${itemName}" no tiene variantes. Por favor, elimine el variantId.` 
            });
            await queryRunner.rollbackTransaction();
            return;
@@ -409,7 +409,7 @@ export const createTicketAdmin = async (req: Request, res: Response): Promise<vo
   } catch (error) {
     await queryRunner.rollbackTransaction();
     console.error("❌ Error creating ticket:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   } finally {
     await queryRunner.release();
   }
@@ -426,14 +426,14 @@ export const getTicketByIdAdmin = async (req: AuthenticatedRequest, res: Respons
     });
 
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
     res.status(200).json(ticket);
   } catch (error) {
     console.error("❌ Error fetching ticket:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -446,7 +446,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
 
     const ticket = await ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
@@ -473,7 +473,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
     // ❌ Prevent changing category
     if ("category" in sanitizedBody && sanitizedBody.category !== ticket.category) {
       res.status(400).json({
-        error: "Cannot change category after ticket creation",
+        error: "No se puede cambiar la categoría después de la creación del ticket",
       });
       return;
     }
@@ -481,7 +481,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
     // ❌ Prevent changing eventId
     if ("eventId" in sanitizedBody && sanitizedBody.eventId !== ticket.eventId) {
       res.status(400).json({
-        error: "Cannot change eventId after ticket creation",
+        error: "No se puede cambiar eventId después de la creación del ticket",
       });
       return;
     }
@@ -489,7 +489,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
     // ❌ Prevent changing includesMenuItem flag
     if ("includesMenuItem" in sanitizedBody && sanitizedBody.includesMenuItem !== ticket.includesMenuItem) {
       res.status(400).json({
-        error: "Cannot change includesMenuItem flag after ticket creation",
+        error: "No se puede cambiar la bandera includesMenuItem después de la creación del ticket",
       });
       return;
     }
@@ -507,7 +507,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
         normalizedExisting &&
         normalizedUpdate.getTime() !== normalizedExisting.getTime()
       ) {
-        res.status(400).json({ error: "Cannot update availableDate after creation" });
+        res.status(400).json({ error: "No se puede actualizar la fecha disponible después de la creación del ticket" });
         return;
       }
     }
@@ -517,20 +517,20 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
       const newPrice = parseFloat(sanitizedBody.price);
 
       if (isNaN(newPrice) || newPrice < 0) {
-        res.status(400).json({ error: "Price must be a non-negative number" });
+        res.status(400).json({ error: "El precio debe ser un número no negativo" });
         return;
       }
 
       // Validate minimum cost for paid tickets (exclude free tickets)
       if (newPrice !== 0 && newPrice < 1500) {
-        res.status(400).json({ error: "Price must be at least 1500 COP for paid tickets. Use price 0 for free tickets." });
+        res.status(400).json({ error: "El precio debe ser al menos 1500 COP para tickets pagos. Usa precio 0 para tickets gratuitos." });
         return;
       }
 
       // Lock based on category
       if (ticket.category === TicketCategory.FREE && newPrice !== 0) {
         res.status(400).json({
-          error: "Cannot change price of a free ticket to a non-zero value",
+          error: "No se puede cambiar el precio de un ticket gratuito a un valor diferente de cero",
         });
         return;
       }
@@ -541,7 +541,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
         newPrice > 0
       ) {
         res.status(400).json({
-          error: "Cannot change a free ticket to a paid ticket",
+          error: "No se puede cambiar un ticket gratuito a un ticket pagado",
         });
         return;
       }
@@ -552,7 +552,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
         newPrice === 0
       ) {
         res.status(400).json({
-          error: "Cannot change a paid ticket to free",
+          error: "No se puede cambiar un ticket pagado a gratuito",
         });
         return;
       }
@@ -560,13 +560,13 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
 
     // ❌ Prevent invalid maxPerPerson
     if ("maxPerPerson" in sanitizedBody && sanitizedBody.maxPerPerson < 0) {
-      res.status(400).json({ error: "maxPerPerson must be a non-negative number" });
+      res.status(400).json({ error: "maxPerPerson debe ser un número no negativo" });
       return;
     }
 
     // ❌ Prevent invalid priority
     if ("priority" in sanitizedBody && sanitizedBody.priority < 1) {
-      res.status(400).json({ error: "priority must be at least 1" });
+      res.status(400).json({ error: "priority debe ser al menos 1" });
       return;
     }
 
@@ -576,20 +576,20 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
 
       if (ticket.quantity === null) {
         res.status(400).json({
-          error: "Cannot update quantity for tickets created without quantity",
+          error: "No se puede actualizar la cantidad para tickets creados sin cantidad",
         });
         return;
       }
 
       if (ticket.quantity !== null && newQuantity === null) {
         res.status(400).json({
-          error: "Cannot remove quantity from tickets that originally had one",
+          error: "No se puede eliminar la cantidad de tickets que originalmente tenían una",
         });
         return;
       }
 
       if (newQuantity != null && newQuantity < 0) {
-        res.status(400).json({ error: "Quantity must be non-negative" });
+        res.status(400).json({ error: "La cantidad debe ser no negativa" });
         return;
       }
 
@@ -598,7 +598,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
 
         if (newQuantity < soldCount) {
           res.status(400).json({
-            error: `Cannot reduce quantity below number of tickets already sold (${soldCount})`,
+            error: `No se puede reducir la cantidad por debajo del número de tickets ya vendidos (${soldCount})`,
           });
           return;
         }
@@ -611,21 +611,21 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
       sanitizedBody.originalQuantity !== ticket.originalQuantity
     ) {
       res.status(400).json({
-        error: "originalQuantity cannot be updated after creation",
+        error: "originalQuantity no se puede actualizar después de la creación",
       });
       return;
     }
 
     // ❌ Prevent changing clubId
     if ("clubId" in sanitizedBody && sanitizedBody.clubId !== ticket.clubId) {
-      res.status(400).json({ error: "clubId cannot be updated" });
+      res.status(400).json({ error: "clubId no se puede actualizar" });
       return;
     }
 
     // ❌ Prevent enabling dynamic pricing for free tickets
     if ("dynamicPricingEnabled" in sanitizedBody) {
       if ((ticket.category === TicketCategory.FREE || ticket.price === 0) && sanitizedBody.dynamicPricingEnabled) {
-        res.status(400).json({ error: "Dynamic pricing cannot be enabled for free tickets. Free tickets must always have a fixed price of 0." });
+        res.status(400).json({ error: "Los precios dinámicos no pueden habilitarse para tickets gratuitos. Los tickets gratuitos siempre deben tener un precio fijo de 0." });
         return;
       }
     }
@@ -648,7 +648,7 @@ export const updateTicketAdmin = async (req: Request, res: Response): Promise<vo
     res.status(200).json(ticket);
   } catch (error) {
     console.error("❌ Error updating ticket:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -661,7 +661,7 @@ export const deleteTicketAdmin = async (req: Request, res: Response): Promise<vo
 
     const ticket = await ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
@@ -679,7 +679,7 @@ export const deleteTicketAdmin = async (req: Request, res: Response): Promise<vo
       await ticketRepo.save(ticket);
       
       res.status(200).json({ 
-        message: "Ticket soft deleted successfully", 
+        message: "Ticket eliminado suavemente exitosamente", 
         deletedAt: ticket.deletedAt,
         associatedPurchases,
         adCleanupResult,
@@ -689,14 +689,14 @@ export const deleteTicketAdmin = async (req: Request, res: Response): Promise<vo
       // Hard delete - no associated purchases, safe to completely remove
       await ticketRepo.remove(ticket);
       res.status(200).json({ 
-        message: "Ticket permanently deleted successfully",
+        message: "Ticket eliminado permanentemente exitosamente",
         adCleanupResult,
         note: "No associated purchases found, ticket completely removed. Associated ads have been deactivated."
       });
     }
   } catch (error) {
     console.error("❌ Error deleting ticket:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -708,7 +708,7 @@ export const toggleTicketVisibilityAdmin = async (req: Request, res: Response): 
 
     const ticket = await ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
@@ -718,7 +718,7 @@ export const toggleTicketVisibilityAdmin = async (req: Request, res: Response): 
     res.status(200).json({ isActive: ticket.isActive });
   } catch (error) {
     console.error("❌ Error toggling ticket visibility:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -730,7 +730,7 @@ export const toggleTicketDynamicPricingAdmin = async (req: Request, res: Respons
 
     const ticket = await ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
@@ -738,13 +738,13 @@ export const toggleTicketDynamicPricingAdmin = async (req: Request, res: Respons
     if ((ticket.category === TicketCategory.FREE || ticket.price === 0)) {
       if (!ticket.dynamicPricingEnabled) {
         // Don't allow enabling dynamic pricing for free tickets
-        res.status(400).json({ error: "Dynamic pricing cannot be enabled for free tickets. Free tickets must always have a fixed price of 0." });
+        res.status(400).json({ error: "Los precios dinámicos no pueden habilitarse para tickets gratuitos. Los tickets gratuitos siempre deben tener un precio fijo de 0." });
         return;
       } else {
         // Allow disabling if currently enabled (shouldn't happen, but for safety)
         ticket.dynamicPricingEnabled = false;
         await ticketRepo.save(ticket);
-        res.status(200).json({ message: "Dynamic pricing has been disabled for this free ticket. Free tickets must always have a fixed price of 0.", dynamicPricingEnabled: ticket.dynamicPricingEnabled });
+        res.status(200).json({ message: "Los precios dinámicos han sido deshabilitados para este ticket gratuito. Los tickets gratuitos siempre deben tener un precio fijo de 0.", dynamicPricingEnabled: ticket.dynamicPricingEnabled });
         return;
       }
     }
@@ -753,9 +753,9 @@ export const toggleTicketDynamicPricingAdmin = async (req: Request, res: Respons
     ticket.dynamicPricingEnabled = !ticket.dynamicPricingEnabled;
     await ticketRepo.save(ticket);
 
-    res.status(200).json({ message: "Ticket dynamic pricing toggled", dynamicPricingEnabled: ticket.dynamicPricingEnabled });
+    res.status(200).json({ message: "Precio dinámico del ticket cambiado", dynamicPricingEnabled: ticket.dynamicPricingEnabled });
   } catch (error) {
     console.error("❌ Error toggling ticket dynamic pricing:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }; 

@@ -24,12 +24,12 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
     if (!menuItemId || quantity == null || quantity <= 0) {
-      res.status(400).json({ error: "Missing or invalid fields" });
+      res.status(400).json({ error: "Campos faltantes o inválidos" });
       return;
     }
 
@@ -37,7 +37,7 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
     const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'menu');
     if (isLocked) {
       res.status(423).json({ 
-        error: "Cart is currently being processed. Please wait for your payment to complete before adding more items." 
+        error: "El carrito está siendo procesado actualmente. Por favor espera a que se complete tu pago antes de agregar más elementos." 
       });
       return;
     }
@@ -46,7 +46,7 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
     const ticketCartRepo = AppDataSource.getRepository(CartItem);
     const existingTicketItems = await ticketCartRepo.find({ where: userId ? { userId } : { sessionId } });
     if (existingTicketItems.length > 0) {
-      res.status(400).json({ error: "You must complete or clear your ticket cart before ordering menu items." });
+      res.status(400).json({ error: "Debes completar o limpiar tu carrito de tickets antes de ordenar elementos del menú." });
       return;
     }
 
@@ -60,32 +60,32 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
     });
 
     if (!menuItem) {
-      res.status(404).json({ error: "Menu item not found" });
+      res.status(404).json({ error: "Elemento de menú no encontrado" });
       return;
     }
 
     // Check if club is in structured menu mode
     if (menuItem.club.menuType !== "structured") {
       const errorMessage = menuItem.club.menuType === "none" 
-        ? "This club does not offer menu ordering."
-        : "This club's menu is not available for ordering. Please contact the club directly.";
+        ? "Este club no ofrece ordenamiento de menú." 
+        : "El menú de este club no está disponible para ordenamiento. Por favor, contacte al club directamente.";
       
       res.status(400).json({ error: errorMessage });
       return;
     }
 
     if (!menuItem || !menuItem.isActive) {
-      res.status(400).json({ error: "Invalid or inactive menu item" });
+      res.status(400).json({ error: "Elemento de menú inválido o inactivo" });
       return;
     }
 
     if (menuItem.hasVariants && !variantId) {
-      res.status(400).json({ error: "Variant is required for this item" });
+      res.status(400).json({ error: "Variante es requerida para este elemento" });
       return;
     }
 
     if (!menuItem.hasVariants && variantId) {
-      res.status(400).json({ error: "This item does not use variants" });
+      res.status(400).json({ error: "Este elemento no usa variantes" });
       return;
     }
 
@@ -94,7 +94,7 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
       const existingClubId = existingMenuItems[0].clubId;
       if (existingClubId !== menuItem.clubId) {
         res.status(400).json({
-          error: "You can only add items from one club to your cart. Please clear your cart first."
+          error: "Solo puedes agregar elementos de un club a tu carrito. Por favor, limpia tu carrito primero."
         });
         return;
       }
@@ -107,7 +107,7 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
         const variant = menuItem.variants.find(v => v.id === variantId);
         if (variant && variant.maxPerPerson && quantity > variant.maxPerPerson) {
           res.status(400).json({
-            error: `Max per person for variant "${variant.name}" is ${variant.maxPerPerson}`
+            error: `Max per person para la variante "${variant.name}" es ${variant.maxPerPerson}`
           });
           return;
         }
@@ -116,7 +116,7 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
       // For items without variants, check the parent's maxPerPerson
       if (menuItem.maxPerPerson && quantity > menuItem.maxPerPerson) {
         res.status(400).json({
-          error: `Max per person for this item is ${menuItem.maxPerPerson}`
+          error: `Max per person para este elemento es ${menuItem.maxPerPerson}`
         });
         return;
       }
@@ -141,7 +141,7 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
           const variant = menuItem.variants.find(v => v.id === variantId);
           if (variant && variant.maxPerPerson && newTotal > variant.maxPerPerson) {
             res.status(400).json({
-              error: `Max per person for variant "${variant.name}" is ${variant.maxPerPerson}`
+              error: `Max per person para la variante "${variant.name}" es ${variant.maxPerPerson}`
             });
             return;
           }
@@ -149,7 +149,7 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
       } else {
         if (menuItem.maxPerPerson && newTotal > menuItem.maxPerPerson) {
           res.status(400).json({
-            error: `Max per person for this item is ${menuItem.maxPerPerson}`
+            error: `Max per person para este elemento es ${menuItem.maxPerPerson}`
           });
           return;
         }
@@ -174,7 +174,7 @@ export const addToMenuCart = async (req: AuthenticatedRequest, res: Response): P
     }
   } catch (err) {
     console.error("❌ Error adding to menu cart:", err);
-    res.status(500).json({ error: "Server error adding item" });
+    res.status(500).json({ error: "Error del servidor al agregar elemento" });
   }
 };
 
@@ -186,7 +186,7 @@ export const updateMenuCartItem = async (req: AuthenticatedRequest, res: Respons
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -199,7 +199,7 @@ export const updateMenuCartItem = async (req: AuthenticatedRequest, res: Respons
     const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'menu');
     if (isLocked) {
       res.status(423).json({ 
-        error: "Cart is currently being processed. Please wait for your payment to complete before modifying items." 
+        error: "Carrito está siendo procesado actualmente. Por favor, espera a que se complete tu pago antes de modificar elementos." 
       });
       return;
     }
@@ -209,12 +209,12 @@ export const updateMenuCartItem = async (req: AuthenticatedRequest, res: Respons
 
     const cartItem = await cartRepo.findOne({ where: { id } });
     if (!cartItem) {
-      res.status(404).json({ error: "Cart item not found" });
+      res.status(404).json({ error: "Elemento del carrito no encontrado" });
       return;
     }
 
     if (cartItem.userId !== userId && cartItem.sessionId !== sessionId) {
-      res.status(403).json({ error: "Unauthorized to update this item" });
+      res.status(403).json({ error: "No autorizado para actualizar este elemento" });
       return;
     }
 
@@ -223,7 +223,7 @@ export const updateMenuCartItem = async (req: AuthenticatedRequest, res: Respons
       relations: ["variants"]
     });
     if (!menuItem || !menuItem.isActive) {
-      res.status(400).json({ error: "Item no longer available" });
+      res.status(400).json({ error: "Elemento no disponible" });
       return;
     }
 
@@ -234,7 +234,7 @@ export const updateMenuCartItem = async (req: AuthenticatedRequest, res: Respons
         const variant = menuItem.variants.find(v => v.id === cartItem.variantId);
         if (variant && variant.maxPerPerson && quantity > variant.maxPerPerson) {
           res.status(400).json({
-            error: `Max per person for variant "${variant.name}" is ${variant.maxPerPerson}`
+            error: `Max per person para la variante "${variant.name}" es ${variant.maxPerPerson}`
           });
           return;
         }
@@ -243,7 +243,7 @@ export const updateMenuCartItem = async (req: AuthenticatedRequest, res: Respons
       // For items without variants, check the parent's maxPerPerson
       if (menuItem.maxPerPerson && quantity > menuItem.maxPerPerson) {
         res.status(400).json({
-          error: `Max per person for this item is ${menuItem.maxPerPerson}`
+          error: `Max per person para este elemento es ${menuItem.maxPerPerson}`
         });
         return;
       }
@@ -255,7 +255,7 @@ export const updateMenuCartItem = async (req: AuthenticatedRequest, res: Respons
     res.json(cartItem);
   } catch (err) {
     console.error("❌ Error updating cart item:", err);
-    res.status(500).json({ error: "Server error updating item" });
+    res.status(500).json({ error: "Error del servidor al actualizar elemento" });
   }
 };
 
@@ -265,7 +265,7 @@ export const getMenuCartItems = async (req: AuthenticatedRequest, res: Response)
     const sessionId: string | undefined = !userId && req.sessionId ? req.sessionId : undefined;
 
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -325,7 +325,7 @@ export const getMenuCartItems = async (req: AuthenticatedRequest, res: Response)
     res.status(200).json(itemsWithDynamicPrices);
   } catch (err) {
     console.error("❌ Error fetching menu cart items:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -335,7 +335,7 @@ export const getMenuCartSummary = async (req: AuthenticatedRequest, res: Respons
     const sessionId: string | undefined = !userId && req.sessionId ? req.sessionId : undefined;
 
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -390,7 +390,7 @@ export const getMenuCartSummary = async (req: AuthenticatedRequest, res: Respons
     res.status(200).json(summary);
   } catch (err) {
     console.error("❌ Error fetching menu cart summary:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -403,7 +403,7 @@ export const removeMenuCartItem = async (req: AuthenticatedRequest, res: Respons
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -411,7 +411,7 @@ export const removeMenuCartItem = async (req: AuthenticatedRequest, res: Respons
     const item = await cartRepo.findOneBy({ id });
 
     if (!item) {
-      res.status(404).json({ error: "Menu cart item not found" });
+      res.status(404).json({ error: "Elemento del carrito no encontrado" });
       return;
     }
 
@@ -419,13 +419,13 @@ export const removeMenuCartItem = async (req: AuthenticatedRequest, res: Respons
     const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'menu');
     if (isLocked) {
       res.status(423).json({ 
-        error: "Cart is currently being processed. Please wait for your payment to complete before removing items." 
+        error: "Carrito está siendo procesado actualmente. Por favor, espera a que se complete tu pago antes de eliminar elementos." 
       });
       return;
     }
 
     if (!ownsMenuCartItem(item, userId, sessionId)) {
-      res.status(403).json({ error: "You cannot delete another user's menu cart item" });
+      res.status(403).json({ error: "No puedes eliminar el carrito de otro usuario" });
       return;
     }
 
@@ -433,7 +433,7 @@ export const removeMenuCartItem = async (req: AuthenticatedRequest, res: Respons
     res.status(204).send();
   } catch (err) {
     console.error("❌ Error removing menu cart item:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -444,7 +444,7 @@ export const clearMenuCart = async (req: AuthenticatedRequest, res: Response): P
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -455,7 +455,7 @@ export const clearMenuCart = async (req: AuthenticatedRequest, res: Response): P
     res.status(204).send();
   } catch (err) {
     console.error("❌ Error clearing menu cart:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -467,7 +467,7 @@ export const clearTicketCartFromMenu = async (req: AuthenticatedRequest, res: Re
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -478,6 +478,6 @@ export const clearTicketCartFromMenu = async (req: AuthenticatedRequest, res: Re
     res.status(204).send();
   } catch (err) {
     console.error("❌ Error clearing ticket cart from menu flow:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };

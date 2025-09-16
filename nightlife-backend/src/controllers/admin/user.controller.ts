@@ -35,7 +35,7 @@ export async function getAllUsers(req: AuthenticatedRequest, res: Response): Pro
     });
   } catch (error) {
     console.error("❌ Error getting all users:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -49,7 +49,7 @@ export async function getUserById(req: AuthenticatedRequest, res: Response): Pro
     // Sanitize the user ID
     const sanitizedId = sanitizeInput(id);
     if (!sanitizedId) {
-      res.status(400).json({ error: "Invalid user ID" });
+      res.status(400).json({ error: "ID de usuario inválido" });
       return;
     }
 
@@ -57,7 +57,7 @@ export async function getUserById(req: AuthenticatedRequest, res: Response): Pro
     const user = await userRepo.findOneBy({ id: sanitizedId });
 
     if (!user) {
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({ error: "Usuario no encontrado" });
       return;
     }
 
@@ -77,7 +77,7 @@ export async function getUserById(req: AuthenticatedRequest, res: Response): Pro
     });
   } catch (error) {
     console.error("❌ Error getting user by ID:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -91,7 +91,7 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response): Prom
     // Sanitize the user ID
     const sanitizedId = sanitizeInput(id);
     if (!sanitizedId) {
-      res.status(400).json({ error: "Invalid user ID" });
+      res.status(400).json({ error: "ID de usuario inválido" });
       return;
     }
 
@@ -99,12 +99,12 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response): Prom
     const user = await userRepo.findOneBy({ id: sanitizedId });
 
     if (!user) {
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({ error: "Usuario no encontrado" });
       return;
     }
 
     if (user.isDeleted) {
-      res.status(400).json({ error: "User account is already deleted" });
+      res.status(400).json({ error: "La cuenta de usuario ya ha sido eliminada" });
       return;
     }
 
@@ -131,7 +131,7 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response): Prom
     
     if (result.success) {
       res.status(200).json({ 
-        message: "User account anonymized successfully",
+        message: "Cuenta de usuario anonimizada exitosamente",
         userId: sanitizedId
       });
     } else {
@@ -139,7 +139,7 @@ export async function deleteUser(req: AuthenticatedRequest, res: Response): Prom
     }
   } catch (error) {
     console.error("❌ Error deleting user:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -153,7 +153,7 @@ export async function checkUserDeletionStatus(req: AuthenticatedRequest, res: Re
     // Sanitize the user ID
     const sanitizedId = sanitizeInput(id);
     if (!sanitizedId) {
-      res.status(400).json({ error: "Invalid user ID" });
+      res.status(400).json({ error: "ID de usuario inválido" });
       return;
     }
 
@@ -161,7 +161,7 @@ export async function checkUserDeletionStatus(req: AuthenticatedRequest, res: Re
     const user = await userRepo.findOneBy({ id: sanitizedId });
 
     if (!user) {
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({ error: "Usuario no encontrado" });
       return;
     }
 
@@ -185,7 +185,7 @@ export async function checkUserDeletionStatus(req: AuthenticatedRequest, res: Re
     }
   } catch (error) {
     console.error("❌ Error checking user deletion status:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -199,7 +199,7 @@ export async function updateUserRole(req: AuthenticatedRequest, res: Response): 
     // Sanitize the user ID
     const sanitizedId = sanitizeInput(id);
     if (!sanitizedId) {
-      res.status(400).json({ error: "Invalid user ID" });
+      res.status(400).json({ error: "ID de usuario inválido" });
       return;
     }
 
@@ -208,7 +208,7 @@ export async function updateUserRole(req: AuthenticatedRequest, res: Response): 
     const { role } = sanitizedBody;
 
     if (!role || !["clubowner", "bouncer", "user"].includes(role)) {
-      res.status(400).json({ error: "Invalid role. Allowed roles: user, clubowner, bouncer." });
+      res.status(400).json({ error: "Rol inválido. Roles permitidos: user, clubowner, bouncer." });
       return;
     }
 
@@ -216,17 +216,17 @@ export async function updateUserRole(req: AuthenticatedRequest, res: Response): 
     const user = await repo.findOneBy({ id: sanitizedId });
 
     if (!user) {
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({ error: "Usuario no encontrado" });
       return;
     }
 
     if (user.role === "admin") {
-      res.status(403).json({ error: "Cannot change role of an admin via API" });
+      res.status(403).json({ error: "No se puede cambiar el rol de un administrador vía API" });
       return;
     }
 
     if (user.isDeleted) {
-      res.status(400).json({ error: "Cannot modify deleted user" });
+      res.status(400).json({ error: "No se puede modificar un usuario eliminado" });
       return;
     }
 
@@ -234,12 +234,12 @@ export async function updateUserRole(req: AuthenticatedRequest, res: Response): 
     await repo.save(user);
 
     res.json({ 
-      message: `User role updated to ${role}`,
+      message: `Rol de usuario actualizado a ${role}`,
       userId: sanitizedId,
       newRole: role
     });
   } catch (error) {
     console.error("❌ Error updating user role:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 } 

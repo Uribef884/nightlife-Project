@@ -26,7 +26,7 @@ export async function register(req: Request, res: Response): Promise<void> {
     const password = req.body.password;
     
     if (!sanitizedEmail) {
-      res.status(400).json({ error: "Invalid email format" });
+      res.status(400).json({ error: "Formato de email inválido" });
       return;
     }
     
@@ -36,21 +36,21 @@ export async function register(req: Request, res: Response): Promise<void> {
 
     if (!result.success) {
       res.status(400).json({
-        error: "Invalid input",
+        error: "Datos de entrada inválidos",
         details: result.error.flatten(),
       });
       return;
     }
 
     if (isDisposableEmail(email)) {
-      res.status(403).json({ error: "Email domain not allowed" });
+      res.status(403).json({ error: "Dominio de email no permitido" });
       return;
     }
 
     const repo = AppDataSource.getRepository(User);
     const existing = await repo.findOneBy({ email });
     if (existing) {
-      res.status(409).json({ error: "Email already in use" });
+      res.status(409).json({ error: "Usuario ya existe" });
       return;
     }
 
@@ -66,13 +66,13 @@ export async function register(req: Request, res: Response): Promise<void> {
     const token = jwt.sign({ id: user.id, role: user.role, isDeleted: user.isDeleted }, JWT_SECRET, { expiresIn: "7d" });
 
     res.status(201).json({
-      message: "User registered successfully",
+      message: "Usuario registrado exitosamente",
       token,
       user: { id: user.id, email: user.email, role: user.role },
     });
   } catch (error) {
     console.error("❌ Error in register:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -81,14 +81,14 @@ export async function login(req: Request, res: Response): Promise<void> {
   const password = req.body.password;
   
   if (!sanitizedEmail) {
-    res.status(400).json({ error: "Invalid email format" });
+    res.status(400).json({ error: "Formato de email inválido" });
     return;
   }
   
   const email = sanitizedEmail;
 
   if (!email || !password) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "Credenciales inválidas" });
     return;
   }
 
@@ -96,26 +96,26 @@ export async function login(req: Request, res: Response): Promise<void> {
   const user = await repo.findOneBy({ email });
 
   if (!user) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "Credenciales inválidas" });
     return;
   }
 
   // Check if user account is deleted
   if (user.isDeleted) {
-    res.status(401).json({ error: "Account has been deleted" });
+    res.status(401).json({ error: "La cuenta ha sido eliminada" });
     return;
   }
 
   // Check if user has a password (not OAuth user)
   if (!user.password) {
-    res.status(401).json({ error: "Please sign in with Google" });
+    res.status(401).json({ error: "Por favor inicia sesión con Google" });
     return;
   }
 
   const isMatch = await bcrypt.compare(password, user.password);
 
   if (!isMatch) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "Credenciales inválidas" });
     return;
   }
 
@@ -161,7 +161,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   });
 
   res.json({
-    message: "Login successful",
+    message: "Inicio de sesión exitoso",
     user: {
       id: user.id,
       email: user.email,
@@ -199,10 +199,10 @@ export async function logout(req: Request, res: Response): Promise<void> {
       });
     }
 
-    res.json({ message: "Logged out successfully" });
+    res.json({ message: "Sesión cerrada exitosamente" });
   } catch (error) {
     console.error("❌ Error during logout:", error);
-    res.status(500).json({ error: "Error while logging out" });
+    res.status(500).json({ error: "Error al cerrar sesión" });
   }
 }
 
@@ -212,7 +212,7 @@ export async function deleteOwnUser(req: Request, res: Response): Promise<void> 
   try {
     const userId = req.user?.id;
     if (!userId) {
-      res.status(401).json({ error: "Unauthorized" });
+      res.status(401).json({ error: "No autorizado" });
       return;
     }
 
@@ -220,12 +220,12 @@ export async function deleteOwnUser(req: Request, res: Response): Promise<void> 
     const user = await repo.findOneBy({ id: userId });
 
     if (!user) {
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({ error: "Usuario no encontrado" });
       return;
     }
 
     if (user.isDeleted) {
-      res.status(400).json({ error: "User account is already deleted" });
+      res.status(400).json({ error: "La cuenta de usuario ya ha sido eliminada" });
       return;
     }
 
@@ -251,13 +251,13 @@ export async function deleteOwnUser(req: Request, res: Response): Promise<void> 
     const result = await anonymizeUser(userId);
     
     if (result.success) {
-      res.json({ message: "Your account has been anonymized successfully" });
+      res.json({ message: "Tu cuenta ha sido anonimizada exitosamente" });
     } else {
       res.status(500).json({ error: result.message });
     }
   } catch (error) {
     console.error("❌ Error deleting user:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -269,7 +269,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   const result = forgotPasswordSchema.safeParse(req.body);
   if (!result.success) {
     console.log('❌ [AUTH_CONTROLLER] Validation failed:', result.error);
-    res.status(200).json({ message: "Reset link has been sent." });
+    res.status(200).json({ message: "Se ha enviado el enlace de restablecimiento." });
     return;
   }
 
@@ -279,7 +279,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   const user = await AppDataSource.getRepository(User).findOneBy({ email });
   if (!user) {
     console.log('⚠️ [AUTH_CONTROLLER] User not found for email:', email);
-    res.status(200).json({ message: "Reset link has been sent." });
+    res.status(200).json({ message: "Se ha enviado el enlace de restablecimiento." });
     return;
   }
 
@@ -291,17 +291,17 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   try {
     await sendPasswordResetEmail(user.email, token);
     console.log('✅ [AUTH_CONTROLLER] Password reset email sent successfully');
-    res.status(200).json({ message: "Reset link has been sent." });
+    res.status(200).json({ message: "Se ha enviado el enlace de restablecimiento." });
   } catch (error) {
     console.error('❌ [AUTH_CONTROLLER] Failed to send password reset email:', error);
-    res.status(500).json({ error: "Failed to send reset email" });
+    res.status(500).json({ error: "Error al enviar el email de restablecimiento" });
   }
 }
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {
   const result = resetPasswordSchema.safeParse(req.body);
   if (!result.success) {
-    res.status(400).json({ error: "Invalid input" });
+    res.status(400).json({ error: "Datos de entrada inválidos" });
     return;
   }
 
@@ -313,17 +313,17 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
     const user = await repo.findOneBy({ id: payload.id });
 
     if (!user) {
-      res.status(400).json({ error: "Invalid token or user" });
+      res.status(400).json({ error: "Token o usuario inválido" });
       return;
     }
 
     user.password = await bcrypt.hash(newPassword, 10);
     await repo.save(user);
 
-    res.status(200).json({ message: "Password reset successfully" });
+    res.status(200).json({ message: "Contraseña restablecida exitosamente" });
   } catch (err) {
     console.error("❌ Error resetting password:", err);
-    res.status(400).json({ error: "Invalid or expired token" });
+    res.status(400).json({ error: "Token inválido o expirado" });
   }
 }
 
@@ -333,7 +333,7 @@ export async function changePassword(req: Request, res: Response): Promise<void>
     const userId = typedReq.user?.id;
 
     if (!userId) {
-      res.status(401).json({ error: "Unauthorized" });
+      res.status(401).json({ error: "No autorizado" });
       return;
     }
 
@@ -352,33 +352,33 @@ export async function changePassword(req: Request, res: Response): Promise<void>
     const user = await repo.findOneBy({ id: userId });
 
     if (!user) {
-      res.status(404).json({ error: "User not found" });
+      res.status(404).json({ error: "Usuario no encontrado" });
       return;
     }
 
     // Check if user account is deleted
     if (user.isDeleted) {
-      res.status(401).json({ error: "Account has been deleted" });
+      res.status(401).json({ error: "La cuenta ha sido eliminada" });
       return;
     }
 
     // Check if user has a password (not OAuth user)
     if (!user.password) {
-      res.status(400).json({ error: "Cannot change password for OAuth users" });
+      res.status(400).json({ error: "No se puede cambiar la contraseña para usuarios OAuth" });
       return;
     }
 
     // Verify old password
     const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
     if (!isOldPasswordValid) {
-      res.status(400).json({ error: "Current password is incorrect" });
+      res.status(400).json({ error: "La contraseña actual es incorrecta" });
       return;
     }
 
     // Check if new password is different from old password
     const isSamePassword = await bcrypt.compare(newPassword, user.password);
     if (isSamePassword) {
-      res.status(400).json({ error: "New password must be different from current password" });
+      res.status(400).json({ error: "La nueva contraseña debe ser diferente a la contraseña actual" });
       return;
     }
 
@@ -387,10 +387,10 @@ export async function changePassword(req: Request, res: Response): Promise<void>
     user.password = hashedNewPassword;
     await repo.save(user);
 
-    res.status(200).json({ message: "Password changed successfully" });
+    res.status(200).json({ message: "Contraseña cambiada exitosamente" });
   } catch (error) {
     console.error("❌ Error changing password:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -401,13 +401,13 @@ export const getCurrentUser = async (
   const user = req.user;
 
   if (!user) {
-    res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json({ message: "No autorizado" });
     return;
   }
 
   // Check if user account is deleted
   if (user.isDeleted) {
-    res.status(401).json({ error: "Account has been deleted" });
+    res.status(401).json({ error: "La cuenta ha sido eliminada" });
     return;
   }
 
@@ -416,7 +416,7 @@ export const getCurrentUser = async (
   const fullUser = await repo.findOneBy({ id: user.id });
   
   if (!fullUser) {
-    res.status(404).json({ error: "User not found" });
+    res.status(404).json({ error: "Usuario no encontrado" });
     return;
   }
 
@@ -446,7 +446,7 @@ export async function googleAuth(req: AuthenticatedRequest, res: Response): Prom
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
       console.error('❌ Missing Google OAuth environment variables');
       res.status(500).json({ 
-        error: "Google OAuth not configured",
+        error: "Google OAuth no configurado",
         missing: [
           !process.env.GOOGLE_CLIENT_ID && 'GOOGLE_CLIENT_ID',
           !process.env.GOOGLE_CLIENT_SECRET && 'GOOGLE_CLIENT_SECRET',
@@ -469,7 +469,7 @@ export async function googleAuth(req: AuthenticatedRequest, res: Response): Prom
     res.redirect(authUrl);
   } catch (error) {
     console.error("❌ Error initiating Google OAuth:", error);
-    res.status(500).json({ error: "Failed to initiate Google authentication" });
+    res.status(500).json({ error: "Error al iniciar la autenticación con Google" });
   }
 }
 
@@ -500,9 +500,9 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     if (!code) {
       console.error('❌ Missing authorization code in OAuth callback');
       res.status(400).json({ 
-        error: "Missing authorization code",
+        error: "Código de autorización faltante",
         received_params: req.query,
-        help: "This endpoint should only be accessed via Google OAuth flow. Start at /auth/google"
+        help: "Este endpoint solo debe ser accedido mediante el flujo OAuth de Google. Comienza en /auth/google"
       });
       return;
     }
@@ -511,13 +511,13 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     const googleUser = await OAuthService.verifyGoogleToken(code as string);
     
     if (!googleUser.emailVerified) {
-      res.status(400).json({ error: "Google email not verified" });
+      res.status(400).json({ error: "Email de Google no verificado" });
       return;
     }
 
     // Check for disposable email
     if (isDisposableEmail(googleUser.email)) {
-      res.status(403).json({ error: "Email domain not allowed" });
+      res.status(403).json({ error: "Dominio de email no permitido" });
       return;
     }
 
@@ -527,7 +527,7 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     if (user) {
       // Check if user account is deleted
       if (user.isDeleted) {
-        res.status(401).json({ error: "Account has been deleted" });
+        res.status(401).json({ error: "La cuenta ha sido eliminada" });
         return;
       }
       
@@ -629,7 +629,7 @@ export async function googleTokenAuth(req: Request, res: Response): Promise<void
     const typedReq = req as AuthenticatedRequest;
     
     if (!idToken) {
-      res.status(400).json({ error: "Missing Google ID token" });
+      res.status(400).json({ error: "Token de ID de Google faltante" });
       return;
     }
 
@@ -637,13 +637,13 @@ export async function googleTokenAuth(req: Request, res: Response): Promise<void
     const googleUser = await OAuthService.verifyGoogleIdToken(idToken);
     
     if (!googleUser.emailVerified) {
-      res.status(400).json({ error: "Google email not verified" });
+      res.status(400).json({ error: "Email de Google no verificado" });
       return;
     }
 
     // Check for disposable email
     if (isDisposableEmail(googleUser.email)) {
-      res.status(403).json({ error: "Email domain not allowed" });
+      res.status(403).json({ error: "Dominio de email no permitido" });
       return;
     }
 
@@ -653,7 +653,7 @@ export async function googleTokenAuth(req: Request, res: Response): Promise<void
     if (user) {
       // Check if user account is deleted
       if (user.isDeleted) {
-        res.status(401).json({ error: "Account has been deleted" });
+        res.status(401).json({ error: "La cuenta ha sido eliminada" });
         return;
       }
       
@@ -726,7 +726,7 @@ export async function googleTokenAuth(req: Request, res: Response): Promise<void
     }
 
     res.json({
-      message: "Google authentication successful",
+      message: "Autenticación con Google exitosa",
       user: {
         id: user.id,
         email: user.email,
@@ -741,7 +741,7 @@ export async function googleTokenAuth(req: Request, res: Response): Promise<void
 
   } catch (error) {
     console.error("❌ Error in Google token authentication:", error);
-    res.status(500).json({ error: "Failed to authenticate with Google" });
+    res.status(500).json({ error: "Error al autenticar con Google" });
   }
 }
 
@@ -749,7 +749,7 @@ export async function checkUserDeletionStatus(req: Request, res: Response): Prom
   try {
     const userId = req.user?.id;
     if (!userId) {
-      res.status(401).json({ error: "Unauthorized" });
+      res.status(401).json({ error: "No autorizado" });
       return;
     }
 
@@ -773,6 +773,6 @@ export async function checkUserDeletionStatus(req: Request, res: Response): Prom
     }
   } catch (error) {
     console.error("❌ Error checking user deletion status:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }

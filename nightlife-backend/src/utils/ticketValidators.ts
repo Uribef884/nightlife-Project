@@ -26,28 +26,28 @@ export const validateTicketInput = (req: Request, res: Response, next: NextFunct
       category === TicketCategory.GENERAL
     ) {
       if (availableDate) {
-        res.status(400).json({ error: "Normal covers must not have an availableDate" });
+        res.status(400).json({ error: "Normal covers no pueden tener una fecha disponible" });
         return;
       }
 
       if (quantity !== undefined) {
-        res.status(400).json({ error: "Normal covers must not have a quantity" });
+        res.status(400).json({ error: "Normal covers no pueden tener una cantidad" });
         return;
       }
 
       if (parsedPrice <= 0) {
-        res.status(400).json({ error: "Normal covers must have a price greater than 0" });
+        res.status(400).json({ error: "Normal covers deben tener un precio mayor que 0" });
         return;
       }
 
       // Validate minimum cost for paid tickets (exclude free tickets)
       if (parsedPrice !== 0 && parsedPrice < 1500) {
-        res.status(400).json({ error: "Price must be at least 1500 COP for paid tickets. Use price 0 for free tickets." });
+        res.status(400).json({ error: "El precio debe ser al menos 1500 COP para tickets pagos. Usa precio 0 para tickets gratuitos." });
         return;
       }
 
       if (eventId) {
-        res.status(400).json({ error: "Normal covers cannot be linked to events" });
+        res.status(400).json({ error: "Normal covers no pueden estar vinculados a eventos" });
         return;
       }
 
@@ -57,22 +57,22 @@ export const validateTicketInput = (req: Request, res: Response, next: NextFunct
     // ✅ Free tickets
     if (category === TicketCategory.FREE) {
       if (parsedPrice !== 0) {
-        res.status(400).json({ error: "Free tickets must have price 0" });
+        res.status(400).json({ error: "Free tickets deben tener precio 0" });
         return;
       }
 
       if (!availableDate) {
-        res.status(400).json({ error: "Free tickets must have an availableDate" });
+        res.status(400).json({ error: "Free tickets deben tener una fecha disponible" });
         return;
       }
 
       if (parsedQuantity == null || parsedQuantity <= 0) {
-        res.status(400).json({ error: "Free tickets must have a valid quantity" });
+        res.status(400).json({ error: "Free tickets deben tener una cantidad válida" });
         return;
       }
 
       if (eventId) {
-        res.status(400).json({ error: "Free tickets must not be linked to events" });
+        res.status(400).json({ error: "Free tickets no pueden estar vinculados a eventos" });
         return;
      }
 
@@ -82,17 +82,17 @@ export const validateTicketInput = (req: Request, res: Response, next: NextFunct
     // ✅ Event tickets
     if (category === TicketCategory.EVENT) {
       if (!eventId) {
-        res.status(400).json({ error: "Event tickets must be linked to an event" });
+        res.status(400).json({ error: "Event tickets deben estar vinculados a un evento" });
         return;
       }
 
       if (availableDate) {
-        res.status(400).json({ error: "Event tickets must not manually set availableDate" });
+        res.status(400).json({ error: "Event tickets no pueden establecer manualmente una fecha disponible" });
         return;
       }
 
       if (parsedQuantity == null || parsedQuantity <= 0) {
-        res.status(400).json({ error: "Event tickets must have a valid quantity" });
+        res.status(400).json({ error: "Event tickets deben tener una cantidad válida" });
         return;
       }
 
@@ -101,23 +101,23 @@ export const validateTicketInput = (req: Request, res: Response, next: NextFunct
         .findOne({ where: { id: eventId } })
         .then((event) => {
           if (!event) {
-            res.status(400).json({ error: "Event not found for eventId" });
+            res.status(400).json({ error: "Evento no encontrado para eventId" });
             return;
           }
           next();
         })
         .catch((err) => {
           console.error("❌ Ticket validation DB error:", err);
-          res.status(500).json({ error: "Internal server error during validation" });
+          res.status(500).json({ error: "Error interno del servidor durante la validación" });
         });
 
       return;
     }
 
     // Fallback
-    res.status(400).json({ error: "Unknown ticket category" });
+    res.status(400).json({ error: "Categoría de ticket desconocida" });
   } catch (error) {
     console.error("❌ Ticket validation failed:", error);
-    res.status(500).json({ error: "Internal server error during validation" });
+    res.status(500).json({ error: "Error interno del servidor durante la validación" });
   }
 };

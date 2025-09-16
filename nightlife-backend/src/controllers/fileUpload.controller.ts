@@ -20,7 +20,7 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
 
     // Only club owners can upload PDF menu
     if (user.role !== "admin" && user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can upload PDF menu" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden subir menús PDF" });  
       return;
     }
 
@@ -31,13 +31,13 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
       // For admins, use the clubId from the URL parameters
       clubId = req.params.clubId;
       if (!clubId) {
-        res.status(400).json({ error: "clubId parameter is required for admin uploads" });
+        res.status(400).json({ error: "El parámetro clubId es requerido para subidas de administrador" });
         return;
       }
     } else {
       // For club owners, use their associated clubId
       if (!user.clubId) {
-        res.status(400).json({ error: 'User not associated with any club' });
+        res.status(400).json({ error: 'Usuario no asociado con ningún club' });
         return;
       }
       clubId = user.clubId;
@@ -48,18 +48,18 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
     const club = await clubRepo.findOne({ where: { id: clubId } });
     
     if (!club) {
-      res.status(404).json({ error: 'Club not found' });
+      res.status(404).json({ error: 'Club no encontrado' });
       return;
     }
 
     // Check if club is in PDF mode
     if (club.menuType !== "pdf") {
-      let errorMessage = "Club must be in PDF menu mode to upload PDF. Switch to PDF mode first.";
+      let errorMessage = "El club debe estar en modo menú PDF para subir un PDF. Cambia a modo PDF primero.";
       
       if (club.menuType === "structured") {
-        errorMessage = "Cannot upload PDF menu when club is in structured menu mode. Switch to PDF mode first to upload a PDF menu.";
+        errorMessage = "No se puede subir menú PDF cuando el club está en modo menú estructurado. Cambia a modo PDF primero para subir un menú PDF.";
       } else if (club.menuType === "none") {
-        errorMessage = "Cannot upload PDF menu when club has no menu enabled. Switch to PDF mode first to upload a PDF menu.";
+        errorMessage = "No se puede subir menú PDF cuando el club no tiene menú habilitado. Cambia a modo PDF primero para subir un menú PDF.";
       }
       
       res.status(400).json({ 
@@ -131,7 +131,7 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
     }
 
     res.json({
-      message: 'PDF menu uploaded successfully',
+      message: 'Menú PDF subido exitosamente',
       pdfMenuUrl: uploadResult.url,
       pdfMenuName: club.pdfMenuName,
       pdfMenuId: newMenuId,
@@ -145,7 +145,7 @@ export const uploadMenuPdf = async (req: AuthenticatedRequest, res: Response): P
     });
   } catch (error) {
     console.error('Error uploading PDF:', error);
-    res.status(500).json({ error: 'Failed to upload PDF' });
+    res.status(500).json({ error: 'Error al subir PDF' });
   }
 };
 
@@ -156,7 +156,7 @@ export const removePdfMenu = async (req: AuthenticatedRequest, res: Response): P
 
     // Only club owners can remove PDF menu
     if (user.role !== "admin" && user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can remove PDF menu" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden eliminar menús PDF" });
       return;
     }
 
@@ -167,13 +167,13 @@ export const removePdfMenu = async (req: AuthenticatedRequest, res: Response): P
       // For admins, use the clubId from the URL parameters
       clubId = req.params.clubId;
       if (!clubId) {
-        res.status(400).json({ error: "clubId parameter is required for admin operations" });
+        res.status(400).json({ error: "El parámetro clubId es requerido para operaciones de administrador" });
         return;
       }
     } else {
       // For club owners, use their associated clubId
       if (!user.clubId) {
-        res.status(400).json({ error: 'User not associated with any club' });
+        res.status(400).json({ error: 'Usuario no asociado con ningún club' });
         return;
       }
       clubId = user.clubId;
@@ -183,12 +183,12 @@ export const removePdfMenu = async (req: AuthenticatedRequest, res: Response): P
     const club = await clubRepo.findOne({ where: { id: clubId } });
 
     if (!club) {
-      res.status(404).json({ error: 'Club not found' });
+      res.status(404).json({ error: 'Club no encontrado' });
       return;
     }
 
     if (!club.pdfMenuUrl) {
-      res.status(404).json({ error: 'No PDF menu to remove' });
+      res.status(404).json({ error: 'No hay menú PDF para eliminar' });
       return;
     }
 
@@ -213,11 +213,11 @@ export const removePdfMenu = async (req: AuthenticatedRequest, res: Response): P
     });
 
     res.json({
-      message: 'PDF menu removed successfully'
+      message: 'Menú PDF eliminado exitosamente'
     });
   } catch (error) {
     console.error('Error removing PDF menu:', error);
-    res.status(500).json({ error: 'Failed to remove PDF menu' });
+    res.status(500).json({ error: 'Error al eliminar menú PDF' });
   }
 };
 
@@ -229,7 +229,7 @@ export const uploadClubProfileImage = async (req: AuthenticatedRequest, res: Res
 
     // Only club owners can upload profile image
     if (user.role !== "admin" && user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can upload profile image" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden subir imagen de perfil" });
       return;
     }
 
@@ -240,14 +240,14 @@ export const uploadClubProfileImage = async (req: AuthenticatedRequest, res: Res
       // For admins, use the clubId from the URL parameters
       const paramClubId = req.params.clubId;
       if (!paramClubId) {
-        res.status(400).json({ error: "clubId parameter is required for admin uploads" });
+        res.status(400).json({ error: "El parámetro clubId es requerido para subidas de administrador" });
         return;
       }
       clubId = paramClubId;
     } else {
       // For club owners, use their associated clubId
       if (!user.clubId) {
-        res.status(400).json({ error: 'User not associated with any club' });
+        res.status(400).json({ error: 'Usuario no asociado con ningún club' });
         return;
       }
       clubId = user.clubId;
@@ -258,7 +258,7 @@ export const uploadClubProfileImage = async (req: AuthenticatedRequest, res: Res
     const club = await clubRepo.findOne({ where: { id: clubId } });
     
     if (!club) {
-      res.status(404).json({ error: 'Club not found' });
+      res.status(404).json({ error: 'Club no encontrado' });
       return;
     }
 
@@ -297,7 +297,7 @@ export const uploadClubProfileImage = async (req: AuthenticatedRequest, res: Res
     }
 
     res.json({
-      message: 'Profile image uploaded successfully',
+      message: 'Imagen de perfil subida exitosamente',
       imageUrl: uploadResult.url,
       blurhash: processed.blurhash,
       width: processed.width,
@@ -305,7 +305,7 @@ export const uploadClubProfileImage = async (req: AuthenticatedRequest, res: Res
     });
   } catch (error) {
     console.error('Error uploading image:', error);
-    res.status(500).json({ error: 'Failed to upload image' });
+    res.status(500).json({ error: 'Error al subir imagen' });
   }
 };
 
@@ -319,7 +319,7 @@ export const uploadMenuItemImage = async (req: AuthenticatedRequest, res: Respon
 
     // Only club owners can upload menu item images
     if (user.role !== "admin" && user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can upload menu item images" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden subir imágenes de artículos del menú" });
       return;
     }
 
@@ -330,14 +330,14 @@ export const uploadMenuItemImage = async (req: AuthenticatedRequest, res: Respon
       // For admins, use the clubId from the URL parameters
       const paramClubId = req.params.clubId;
       if (!paramClubId) {
-        res.status(400).json({ error: "clubId parameter is required for admin uploads" });
+        res.status(400).json({ error: "El parámetro clubId es requerido para subidas de administrador" });
         return;
       }
       expectedClubId = paramClubId;
     } else {
       // For club owners, use their associated clubId
       if (!user.clubId) {
-        res.status(400).json({ error: 'User not associated with any club' });
+        res.status(400).json({ error: 'Usuario no asociado con ningún club' });
         return;
       }
       expectedClubId = user.clubId;
@@ -348,14 +348,14 @@ export const uploadMenuItemImage = async (req: AuthenticatedRequest, res: Respon
     const item = await itemRepo.findOne({ where: { id: menuItemIdToUse } });
 
     if (!item) {
-      res.status(404).json({ error: 'Menu item not found' });
+      res.status(404).json({ error: 'Artículo del menú no encontrado' });
       return;
     }
 
     // Check if menu item belongs to the expected club
     if (item.clubId !== expectedClubId) {
       res.status(403).json({ 
-        error: `Menu item '${item.name}' does not belong to the specified club` 
+        error: `El artículo del menú '${item.name}' no pertenece al club especificado` 
       });
       return;
     }
@@ -394,14 +394,14 @@ export const uploadMenuItemImage = async (req: AuthenticatedRequest, res: Respon
     }
 
     res.json({
-      message: 'Menu item image uploaded successfully',
+      message: 'Imagen del artículo del menú subida exitosamente',
       imageUrl: uploadResult.url,
       blurhash: processed.blurhash,
       itemId: item.id
     });
   } catch (error) {
     console.error('Error uploading menu item image:', error);
-    res.status(500).json({ error: 'Failed to upload image' });
+    res.status(500).json({ error: 'Error al subir imagen' });
   }
 };
 
@@ -416,7 +416,7 @@ export const uploadEventBanner = async (req: AuthenticatedRequest, res: Response
     // Only club owners can upload event banners
     if (user.role !== "admin" && user.role !== "clubowner") {
       console.log('❌ Access denied - user role:', user.role);
-      res.status(403).json({ error: "Only club owners can upload event banners" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden subir banners de eventos" });
       return;
     }
 
@@ -428,14 +428,14 @@ export const uploadEventBanner = async (req: AuthenticatedRequest, res: Response
       // For admins, use the clubId from the URL parameters
       const paramClubId = req.params.clubId;
       if (!paramClubId) {
-        res.status(400).json({ error: "clubId parameter is required for admin uploads" });
+        res.status(400).json({ error: "El parámetro clubId es requerido para subidas de administrador" });
         return;
       }
       expectedClubId = paramClubId;
     } else {
       // For club owners, use their associated clubId
       if (!user.clubId) {
-        res.status(400).json({ error: 'User not associated with any club' });
+        res.status(400).json({ error: 'Usuario no asociado con ningún club' });
         return;
       }
       expectedClubId = user.clubId;
@@ -448,7 +448,7 @@ export const uploadEventBanner = async (req: AuthenticatedRequest, res: Response
 
     if (!event || event.clubId !== expectedClubId) {
       console.log('❌ Event not found or unauthorized');
-      res.status(404).json({ error: 'Event not found or unauthorized' });
+      res.status(404).json({ error: 'Evento no encontrado o no autorizado' });
       return;
     }
 
@@ -492,7 +492,7 @@ export const uploadEventBanner = async (req: AuthenticatedRequest, res: Response
     }
 
     res.json({
-      message: 'Event banner uploaded successfully',
+      message: 'Banner del evento subido exitosamente',
       imageUrl: uploadResult.url,
       blurhash: processed.blurhash,
       eventId: event.id
@@ -500,7 +500,7 @@ export const uploadEventBanner = async (req: AuthenticatedRequest, res: Response
 
   } catch (error) {
     console.error('❌ Error uploading event banner:', error);
-    res.status(500).json({ error: 'Failed to upload event banner' });
+    res.status(500).json({ error: 'Error al subir banner del evento' });
   }
 };
 
@@ -511,7 +511,7 @@ export const uploadAdImage = async (req: AuthenticatedRequest, res: Response): P
     const { adId } = req.params;
     const file = req.file;
     if (!file) {
-      res.status(400).json({ error: "No image file uploaded." });
+      res.status(400).json({ error: "No se subió archivo de imagen." });
       return ;
     }
 
@@ -519,13 +519,13 @@ export const uploadAdImage = async (req: AuthenticatedRequest, res: Response): P
     const adRepo = AppDataSource.getRepository(Ad);
     const ad = await adRepo.findOne({ where: { id: adId } });
     if (!ad) {
-      res.status(404).json({ error: "Ad not found." });
+      res.status(404).json({ error: "Anuncio no encontrado." });
       return;
     }
 
     // Permission check
     if (!ad.clubId && user.role !== "admin") {
-      res.status(403).json({ error: "Only admins can upload images for admin ads." });
+      res.status(403).json({ error: "Solo los administradores pueden subir imágenes para anuncios de administrador." });
       return ;
     }
     if (ad.clubId) {
@@ -533,11 +533,11 @@ export const uploadAdImage = async (req: AuthenticatedRequest, res: Response): P
         // For admins, check if the ad belongs to the club specified in the URL
         const paramClubId = req.params.clubId;
         if (!paramClubId || ad.clubId !== paramClubId) {
-          res.status(403).json({ error: "Ad does not belong to the specified club." });
+          res.status(403).json({ error: "El anuncio no pertenece al club especificado." });
           return;
         }
       } else if (user.role !== "clubowner" || user.clubId !== ad.clubId) {
-        res.status(403).json({ error: "Only the club owner can upload images for this ad." });
+        res.status(403).json({ error: "Solo el dueño del club puede subir imágenes para este anuncio." });
         return;
       }
     }
@@ -563,14 +563,14 @@ export const uploadAdImage = async (req: AuthenticatedRequest, res: Response): P
     await S3Service.deleteFileByUrl(oldImageUrl, ad.imageUrl);
 
     res.json({
-      message: 'Ad image uploaded successfully',
+      message: 'Imagen del anuncio subida exitosamente',
       imageUrl: ad.imageUrl,
       blurhash: ad.imageBlurhash,
       adId: ad.id
     });
   } catch (error) {
     console.error('Error uploading ad image:', error);
-    res.status(500).json({ error: 'Failed to upload ad image' });
+    res.status(500).json({ error: 'Error al subir imagen del anuncio' });
   }
 };
 

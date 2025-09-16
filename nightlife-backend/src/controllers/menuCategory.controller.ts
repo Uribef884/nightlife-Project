@@ -18,14 +18,14 @@ export const getAllMenuCategories = async (req: Request, res: Response) => {
     const club = await clubRepo.findOne({ where: { id: clubId } });
     
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
     // Check if club uses PDF menu
     if (club.menuType === "pdf") {
       res.status(400).json({ 
-        error: "This club uses a PDF menu. Structured menu categories are not available." 
+        error: "Este club usa un menú PDF. Las categorías de menú estructurado no están disponibles." 
       });
       return;
     }
@@ -100,7 +100,7 @@ export const getAllMenuCategories = async (req: Request, res: Response) => {
     res.json(categoriesWithDynamicPrices);
   } catch (err) {
     console.error("Failed to fetch menu categories:", err);
-    res.status(500).json({ error: "Server error fetching menu categories" });
+    res.status(500).json({ error: "Error del servidor al obtener categorías del menú" });
   }
 };
 
@@ -115,17 +115,17 @@ export const createMenuCategory = async (req: Request, res: Response): Promise<v
     const user = req.user;
 
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can create categories" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden crear categorías" });
       return;
     }
 
     if (!user.clubId) {
-      res.status(403).json({ error: "Club ID is required" });
+      res.status(403).json({ error: "ID del club es requerido" });
       return;
     }
 
     if (!name) {
-      res.status(400).json({ error: "Name is required" });
+      res.status(400).json({ error: "El nombre es requerido" });
       return;
     }
 
@@ -139,7 +139,7 @@ export const createMenuCategory = async (req: Request, res: Response): Promise<v
     res.status(201).json(newCategory);
   } catch (err) {
     console.error("Error creating menu category:", err);
-    res.status(500).json({ error: "Server error creating category" });
+    res.status(500).json({ error: "Error del servidor al crear categoría" });
   }
 };
 
@@ -156,7 +156,7 @@ export const updateMenuCategory = async (req: Request, res: Response): Promise<v
     const user = req.user;
 
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can update categories" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden actualizar categorías" });
       return;
     }
 
@@ -167,13 +167,13 @@ export const updateMenuCategory = async (req: Request, res: Response): Promise<v
     });
 
     if (!category || category.club.id !== user.clubId) {
-      res.status(403).json({ error: "You can only update your own categories" });
+      res.status(403).json({ error: "Solo puedes actualizar tus propias categorías" });
       return;
     }
 
     if (name !== undefined) {
       if (!name) {
-        res.status(400).json({ error: "Name is required" });
+        res.status(400).json({ error: "El nombre es requerido" });
         return;
       }
       category.name = name;
@@ -184,7 +184,7 @@ export const updateMenuCategory = async (req: Request, res: Response): Promise<v
     res.json(category);
   } catch (err) {
     console.error("Error updating category:", err);
-    res.status(500).json({ error: "Server error updating category" });
+    res.status(500).json({ error: "Error del servidor al actualizar categoría" });
   }
 };
 
@@ -194,7 +194,7 @@ export const deleteMenuCategory = async (req: Request, res: Response): Promise<v
     const user = req.user;
 
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can delete categories" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden eliminar categorías" });
       return;
     }
 
@@ -205,7 +205,7 @@ export const deleteMenuCategory = async (req: Request, res: Response): Promise<v
     });
 
     if (!category || category.club.id !== user.clubId) {
-      res.status(403).json({ error: "You can only delete your own categories" });
+      res.status(403).json({ error: "Solo puedes eliminar tus propias categorías" });
       return;
     }
 
@@ -234,21 +234,21 @@ export const deleteMenuCategory = async (req: Request, res: Response): Promise<v
       await repo.save(category);
 
       res.json({ 
-        message: "Category soft deleted successfully", 
+        message: "Categoría eliminada exitosamente", 
         deletedAt: category.deletedAt,
         hasPurchases,
-        note: "Category marked as deleted but preserved due to existing purchases"
+        note: "Categoría marcada como eliminada pero preservada debido a compras existentes"
       });
     } else {
       // Hard delete - no associated purchases, safe to completely remove
       await repo.remove(category);
       res.json({ 
-        message: "Category permanently deleted successfully",
-        note: "No associated purchases found, category completely removed"
+        message: "Categoría eliminada permanentemente exitosamente",
+        note: "No se encontraron compras asociadas, categoría completamente removida"
       });
     }
   } catch (err) {
     console.error("Error deleting category:", err);
-    res.status(500).json({ error: "Server error deleting category" });
+    res.status(500).json({ error: "Error del servidor al eliminar categoría" });
   }
 };

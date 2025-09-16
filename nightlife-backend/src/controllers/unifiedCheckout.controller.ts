@@ -51,14 +51,14 @@ export class UnifiedCheckoutController {
       const sanitizedEmail = sanitizeInput(rawEmail);
 
       if (!sanitizedEmail) {
-        res.status(400).json({ error: "Valid email is required to complete checkout." });
+        res.status(400).json({ error: "Email válido es requerido para completar la compra." });
         return;
       }
 
       const email = sanitizedEmail;
 
       if (!req.user && isDisposableEmail(email)) {
-        res.status(403).json({ error: "Disposable email domains are not allowed." });
+        res.status(403).json({ error: "Dominios de email desechables no están permitidos." });
         return;
       }
 
@@ -79,33 +79,33 @@ export class UnifiedCheckoutController {
       } = typedReq.body;
 
       if (!paymentMethod) {
-        res.status(400).json({ error: "Payment method is required" });
+        res.status(400).json({ error: "Método de pago es requerido" });
         return;
       }
 
       // Validate payment method specific data
       if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.CARD) {
         if (!paymentData || !paymentData.number || !paymentData.cvc || !paymentData.exp_month || !paymentData.exp_year || !paymentData.card_holder) {
-          res.status(400).json({ error: "Complete card data is required" });
+          res.status(400).json({ error: "Datos completos de tarjeta son requeridos" });
           return;
         }
       } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.NEQUI) {
         if (!paymentData || !paymentData.phone_number) {
-          res.status(400).json({ error: "Phone number is required for Nequi payments" });
+          res.status(400).json({ error: "Número de teléfono es requerido para pagos con Nequi" });
           return;
         }
       } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.PSE) {
         if (!paymentData || !paymentData.user_legal_id || !paymentData.financial_institution_code || !customer_data?.full_name) {
-          res.status(400).json({ error: "Complete PSE data including customer info is required" });
+          res.status(400).json({ error: "Datos completos de PSE incluyendo información del cliente son requeridos" });
           return;
         }
       } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.BANCOLOMBIA_TRANSFER) {
         if (!paymentData || !paymentData.payment_description) {
-          res.status(400).json({ error: "Payment description is required for Bancolombia Transfer" });
+          res.status(400).json({ error: "Descripción de pago es requerida para Transferencia Bancolombia" });
           return;
         }
       } else if (!Object.values(WOMPI_CONFIG.PAYMENT_METHODS).includes(paymentMethod)) {
-        res.status(400).json({ error: "Unsupported payment method" });
+        res.status(400).json({ error: "Método de pago no soportado" });
         return;
       }
 
@@ -190,7 +190,7 @@ export class UnifiedCheckoutController {
         transactionId: result.transactionId,
         total: result.totalPaid,
         status: result.wompiStatus,
-        message: "Unified checkout initiated successfully. Processing payment automatically...",
+        message: "Checkout unificado iniciado exitosamente. Procesando pago automáticamente...",
         automaticCheckout: true,
         isFreeCheckout: result.isFreeCheckout,
         customerInfo: {
@@ -204,20 +204,20 @@ export class UnifiedCheckoutController {
       if (result.redirectUrl) {
         response.redirectUrl = result.redirectUrl;
         response.requiresRedirect = true;
-        response.message = `Please complete payment at ${paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.PSE ? 'your bank' : 'Bancolombia'}. We'll process your order automatically once payment is complete.`;
+        response.message = `Por favor completa el pago en ${paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.PSE ? 'tu banco' : 'Bancolombia'}. Procesaremos tu pedido automáticamente una vez que el pago esté completo.`;
       }
 
       // Handle immediate responses (Cards, Nequi)
       if (result.wompiStatus === WOMPI_CONFIG.STATUSES.APPROVED) {
-        response.message = "Payment approved successfully. Processing your order...";
+        response.message = "Pago aprobado exitosamente. Procesando tu pedido...";
       } else if (result.wompiStatus === WOMPI_CONFIG.STATUSES.DECLINED) {
-        response.error = "Payment was declined";
+        response.error = "El pago fue rechazado";
         response.status = "DECLINED";
       } else if (result.wompiStatus === WOMPI_CONFIG.STATUSES.PENDING) {
         if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.NEQUI) {
-          response.message = "Please check your Nequi app to complete the payment. We'll process your order automatically once confirmed.";
+          response.message = "Por favor revisa tu app de Nequi para completar el pago. Procesaremos tu pedido automáticamente una vez confirmado.";
         } else {
-          response.message = "Payment is being processed. We'll update you automatically.";
+          response.message = "El pago está siendo procesado. Te actualizaremos automáticamente.";
         }
       }
 
@@ -236,7 +236,7 @@ export class UnifiedCheckoutController {
       }
       
       res.status(400).json({ 
-        error: error.message || "Failed to initiate unified checkout" 
+        error: error.message || "Error al iniciar el checkout unificado" 
       });
     }
   };
@@ -256,7 +256,7 @@ export class UnifiedCheckoutController {
       const { transactionId } = typedReq.body;
 
       if (!transactionId) {
-        res.status(400).json({ error: "Transaction ID is required" });
+        res.status(400).json({ error: "ID de transacción es requerido" });
         return;
       }
 
@@ -272,7 +272,7 @@ export class UnifiedCheckoutController {
     } catch (err) {
       console.error("❌ Error confirming unified checkout:", err);
       res.status(500).json({ 
-        error: err instanceof Error ? err.message : "Server error confirming checkout" 
+        error: err instanceof Error ? err.message : "Error del servidor confirmando checkout" 
       });
     }
   };
@@ -286,7 +286,7 @@ export class UnifiedCheckoutController {
       const { transactionId } = req.params;
 
       if (!transactionId) {
-        res.status(400).json({ error: "Transaction ID is required" });
+        res.status(400).json({ error: "ID de transacción es requerido" });
         return;
       }
 
@@ -342,7 +342,7 @@ export class UnifiedCheckoutController {
     } catch (error: any) {
       console.error(`[UNIFIED-CHECKOUT-STATUS] Error:`, error);
       res.status(500).json({ 
-        error: error.message || "Failed to check transaction status" 
+        error: error.message || "Error al verificar el estado de la transacción" 
       });
     }
   };

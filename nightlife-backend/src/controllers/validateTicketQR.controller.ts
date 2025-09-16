@@ -12,7 +12,7 @@ export async function previewTicketQR(
     const { qrCode } = req.body;
 
     if (!qrCode) {
-      res.status(400).json({ error: "QR code is required" });
+      res.status(400).json({ error: "Código QR es requerido" });
       return;
     }
 
@@ -42,7 +42,7 @@ export async function previewTicketQR(
     res.json(response);
   } catch (error) {
     console.error("❌ Error previewing ticket QR:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -54,7 +54,7 @@ export async function confirmTicketQR(
     const { qrCode } = req.body;
 
     if (!qrCode) {
-      res.status(400).json({ error: "QR code is required" });
+      res.status(400).json({ error: "Código QR es requerido" });
       return;
     }
 
@@ -71,7 +71,7 @@ export async function confirmTicketQR(
     // Check if already used
     if (purchase.isUsed) {
       res.status(410).json({ 
-        error: "QR code already used",
+        error: "Código QR ya usado",
         usedAt: purchase.usedAt
       });
       return;
@@ -98,6 +98,6 @@ export async function confirmTicketQR(
     res.json(response);
   } catch (error) {
     console.error("❌ Error confirming ticket QR:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 } 

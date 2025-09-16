@@ -13,7 +13,7 @@ export function requireAuth(
   const token = req.cookies?.token;
 
   if (!token) {
-    res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ error: "No autorizado" });
     return;
   }
 
@@ -30,6 +30,6 @@ export function requireAuth(
     next();
   } catch (err) {
     console.error("❌ Invalid token:", err);
-    res.status(401).json({ error: "Invalid or expired token" });
+    res.status(401).json({ error: "Token inválido o expirado" });
   }
 }

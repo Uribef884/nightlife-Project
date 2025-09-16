@@ -29,7 +29,7 @@ export const getAllEvents = async (req: Request, res: Response) => {
     res.status(200).json(events);
   } catch (err) {
     console.error("❌ Failed to fetch all events:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -45,7 +45,7 @@ export const getEventById = async (req: Request, res: Response) => {
     });
 
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
@@ -77,7 +77,7 @@ export const getEventById = async (req: Request, res: Response) => {
     res.status(200).json(event);
   } catch (err) {
     console.error("❌ Failed to fetch event by ID:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -204,7 +204,7 @@ export const getEventsByClubId = async (req: Request, res: Response) => {
     res.status(200).json(eventsWithDynamicPricing);
   } catch (err) {
     console.error("❌ Failed to fetch events by club:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -215,13 +215,13 @@ export const getMyClubEvents = async (req: AuthenticatedRequest, res: Response):
 
     // Only club owners can access their club's events
     if (user.role !== "admin" && user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can access club events" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden acceder a los eventos de su club" });
       return;
     }
 
     // For non-admin users, they must have a clubId
     if (user.role !== "admin" && !user.clubId) {
-      res.status(400).json({ error: "User is not associated with any club" });
+      res.status(400).json({ error: "Usuario no asociado con ningún club" });
       return;
     }
 
@@ -244,7 +244,7 @@ export const getMyClubEvents = async (req: AuthenticatedRequest, res: Response):
     res.status(200).json(enrichedEvents);
   } catch (err) {
     console.error("❌ Failed to fetch club events:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -260,18 +260,18 @@ export const createEvent = async (req: AuthenticatedRequest, res: Response): Pro
     const user = req.user;
 
     if (!user || !user.clubId) {
-      res.status(403).json({ error: "Forbidden: No clubId associated" });
+      res.status(403).json({ error: "Prohibido: No hay clubId asociado" });
       return;
     }
 
     if (!name || !availableDate || !openHours) {
-      res.status(400).json({ error: "Missing required fields: name, availableDate, or openHours" });
+      res.status(400).json({ error: "Faltan campos requeridos: name, availableDate, o openHours" });
       return;
     }
 
     // Validate image
     if (!req.file) {
-      res.status(400).json({ error: "Image file is required." });
+      res.status(400).json({ error: "Archivo de imagen requerido." });
       return;
     }
 
@@ -281,26 +281,26 @@ export const createEvent = async (req: AuthenticatedRequest, res: Response): Pro
       try {
         parsedOpenHours = JSON.parse(openHours);
       } catch (error) {
-        res.status(400).json({ error: "Invalid openHours format. Must be valid JSON." });
+        res.status(400).json({ error: "Formato de openHours inválido. Debe ser JSON válido." });
         return;
       }
     } else if (typeof openHours === 'object') {
       parsedOpenHours = openHours;
     } else {
-      res.status(400).json({ error: "openHours is required and must be provided" });
+      res.status(400).json({ error: "openHours es requerido y debe ser proporcionado" });
       return;
     }
 
     // Validate openHours format
     if (!parsedOpenHours.open || !parsedOpenHours.close) {
-      res.status(400).json({ error: "openHours must have both 'open' and 'close' properties" });
+      res.status(400).json({ error: "openHours debe tener las propiedades 'open' y 'close'" });
       return;
     }
 
     // Validate time format (HH:MM)
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
     if (!timeRegex.test(parsedOpenHours.open) || !timeRegex.test(parsedOpenHours.close)) {
-      res.status(400).json({ error: "Time format must be HH:MM (e.g., '22:00', '02:00')" });
+      res.status(400).json({ error: "El formato de tiempo debe ser HH:MM (e.g., '22:00', '02:00')" });
       return;
     }
 
@@ -309,7 +309,7 @@ export const createEvent = async (req: AuthenticatedRequest, res: Response): Pro
     const [year, month, day] = raw.split("-").map(Number);
 
     if (!year || !month || !day) {
-      res.status(400).json({ error: "Invalid availableDate format" });
+      res.status(400).json({ error: "Formato de availableDate inválido" });
       return;
     }
 
@@ -319,7 +319,7 @@ export const createEvent = async (req: AuthenticatedRequest, res: Response): Pro
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (normalizedDate < today) {
-      res.status(400).json({ error: "Event date cannot be in the past" });
+      res.status(400).json({ error: "La fecha del evento no puede ser en el pasado" });
       return;
     }
 
@@ -340,7 +340,7 @@ export const createEvent = async (req: AuthenticatedRequest, res: Response): Pro
 
     if (existingEvent) {
       res.status(400).json({ 
-        error: `An event already exists for ${normalizedDate.toISOString().split('T')[0]}. Only one event per date is allowed.` 
+        error: `Un evento ya existe para ${normalizedDate.toISOString().split('T')[0]}. Solo se permite un evento por fecha.` 
       });
       return;
     }
@@ -369,7 +369,7 @@ export const createEvent = async (req: AuthenticatedRequest, res: Response): Pro
     res.status(201).json(newEvent);
   } catch (err) {
     console.error("❌ Failed to create event:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -380,7 +380,7 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response) => {
     const user = req.user;
 
     if (!user || !user.clubId) {
-      res.status(403).json({ error: "Forbidden: No clubId associated" });
+      res.status(403).json({ error: "Prohibido: No hay clubId asociado" });
       return;
     }
 
@@ -391,12 +391,12 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response) => {
     });
 
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
     if (event.clubId !== user.clubId) {
-      res.status(403).json({ error: "Forbidden: You cannot delete events from another club" });
+      res.status(403).json({ error: "Prohibido: No puedes eliminar eventos de otro club" });
       return;
     }
 
@@ -440,7 +440,7 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response) => {
       const s3CleanupResult = await cleanupEventS3Files(event);
       
       res.status(200).json({ 
-        message: "Event and related tickets soft deleted due to existing purchases",
+        message: "Evento y tickets relacionados eliminados suavemente debido a la existencia de compras",
         adCleanupResult,
         s3CleanupResult,
         note: "Associated ads have been automatically deactivated. S3 banner has been cleaned up."
@@ -455,14 +455,14 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response) => {
     await eventRepo.remove(event);
 
     res.status(200).json({ 
-      message: "Event and associated tickets deleted successfully",
+      message: "Evento y tickets asociados eliminados exitosamente",
       adCleanupResult,
       s3CleanupResult,
       note: "Associated ads have been automatically deactivated. S3 banner has been cleaned up."
     });
   } catch (err) {
     console.error("❌ Failed to delete event:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -485,13 +485,13 @@ export const updateEvent = async (req: AuthenticatedRequest, res: Response): Pro
     }
 
     if (!user || !user.clubId) {
-      res.status(403).json({ error: "Forbidden: No clubId associated" });
+      res.status(403).json({ error: "Prohibido: No hay clubId asociado" });
       return;
     }
 
     // Prevent changing availableDate
     if (availableDate !== undefined) {
-      res.status(400).json({ error: "Cannot update availableDate after creation" });
+      res.status(400).json({ error: "No se puede actualizar availableDate después de la creación" });
       return;
     }
 
@@ -499,12 +499,12 @@ export const updateEvent = async (req: AuthenticatedRequest, res: Response): Pro
     const event = await eventRepo.findOne({ where: { id } });
 
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
     if (event.clubId !== user.clubId) {
-      res.status(403).json({ error: "Forbidden: You cannot update events from another club" });
+      res.status(403).json({ error: "Prohibido: No puedes actualizar eventos de otro club" });
       return;
     }
 
@@ -516,7 +516,7 @@ export const updateEvent = async (req: AuthenticatedRequest, res: Response): Pro
           try {
             parsedOpenHours = JSON.parse(openHours);
           } catch (error) {
-            res.status(400).json({ error: "Invalid openHours format. Must be valid JSON." });
+            res.status(400).json({ error: "Formato de openHours inválido. Debe ser JSON válido." });
             return;
           }
         } else if (typeof openHours === 'object') {
@@ -526,14 +526,14 @@ export const updateEvent = async (req: AuthenticatedRequest, res: Response): Pro
         // Validate openHours format
         if (parsedOpenHours) {
           if (!parsedOpenHours.open || !parsedOpenHours.close) {
-            res.status(400).json({ error: "openHours must have both 'open' and 'close' properties" });
+            res.status(400).json({ error: "openHours debe tener las propiedades 'open' y 'close'" });
             return;
           }
 
           // Validate time format (HH:MM)
           const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
           if (!timeRegex.test(parsedOpenHours.open) || !timeRegex.test(parsedOpenHours.close)) {
-            res.status(400).json({ error: "Time format must be HH:MM (e.g., '22:00', '02:00')" });
+            res.status(400).json({ error: "El formato de tiempo debe ser HH:MM (e.g., '22:00', '02:00')" });
             return;
           }
         }
@@ -553,7 +553,7 @@ export const updateEvent = async (req: AuthenticatedRequest, res: Response): Pro
     res.json(event);
   } catch (err) {
     console.error("❌ Failed to update event:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -564,12 +564,12 @@ export const updateEventImage = async (req: AuthenticatedRequest, res: Response)
     const user = req.user;
 
     if (!user || !user.clubId) {
-      res.status(403).json({ error: "Forbidden: No clubId associated" });
+      res.status(403).json({ error: "Prohibido: No hay clubId asociado" });
       return;
     }
 
     if (!req.file) {
-      res.status(400).json({ error: "Image file is required." });
+      res.status(400).json({ error: "Archivo de imagen requerido." });
       return;
     }
 
@@ -577,12 +577,12 @@ export const updateEventImage = async (req: AuthenticatedRequest, res: Response)
     const event = await eventRepo.findOne({ where: { id } });
 
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
     if (event.clubId !== user.clubId) {
-      res.status(403).json({ error: "Forbidden: You cannot update events from another club" });
+      res.status(403).json({ error: "Prohibido: No puedes actualizar eventos de otro club" });
       return;
     }
 
@@ -619,7 +619,7 @@ export const updateEventImage = async (req: AuthenticatedRequest, res: Response)
     res.json(event);
   } catch (err) {
     console.error("❌ Failed to update event image:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -628,7 +628,7 @@ export const toggleEventVisibility = async (req: AuthenticatedRequest, res: Resp
   try {
     const user = req.user;
     if (!user) {
-      res.status(401).json({ error: "Unauthorized" });
+      res.status(401).json({ error: "No autorizado" });
       return;
     }
 
@@ -642,12 +642,12 @@ export const toggleEventVisibility = async (req: AuthenticatedRequest, res: Resp
     });
 
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
     if (event.clubId !== user.clubId) {
-      res.status(403).json({ error: "You are not authorized to modify this event" });
+      res.status(403).json({ error: "No estás autorizado para modificar este evento" });
       return;
     }
 
@@ -664,13 +664,13 @@ export const toggleEventVisibility = async (req: AuthenticatedRequest, res: Resp
     }
 
     res.json({ 
-      message: "Event and all child tickets visibility toggled", 
+      message: "Evento y todos los tickets hijos visibilidad alternada", 
       isActive: event.isActive,
       ticketsUpdated: event.tickets?.length || 0
     });
   } catch (err) {
     console.error("❌ Failed to toggle event visibility:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 

@@ -20,7 +20,7 @@ export class UnifiedCartController {
       const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'unified');
       if (isLocked) {
         res.status(423).json({ 
-          error: "Cart is currently being processed. Please wait for your payment to complete before adding more items." 
+          error: "Carrito está siendo procesado. Por favor, espera a que se complete tu pago antes de agregar más elementos." 
         });
         return;
       }
@@ -30,7 +30,7 @@ export class UnifiedCartController {
       if (itemType === 'ticket') {
         // Validate ticket input
         if (!ticketId || !date || quantity == null || quantity <= 0) {
-          res.status(400).json({ error: "Missing or invalid fields for ticket: ticketId, date, and quantity are required" });
+          res.status(400).json({ error: "Campos faltantes o inválidos para ticket: ticketId, date y quantity son requeridos" });
           return;
         }
 
@@ -42,7 +42,7 @@ export class UnifiedCartController {
       } else if (itemType === 'menu') {
         // Validate menu input
         if (!menuItemId || quantity == null || quantity <= 0 || !date) {
-          res.status(400).json({ error: "Missing or invalid fields for menu: menuItemId, quantity, and date are required" });
+          res.status(400).json({ error: "Campos faltantes o inválidos para menú: menuItemId, quantity y date son requeridos" });
           return;
         }
 
@@ -52,14 +52,14 @@ export class UnifiedCartController {
           sessionId
         );
       } else {
-        res.status(400).json({ error: "Invalid itemType. Must be 'ticket' or 'menu'" });
+        res.status(400).json({ error: "itemType inválido. Debe ser 'ticket' o 'menu'" });
         return;
       }
 
       res.status(201).json(cartItem);
     } catch (err) {
       console.error("❌ Error adding item to unified cart:", err);
-      res.status(400).json({ error: err instanceof Error ? err.message : "Server error adding item" });
+      res.status(400).json({ error: err instanceof Error ? err.message : "Error del servidor al agregar elemento" });
     }
   };
 
@@ -76,7 +76,7 @@ export class UnifiedCartController {
 
       // Validate input
       if (!id || typeof quantity !== "number" || quantity <= 0) {
-        res.status(400).json({ error: "Valid ID and quantity are required" });
+        res.status(400).json({ error: "ID y cantidad válidos son requeridos" });
         return;
       }
 
@@ -99,7 +99,7 @@ export class UnifiedCartController {
       res.status(200).json(cartItem);
     } catch (err) {
       console.error("❌ Error updating unified cart item:", err);
-      res.status(500).json({ error: err instanceof Error ? err.message : "Server error updating item" });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Error del servidor al actualizar elemento" });
     }
   };
 
@@ -115,7 +115,7 @@ export class UnifiedCartController {
 
       // Validate input
       if (!id) {
-        res.status(400).json({ error: "Valid ID is required" });
+        res.status(400).json({ error: "ID válido es requerido" });
         return;
       }
 
@@ -123,7 +123,7 @@ export class UnifiedCartController {
       const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'unified');
       if (isLocked) {
         res.status(423).json({ 
-          error: "Cart is currently being processed. Please wait for your payment to complete before removing items." 
+          error: "Carrito está siendo procesado. Por favor, espera a que se complete tu pago antes de eliminar elementos." 
         });
         return;
       }
@@ -132,7 +132,7 @@ export class UnifiedCartController {
       res.status(204).send();
     } catch (err) {
       console.error("❌ Error removing unified cart item:", err);
-      res.status(500).json({ error: err instanceof Error ? err.message : "Server error removing item" });
+      res.status(500).json({ error: err instanceof Error ? err.message : "Error del servidor al remover elemento" });
     }
   };
 
@@ -149,7 +149,7 @@ export class UnifiedCartController {
       res.status(200).json(cartItems);
     } catch (err) {
       console.error("❌ Error fetching unified cart items:", err);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: "Error interno del servidor" });
     }
   };
 
@@ -166,7 +166,7 @@ export class UnifiedCartController {
       res.status(200).json(summary);
     } catch (err) {
       console.error("❌ Error fetching unified cart summary:", err);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: "Error interno del servidor" });
     }
   };
 
@@ -183,7 +183,7 @@ export class UnifiedCartController {
       res.status(204).send();
     } catch (err) {
       console.error("❌ Error clearing unified cart:", err);
-      res.status(500).json({ error: "Internal server error" });
+      res.status(500).json({ error: "Error interno del servidor" });
     }
   };
 }

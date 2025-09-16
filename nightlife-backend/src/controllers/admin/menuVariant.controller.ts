@@ -21,7 +21,7 @@ export const getVariantsByMenuItemIdAdmin = async (req: Request, res: Response):
     res.json(variants);
   } catch (err) {
     console.error("❌ Error fetching variants:", err);
-    res.status(500).json({ error: "Failed to load variants" });
+    res.status(500).json({ error: "Error al cargar variantes" });
   }
 };
 
@@ -34,31 +34,31 @@ export const createMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
     const itemRepo = AppDataSource.getRepository(MenuItem);
 
     if (!name || !price) {
-      res.status(400).json({ error: "Name and price are required" });
+      res.status(400).json({ error: "Nombre y precio son requeridos" });
       return;
     }
 
     const parsedPrice = parseFloat(price);
     if (isNaN(parsedPrice) || parsedPrice <= 0) {
-      res.status(400).json({ error: "Price must be a positive number (greater than 0)" });
+      res.status(400).json({ error: "El precio debe ser un número positivo (mayor que 0)" });
       return;
     }
 
     // Validate minimum cost for variants (no free variants allowed)
     if (parsedPrice < 1500) {
-      res.status(400).json({ error: "Price must be at least 1500 COP for variants." });
+      res.status(400).json({ error: "El precio debe ser al menos 1500 COP para variantes." });
       return;
     }
 
     const menuItem = await itemRepo.findOneBy({ id: menuItemId });
     if (!menuItem) {
-      res.status(404).json({ error: "Menu item not found" });
+      res.status(404).json({ error: "Elemento de menú no encontrado" });
       return;
     }
 
     const existing = await variantRepo.findOne({ where: { name, menuItemId } });
     if (existing) {
-      res.status(400).json({ error: "Variant name must be unique for this item" });
+      res.status(400).json({ error: "El nombre de la variante debe ser único para este elemento" });
       return;
     }
 
@@ -75,7 +75,7 @@ export const createMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
     res.status(201).json(variant);
   } catch (error) {
     console.error("❌ Error creating menu item variant:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -90,7 +90,7 @@ export const updateMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
       relations: ["menuItem"]
     });
     if (!variant) {
-      res.status(404).json({ error: "Variant not found" });
+      res.status(404).json({ error: "Variante no encontrada" });
       return;
     }
 
@@ -103,12 +103,12 @@ export const updateMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
 
     if (name !== undefined) {
       if (!name) {
-        res.status(400).json({ error: "Variant name is invalid" });
+        res.status(400).json({ error: "El nombre de la variante es inválido" });
         return;
       }
       const existing = await variantRepo.findOne({ where: { name, menuItemId: variant.menuItemId } });
       if (existing && existing.id !== variant.id) {
-        res.status(400).json({ error: "Variant name must be unique" });
+        res.status(400).json({ error: "El nombre de la variante debe ser único" });
         return;
       }
       variant.name = name;
@@ -117,13 +117,13 @@ export const updateMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
     if (price != null) {
       const parsedPrice = parseFloat(price);
       if (isNaN(parsedPrice) || parsedPrice <= 0) {
-        res.status(400).json({ error: "Price must be a positive number (greater than 0)" });
+        res.status(400).json({ error: "El precio debe ser un número positivo (mayor que 0)" });
         return;
       }
 
       // Validate minimum cost for variants (no free variants allowed)
       if (parsedPrice < 1500) {
-        res.status(400).json({ error: "Price must be at least 1500 COP for variants." });
+        res.status(400).json({ error: "El precio debe ser al menos 1500 COP para variantes." });
         return;
       }
 
@@ -144,7 +144,7 @@ export const updateMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
       } else {
         const parsedMaxPerPerson = parseInt(maxPerPerson);
         if (isNaN(parsedMaxPerPerson) || parsedMaxPerPerson <= 0) {
-          res.status(400).json({ error: "Max per person must be a positive integer" });
+          res.status(400).json({ error: "Max por persona debe ser un entero positivo" });
           return;
         }
         variant.maxPerPerson = parsedMaxPerPerson;
@@ -155,7 +155,7 @@ export const updateMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
     res.status(200).json(variant);
   } catch (error) {
     console.error("❌ Error updating menu item variant:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -172,7 +172,7 @@ export const deleteMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
       relations: ["menuItem"] 
     });
     if (!variant) {
-      res.status(404).json({ error: "Variant not found" });
+      res.status(404).json({ error: "Variante no encontrada" });
       return;
     }
 
@@ -194,23 +194,23 @@ export const deleteMenuItemVariantAdmin = async (req: AuthenticatedRequest, res:
       await variantRepo.save(variant);
 
       res.json({ 
-        message: "Variant soft deleted successfully", 
+        message: "Variante eliminada suavemente exitosamente", 
         deletedAt: variant.deletedAt,
         includedInTickets,
         existingPurchases,
-        note: "Variant marked as deleted but preserved due to existing purchases or ticket inclusions"
+        note: "Variante marcada como eliminada pero preservada debido a compras existentes o inclusiones de tickets"
       });
     } else {
       // Hard delete - no associated data, safe to completely remove
       await variantRepo.remove(variant);
       res.json({ 
-        message: "Variant permanently deleted successfully",
+        message: "Variante eliminada permanentemente exitosamente",
         note: "No associated purchases or ticket inclusions found, variant completely removed"
       });
     }
   } catch (error) {
     console.error("❌ Error deleting menu item variant:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -225,15 +225,15 @@ export const toggleMenuItemVariantDynamicPricingAdmin = async (req: Request, res
       relations: ["menuItem"] 
     });
     if (!variant) {
-      res.status(404).json({ error: "Variant not found" });
+      res.status(404).json({ error: "Variante no encontrada" });
       return;
     }
 
     variant.dynamicPricingEnabled = !variant.dynamicPricingEnabled;
     await variantRepo.save(variant);
-    res.json({ message: "Menu item variant dynamic pricing toggled", dynamicPricingEnabled: variant.dynamicPricingEnabled });
+    res.json({ message: "Precio dinámico de variante de elemento de menú cambiado", dynamicPricingEnabled: variant.dynamicPricingEnabled });
   } catch (error) {
     console.error("❌ Error toggling menu item variant dynamic pricing:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }; 

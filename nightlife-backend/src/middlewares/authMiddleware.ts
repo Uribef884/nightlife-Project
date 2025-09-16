@@ -17,7 +17,7 @@ export const authMiddleware = (
   const token = tokenFromHeader || tokenFromCookie;
 
   if (!token) {
-    res.status(401).json({ error: "Missing or invalid token" });
+    res.status(401).json({ error: "Falta o token inválido" });
     return;
   }
 
@@ -26,7 +26,7 @@ export const authMiddleware = (
 
     // Check if user account is deleted from JWT token
     if (decoded.isDeleted) {
-      res.status(401).json({ error: "Account has been deleted" });
+      res.status(401).json({ error: "Cuenta ha sido eliminada" });
       return;
     }
 
@@ -39,7 +39,7 @@ export const authMiddleware = (
 
     next();
   } catch (err) {
-    res.status(401).json({ error: "Invalid or expired token" });
+    res.status(401).json({ error: "Token inválido o expirado" });
   }
 };
 
@@ -51,7 +51,7 @@ export const requireAdminAuth = (
   const user = req.user;
 
   if (!user || user.role !== "admin") {
-    res.status(403).json({ error: "Forbidden: Admins only" });
+    res.status(403).json({ error: "Forbidden: Solo administradores" });
     return;
   }
 
@@ -63,7 +63,7 @@ export const requireClubOwnerOrAdmin = (req: Request, res: Response, next: NextF
   const user = req.user;
 
   if (!user) {
-    res.status(401).json({ error: "Unauthorized" });
+    res.status(401).json({ error: "No autorizado" });
     return;
   }
 
@@ -72,7 +72,7 @@ export const requireClubOwnerOrAdmin = (req: Request, res: Response, next: NextF
     return;
   }
 
-  res.status(403).json({ error: "Forbidden: You are not authorized" });
+  res.status(403).json({ error: "Forbidden: No estás autorizado" });
 };
 
 export const requireClubOwnerAuth = (
@@ -83,7 +83,7 @@ export const requireClubOwnerAuth = (
   const user = req.user;
 
   if (!user || user.role !== "clubowner") {
-    res.status(403).json({ error: "Forbidden: Club owners only" });
+    res.status(403).json({ error: "Forbidden: Solo propietarios de club" });
     return;
   }
 

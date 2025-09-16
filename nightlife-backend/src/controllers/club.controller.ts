@@ -50,47 +50,47 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
 
   // Validate character limits
   if (description && description.length > 1000) {
-    res.status(400).json({ error: "Description cannot exceed 1000 characters" });
+    res.status(400).json({ error: "Descripción no puede exceder 1000 caracteres" });
     return;
   }
   if (dressCode && dressCode.length > 500) {
-    res.status(400).json({ error: "Dress code cannot exceed 500 characters" });
+    res.status(400).json({ error: "Código de vestimenta no puede exceder 500 caracteres" });
     return;
   }
   if (extraInfo && extraInfo.length > 500) {
-    res.status(400).json({ error: "Additional info cannot exceed 500 characters" });
+    res.status(400).json({ error: "Información adicional no puede exceder 500 caracteres" });
     return;
   }
 
   const admin = req.user;
   if (!admin || admin.role !== "admin") {
-    res.status(403).json({ error: "Forbidden: Only admins can create clubs" });
+    res.status(403).json({ error: "Prohibido: Solo los administradores pueden crear clubs" });
     return;
   }
 
   if (!ownerId || typeof ownerId !== "string" || ownerId.trim() === "") {
-    res.status(400).json({ error: "Missing or invalid required field: ownerId" });
+    res.status(400).json({ error: "Falta o campo ownerId inválido" });
     return;
   }
 
   // --- VALIDATION FOR openDays and openHours ---
   if (!Array.isArray(openDays) || openDays.length === 0) {
-    res.status(400).json({ error: "openDays must be a non-empty array of days" });
+    res.status(400).json({ error: "openDays debe ser un array no vacío de días" });
     return;
   }
   if (!Array.isArray(openHours)) {
-    res.status(400).json({ error: "openHours must be an array of { day, open, close } objects" });
+    res.status(400).json({ error: "openHours debe ser un array de objetos { day, open, close }" });
     return;
   }
   const openDaysSet = new Set(openDays);
   const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
   for (const entry of openHours) {
     if (!entry.day || !openDaysSet.has(entry.day)) {
-      res.status(400).json({ error: `Open hour day '${entry.day}' is not in openDays` });
+      res.status(400).json({ error: `El día '${entry.day}' no está en openDays` });
       return;
     }
     if (!timeRegex.test(entry.open) || !timeRegex.test(entry.close)) {
-      res.status(400).json({ error: `Invalid time format for day '${entry.day}'. Use 24-hour HH:MM format.` });
+      res.status(400).json({ error: `Formato de tiempo inválido para el día '${entry.day}'. Use 24-hour HH:MM format.` });
       return;
     }
   }
@@ -98,7 +98,7 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
   const openHoursDays = new Set(openHours.map(h => h.day));
   for (const day of openDays) {
     if (!openHoursDays.has(day)) {
-      res.status(400).json({ error: `Day '${day}' in openDays has no corresponding entry in openHours` });
+      res.status(400).json({ error: `El día '${day}' en openDays no tiene una entrada correspondiente en openHours` });
       return;
     }
   }
@@ -106,14 +106,14 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
 
   const owner = await userRepo.findOneBy({ id: ownerId });
   if (!owner) {
-    res.status(404).json({ error: "User with provided ownerId not found" });
+    res.status(404).json({ error: "Usuario con el ownerId proporcionado no encontrado" });
     return;
   }
 
   // Check if the user is already an owner of another club
   const existingClub = await repo.findOne({ where: { ownerId } });
   if (existingClub) {
-    res.status(400).json({ error: "User is already an owner of another club" });
+    res.status(400).json({ error: "Usuario ya es propietario de otro club" });
     return;
   }
 
@@ -162,13 +162,13 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
 
     // Admin only
     if (!user || user.role !== "admin") {
-      res.status(403).json({ error: "Forbidden: Only admins can update clubs" });
+      res.status(403).json({ error: "Prohibido: Solo los administradores pueden actualizar clubs" });
       return;
     }
 
     const club = await repo.findOne({ where: { id }, relations: ["owner"] });
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
@@ -184,15 +184,15 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
 
     // Validate character limits
     if (sanitizedBody.description && sanitizedBody.description.length > 1000) {
-      res.status(400).json({ error: "Description cannot exceed 1000 characters" });
+      res.status(400).json({ error: "Descripción no puede exceder 1000 caracteres" });
       return;
     }
     if (sanitizedBody.dressCode && sanitizedBody.dressCode.length > 500) {
-      res.status(400).json({ error: "Dress code cannot exceed 500 characters" });
+      res.status(400).json({ error: "Código de vestimenta no puede exceder 500 caracteres" });
       return;
     }
     if (sanitizedBody.extraInfo && sanitizedBody.extraInfo.length > 500) {
-      res.status(400).json({ error: "Additional info cannot exceed 500 characters" });
+      res.status(400).json({ error: "Información adicional no puede exceder 500 caracteres" });
       return;
     }
 
@@ -205,13 +205,13 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
     }
     if (openDays !== undefined) {
       if (!Array.isArray(openDays) || openDays.length === 0) {
-        res.status(400).json({ error: "openDays must be a non-empty array of days" });
+        res.status(400).json({ error: "openDays debe ser un array no vacío de días" });
         return;
       }
     }
     if (openHours !== undefined) {
       if (!Array.isArray(openHours)) {
-        res.status(400).json({ error: "openHours must be an array of { day, open, close } objects" });
+        res.status(400).json({ error: "openHours debe ser un array de objetos { day, open, close }" });
         return;
       }
       const daysSet = new Set(openDays !== undefined ? openDays : club.openDays);
@@ -222,7 +222,7 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
           return;
         }
         if (!timeRegex.test(entry.open) || !timeRegex.test(entry.close)) {
-          res.status(400).json({ error: `Invalid time format for day '${entry.day}'. Use 24-hour HH:MM format.` });
+          res.status(400).json({ error: `Formato de tiempo inválido para el día '${entry.day}'. Use 24-hour HH:MM format.` });
           return;
         }
       }
@@ -231,7 +231,7 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
       const daysToCheck = openDays !== undefined ? openDays : club.openDays;
       for (const day of daysToCheck) {
         if (!openHoursDays.has(day)) {
-          res.status(400).json({ error: `Day '${day}' in openDays has no corresponding entry in openHours` });
+          res.status(400).json({ error: `El día '${day}' en openDays no tiene una entrada correspondiente en openHours` });
           return;
         }
       }
@@ -242,20 +242,20 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
     if (ownerId !== undefined && ownerId !== club.ownerId) {
       // Validate new owner
       if (!ownerId || typeof ownerId !== "string" || ownerId.trim() === "") {
-        res.status(400).json({ error: "Invalid ownerId provided" });
+        res.status(400).json({ error: "ownerId inválido proporcionado" });
         return;
       }
 
       const newOwner = await userRepo.findOneBy({ id: ownerId });
       if (!newOwner) {
-        res.status(404).json({ error: "New owner user not found" });
+        res.status(404).json({ error: "Nuevo usuario propietario no encontrado" });
         return;
       }
 
       // Check if new owner is already an owner of another club
       const existingClub = await repo.findOne({ where: { ownerId } });
       if (existingClub && existingClub.id !== club.id) {
-        res.status(400).json({ error: "New owner is already an owner of another club" });
+        res.status(400).json({ error: "Nuevo propietario ya es propietario de otro club" });
         return;
       }
 
@@ -300,7 +300,7 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
     res.json(updated);
   } catch (error) {
     console.error("❌ Error updating club:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -312,12 +312,12 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
 
     // Club owner only
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Forbidden: Only club owners can update their clubs" });
+      res.status(403).json({ error: "Prohibido: Solo los propietarios de club pueden actualizar sus clubs" });
       return;
     }
 
     if (!user.clubId) {
-      res.status(400).json({ error: "No club associated with this user" });
+      res.status(400).json({ error: "No hay club asociado con este usuario" });
       return;
     }
 
@@ -326,7 +326,7 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
       relations: ["owner"] 
     });
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
@@ -342,21 +342,21 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
     
     // Prevent club owners from updating ownerId
     if (ownerId !== undefined) {
-      res.status(403).json({ error: "Club owners cannot update the ownerId field" });
+      res.status(403).json({ error: "Prohibido: Los propietarios de club no pueden actualizar el campo ownerId" });
       return;
     }
 
     // Validate character limits
     if (sanitizedBody.description && sanitizedBody.description.length > 1000) {
-      res.status(400).json({ error: "Description cannot exceed 1000 characters" });
+      res.status(400).json({ error: "Descripción no puede exceder 1000 caracteres" });
       return;
     }
     if (sanitizedBody.dressCode && sanitizedBody.dressCode.length > 500) {
-      res.status(400).json({ error: "Dress code cannot exceed 500 characters" });
+      res.status(400).json({ error: "Código de vestimenta no puede exceder 500 caracteres" });
       return;
     }
     if (sanitizedBody.extraInfo && sanitizedBody.extraInfo.length > 500) {
-      res.status(400).json({ error: "Additional info cannot exceed 500 characters" });
+      res.status(400).json({ error: "Información adicional no puede exceder 500 caracteres" });
       return;
     }
 
@@ -370,24 +370,24 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
 
     if (openDays !== undefined) {
       if (!Array.isArray(openDays) || openDays.length === 0) {
-        res.status(400).json({ error: "openDays must be a non-empty array of days" });
+        res.status(400).json({ error: "openDays debe ser un array no vacío de días" });
         return;
       }
     }
     if (openHours !== undefined) {
       if (!Array.isArray(openHours)) {
-        res.status(400).json({ error: "openHours must be an array of { day, open, close } objects" });
+        res.status(400).json({ error: "openHours debe ser un array de objetos { day, open, close }" });
         return;
       }
       const daysSet = new Set(openDays !== undefined ? openDays : club.openDays);
       const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
       for (const entry of openHours) {
         if (!entry.day || !daysSet.has(entry.day)) {
-          res.status(400).json({ error: `Open hour day '${entry.day}' is not in openDays` });
+          res.status(400).json({ error: `El día '${entry.day}' no está en openDays` });
           return;
         }
         if (!timeRegex.test(entry.open) || !timeRegex.test(entry.close)) {
-          res.status(400).json({ error: `Invalid time format for day '${entry.day}'. Use 24-hour HH:MM format.` });
+          res.status(400).json({ error: `Formato de tiempo inválido para el día '${entry.day}'. Use 24-hour HH:MM format.` });
           return;
         }
       }
@@ -396,7 +396,7 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
       const daysToCheck = openDays !== undefined ? openDays : club.openDays;
       for (const day of daysToCheck) {
         if (!openHoursDays.has(day)) {
-          res.status(400).json({ error: `Day '${day}' in openDays has no corresponding entry in openHours` });
+          res.status(400).json({ error: `El día '${day}' en openDays no tiene una entrada correspondiente en openHours` });
           return;
         }
       }
@@ -416,7 +416,7 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
     res.json(updated);
   } catch (error) {
     console.error("❌ Error updating my club:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -433,7 +433,7 @@ export async function deleteClub(req: AuthenticatedRequest, res: Response): Prom
     });
 
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
@@ -441,7 +441,7 @@ export async function deleteClub(req: AuthenticatedRequest, res: Response): Prom
     const isOwner = user?.role === "clubowner" && club.ownerId === user.id;
 
     if (!isAdmin && !isOwner) {
-      res.status(403).json({ error: "You are not authorized to delete this club" });
+      res.status(403).json({ error: "No estás autorizado para eliminar este club" });
       return;
     }
 
@@ -472,7 +472,7 @@ export async function deleteClub(req: AuthenticatedRequest, res: Response): Prom
       const s3CleanupResult = await cleanupClubS3Files(club);
 
       res.json({ 
-        message: "Club soft deleted successfully", 
+        message: "Club eliminado suavemente exitosamente", 
         deletedAt: club.deletedAt,
         ticketPurchaseCount,
         menuPurchaseCount,
@@ -486,14 +486,14 @@ export async function deleteClub(req: AuthenticatedRequest, res: Response): Prom
       
       await repo.remove(club);
       res.json({ 
-        message: "Club permanently deleted successfully",
+        message: "Club eliminado permanentemente exitosamente",
         s3CleanupResult,
         note: "No associated purchases found, club completely removed. S3 files have been cleaned up."
       });
     }
   } catch (error) {
     console.error("❌ Error deleting club:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -533,7 +533,7 @@ export async function getAllClubs(req: Request, res: Response): Promise<void> {
     res.json(publicClubs);
   } catch (error) {
     console.error("❌ Error fetching clubs:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -549,7 +549,7 @@ export async function getClubById(req: AuthenticatedRequest, res: Response): Pro
     });
 
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
@@ -589,7 +589,7 @@ export async function getClubById(req: AuthenticatedRequest, res: Response): Pro
     }
   } catch (error) {
     console.error("❌ Error fetching club:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -685,7 +685,7 @@ export async function getFilteredClubs(req: Request, res: Response): Promise<voi
     res.json(publicClubs);
   } catch (error) {
     console.error("❌ Error filtering clubs:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -709,6 +709,6 @@ export async function getCities(req: Request, res: Response): Promise<void> {
     res.json(cityNames);
   } catch (error) {
     console.error("Error fetching cities:", error);
-    res.status(500).json({ error: "Failed to fetch cities" });
+    res.status(500).json({ error: "Error al obtener ciudades" });
   }
 }

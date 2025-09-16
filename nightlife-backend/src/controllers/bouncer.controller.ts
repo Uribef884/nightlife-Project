@@ -15,7 +15,7 @@ export const createBouncer = async (req: AuthenticatedRequest, res: Response): P
     const password = req.body.password;
     
     if (!sanitizedEmail) {
-      res.status(400).json({ error: "Invalid email format" });
+      res.status(400).json({ error: "Formato de email inválido" });
       return;
     }
     
@@ -28,7 +28,7 @@ export const createBouncer = async (req: AuthenticatedRequest, res: Response): P
     const result = authSchemaRegister.safeParse({ email, password });
     if (!result.success) {
       res.status(400).json({
-        error: "Invalid input",
+        error: "Entrada inválida",
         details: result.error.flatten(),
       });
       return;
@@ -36,7 +36,7 @@ export const createBouncer = async (req: AuthenticatedRequest, res: Response): P
 
     // Block disposable emails (mirror register)
     if (isDisposableEmail(email)) {
-      res.status(403).json({ error: "Email domain not allowed" });
+      res.status(403).json({ error: "Dominio de email no permitido" });
       return;
     }
 
@@ -47,13 +47,13 @@ export const createBouncer = async (req: AuthenticatedRequest, res: Response): P
 
     const existing = await userRepo.findOneBy({ email });
     if (existing) {
-      res.status(409).json({ error: "Email already in use" });
+      res.status(409).json({ error: "El email ya está en uso" });
       return;
     }
 
     const club = await clubRepo.findOneBy({ ownerId: requester.id });
     if (!club) {
-      res.status(403).json({ error: "You don't own a club" });
+      res.status(403).json({ error: "No eres propietario de un club" });
       return;
     }
     const clubId = club.id;
@@ -70,7 +70,7 @@ export const createBouncer = async (req: AuthenticatedRequest, res: Response): P
     res.status(201).json({ message: "Bouncer created", bouncer: newBouncer });
   } catch (error) {
     console.error("❌ Error creating bouncer:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -79,13 +79,13 @@ export const getBouncers = async (req: AuthenticatedRequest, res: Response): Pro
   const requester = req.user;
 
   if (!requester || requester.role !== "clubowner") {
-    res.status(403).json({ error: "Only club owners can view bouncers" });
+    res.status(403).json({ error: "Solo los propietarios de club pueden ver porteros" });
     return;
   }
 
   const club = await AppDataSource.getRepository(Club).findOneBy({ ownerId: requester.id });
   if (!club) {
-    res.status(403).json({ error: "You don't own a club" });
+    res.status(403).json({ error: "No eres propietario de un club" });
     return;
   }
 
@@ -103,22 +103,22 @@ export const deleteBouncer = async (req: AuthenticatedRequest, res: Response): P
   const requester = req.user;
 
   if (!requester || requester.role !== "clubowner") {
-    res.status(403).json({ error: "Only club owners can delete bouncers" });
+    res.status(403).json({ error: "Solo los propietarios de club pueden eliminar porteros" });
     return;
   }
 
   const bouncer = await userRepo.findOneBy({ id, role: "bouncer" });
   if (!bouncer) {
-    res.status(404).json({ error: "Bouncer not found" });
+    res.status(404).json({ error: "Portero no encontrado" });
     return;
   }
 
   const ownerClub = await AppDataSource.getRepository(Club).findOneBy({ ownerId: requester.id });
   if (!ownerClub || bouncer.clubId !== ownerClub.id) {
-    res.status(403).json({ error: "You are not authorized to delete this bouncer" });
+    res.status(403).json({ error: "No estás autorizado para eliminar este portero" });
     return;
   }
 
   await userRepo.remove(bouncer);
-  res.status(200).json({ message: "Bouncer deleted successfully" });
+  res.status(200).json({ message: "Portero eliminado exitosamente" });
 };

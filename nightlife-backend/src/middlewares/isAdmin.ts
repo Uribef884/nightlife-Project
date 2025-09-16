@@ -5,7 +5,7 @@ export function isAdmin(req: AuthenticatedRequest, res: Response, next: NextFunc
     const user = req.user;
   
     if (!user || user.role !== "admin") {
-      res.status(403).json({ error: "Admin privileges required" });
+      res.status(403).json({ error: "Privilegios de administrador requeridos" });
       return;
     }
   

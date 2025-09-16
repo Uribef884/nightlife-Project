@@ -14,7 +14,7 @@ export async function getTicketIncludedMenuItems(
     const { ticketId } = req.params;
 
     if (!ticketId) {
-      res.status(400).json({ error: "Ticket ID is required" });
+      res.status(400).json({ error: "Ticket ID es requerido" });
       return;
     }
 
@@ -25,12 +25,12 @@ export async function getTicketIncludedMenuItems(
     });
 
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
     if (!ticket.includesMenuItem) {
-      res.status(400).json({ error: "This ticket does not support included menu items" });
+      res.status(400).json({ error: "Este ticket no soporta elementos de menú incluidos" });
       return;
     }
 
@@ -52,7 +52,7 @@ export async function getTicketIncludedMenuItems(
     res.json(formattedItems);
   } catch (error) {
     console.error("❌ Error getting ticket included menu items:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -65,18 +65,18 @@ export async function addTicketIncludedMenuItem(
     const { menuItemId, variantId, quantity } = req.body;
 
     if (!ticketId || !menuItemId || !quantity) {
-      res.status(400).json({ error: "Ticket ID, menu item ID, and quantity are required" });
+      res.status(400).json({ error: "Ticket ID, menu item ID, y cantidad son requeridos" });
       return;
     }
 
     // Validate quantity - must be positive and within limits
     if (quantity <= 0) {
-      res.status(400).json({ error: "Quantity must be greater than 0" });
+      res.status(400).json({ error: "Cantidad debe ser mayor que 0" });
       return;
     }
 
     if (quantity > 15) {
-      res.status(400).json({ error: "Quantity of a single menu item in a bundle cannot exceed 15" });
+      res.status(400).json({ error: "Cantidad de un solo elemento de menú en un paquete no puede exceder 15" });
       return;
     }
 
@@ -88,18 +88,18 @@ export async function addTicketIncludedMenuItem(
     });
 
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
     if (ticket.club.ownerId !== req.user!.id) {
-      res.status(403).json({ error: "Access denied" });
+      res.status(403).json({ error: "Acceso denegado" });
       return;
     }
 
     // Check if ticket supports included menu items
     if (!ticket.includesMenuItem) {
-      res.status(400).json({ error: "This ticket does not support included menu items" });
+      res.status(400).json({ error: "Este ticket no soporta elementos de menú incluidos" });
       return;
     }
 
@@ -112,14 +112,14 @@ export async function addTicketIncludedMenuItem(
     });
 
     if (!menuItem) {
-      res.status(404).json({ error: "Menu item not found or doesn't belong to this club" });
+      res.status(404).json({ error: "Elemento de menú no encontrado o no pertenece a este club" });
       return;
     }
 
     // ❌ Prevent linking parent menu items with variants
     if (menuItem.hasVariants && !variantId) {
       res.status(400).json({ 
-        error: `Cannot link parent menu item "${menuItem.name}" directly. Please specify a variant instead.` 
+        error: `No se puede vincular el elemento de menú principal "${menuItem.name}" directamente. Por favor, especifique una variante en su lugar.` 
       });
       return;
     }
@@ -127,7 +127,7 @@ export async function addTicketIncludedMenuItem(
     // ❌ Prevent linking menu items without variants when no variant is specified
     if (!menuItem.hasVariants && variantId) {
       res.status(400).json({ 
-        error: `Menu item "${menuItem.name}" does not have variants. Please remove the variantId.` 
+        error: `El elemento de menú "${menuItem.name}" no tiene variantes. Por favor, elimine el variantId.` 
       });
       return;
     }
@@ -140,7 +140,7 @@ export async function addTicketIncludedMenuItem(
       });
 
       if (!variant) {
-        res.status(404).json({ error: "Menu item variant not found" });
+        res.status(404).json({ error: "Variante del elemento de menú no encontrada" });
         return;
       }
     }
@@ -159,7 +159,7 @@ export async function addTicketIncludedMenuItem(
         variantName = ` (${variant?.name || 'Unknown Variant'})`;
       }
       res.status(400).json({ 
-        error: `Item "${itemName}${variantName}" is already included in this ticket combo` 
+        error: `Item "${itemName}${variantName}" ya está incluido en este combo de ticket` 
       });
       return;
     }
@@ -174,7 +174,7 @@ export async function addTicketIncludedMenuItem(
     await ticketIncludedMenuItemRepo.save(includedItem);
 
     res.status(201).json({
-      message: "Menu item added to ticket",
+      message: "Elemento de menú agregado al ticket",
       item: {
         id: includedItem.id,
         menuItemId: includedItem.menuItemId,
@@ -184,7 +184,7 @@ export async function addTicketIncludedMenuItem(
     });
   } catch (error) {
     console.error("❌ Error adding ticket included menu item:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -196,7 +196,7 @@ export async function removeTicketIncludedMenuItem(
     const { ticketId, itemId } = req.params;
 
     if (!ticketId || !itemId) {
-      res.status(400).json({ error: "Ticket ID and item ID are required" });
+      res.status(400).json({ error: "Ticket ID e item ID son requeridos" });
       return;
     }
 
@@ -208,18 +208,18 @@ export async function removeTicketIncludedMenuItem(
     });
 
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
     if (ticket.club.ownerId !== req.user!.id) {
-      res.status(403).json({ error: "Access denied" });
+      res.status(403).json({ error: "Acceso denegado" });
       return;
     }
 
     // Check if ticket supports included menu items
     if (!ticket.includesMenuItem) {
-      res.status(400).json({ error: "This ticket does not support included menu items" });
+      res.status(400).json({ error: "Este ticket no soporta elementos de menú incluidos" });
       return;
     }
 
@@ -229,16 +229,16 @@ export async function removeTicketIncludedMenuItem(
     });
 
     if (!item) {
-      res.status(404).json({ error: "Included menu item not found" });
+      res.status(404).json({ error: "Elemento de menú incluido no encontrado" });
       return;
     }
 
     await ticketIncludedMenuItemRepo.remove(item);
 
-    res.json({ message: "Menu item removed from ticket" });
+    res.json({ message: "Elemento de menú removido del ticket" });
   } catch (error) {
     console.error("❌ Error removing ticket included menu item:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -251,18 +251,18 @@ export async function updateTicketIncludedMenuItem(
     const { quantity } = req.body;
 
     if (!ticketId || !itemId || quantity === undefined) {
-      res.status(400).json({ error: "Ticket ID, item ID, and quantity are required" });
+      res.status(400).json({ error: "Ticket ID, item ID, y cantidad son requeridos" });
       return;
     }
 
     // Validate quantity - must be positive and within limits
     if (quantity <= 0) {
-      res.status(400).json({ error: "Quantity must be greater than 0" });
+      res.status(400).json({ error: "Cantidad debe ser mayor que 0" });
       return;
     }
 
     if (quantity > 15) {
-      res.status(400).json({ error: "Quantity of a single menu item in a bundle cannot exceed 15" });
+      res.status(400).json({ error: "Cantidad de un solo elemento de menú en un paquete no puede exceder 15" });
       return;
     }
 
@@ -274,18 +274,18 @@ export async function updateTicketIncludedMenuItem(
     });
 
     if (!ticket) {
-      res.status(404).json({ error: "Ticket not found" });
+      res.status(404).json({ error: "Ticket no encontrado" });
       return;
     }
 
     if (ticket.club.ownerId !== req.user!.id) {
-      res.status(403).json({ error: "Access denied" });
+      res.status(403).json({ error: "Acceso denegado" });
       return;
     }
 
     // Check if ticket supports included menu items
     if (!ticket.includesMenuItem) {
-      res.status(400).json({ error: "This ticket does not support included menu items" });
+      res.status(400).json({ error: "Este ticket no soporta elementos de menú incluidos" });
       return;
     }
 
@@ -295,7 +295,7 @@ export async function updateTicketIncludedMenuItem(
     });
 
     if (!item) {
-      res.status(404).json({ error: "Included menu item not found" });
+      res.status(404).json({ error: "Elemento de menú incluido no encontrado" });
       return;
     }
 
@@ -303,7 +303,7 @@ export async function updateTicketIncludedMenuItem(
     await ticketIncludedMenuItemRepo.save(item);
 
     res.json({
-      message: "Menu item quantity updated",
+      message: "Cantidad del elemento de menú actualizada",
       item: {
         id: item.id,
         menuItemId: item.menuItemId,
@@ -313,6 +313,6 @@ export async function updateTicketIncludedMenuItem(
     });
   } catch (error) {
     console.error("❌ Error updating ticket included menu item:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 } 

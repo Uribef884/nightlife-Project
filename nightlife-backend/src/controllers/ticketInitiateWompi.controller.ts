@@ -45,20 +45,20 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
   const sanitizedEmail = sanitizeInput(rawEmail);
   
   if (!sanitizedEmail) {
-    return res.status(400).json({ error: "Valid email is required to complete checkout." });
+    return res.status(400).json({ error: "Se requiere un email válido para completar la compra." });
   }
   
   const email = sanitizedEmail;
 
   if (!req.user && isDisposableEmail(email)) {
-    return res.status(403).json({ error: "Disposable email domains are not allowed." });
+    return res.status(403).json({ error: "Los dominios de email desechables no están permitidos." });
   }
 
   const cartRepo = AppDataSource.getRepository(CartItem);
   const where = userId !== null ? { userId } : sessionId !== null ? { sessionId } : undefined;
 
   if (!where) {
-    return res.status(400).json({ error: "Missing session or user" });
+    return res.status(400).json({ error: "Falta sesión o usuario" });
   }
 
   // 🔒 Lock and validate cart before proceeding with payment
@@ -82,14 +82,14 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
   
   if (invalidItems.length > 0) {
     return res.status(400).json({ 
-      error: "All items in cart must be for the same date and club" 
+      error: "Todos los artículos en el carrito deben ser para la misma fecha y club" 
     });
   }
 
   const invalidTicket = cartItems.find((item) => !item.ticket.isActive);
   if (invalidTicket) {
     return res.status(400).json({
-      error: `The ticket "${invalidTicket.ticket.name}" is no longer available for purchase.`,
+      error: `El ticket "${invalidTicket.ticket.name}" ya no está disponible para compra.`,
     });
   }
 
@@ -98,14 +98,14 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
   );
 
   if (!allPricesAreValidNumbers) {
-    return res.status(400).json({ error: "Cart contains invalid ticket price types" });
+    return res.status(400).json({ error: "El carrito contiene tipos de precio de ticket inválidos" });
   }
 
   const isFreeCheckout = cartItems.every((item) => Number(item.ticket.price) === 0);
 
   if (isFreeCheckout) {
     console.log("[WOMPI-TICKET-INITIATE] Free checkout detected. Processing immediately.");
-    throw new Error('This endpoint has been deprecated. Use the unified checkout system instead.');
+    throw new Error('Este endpoint ha sido deprecado. Usa el sistema de checkout unificado en su lugar.');
   }
 
   // Get payment method from request
@@ -118,32 +118,32 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
   } = req.body;
   
   if (!paymentMethod) {
-    return res.status(400).json({ error: "Payment method is required" });
+    return res.status(400).json({ error: "Método de pago es requerido" });
   }
 
   // Validate payment method specific data
   if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.CARD) {
     if (!paymentData || !paymentData.number || !paymentData.cvc || !paymentData.exp_month || !paymentData.exp_year || !paymentData.card_holder) {
-      return res.status(400).json({ error: "Complete card data is required" });
+      return res.status(400).json({ error: "Se requieren datos completos de la tarjeta" });
     }
   } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.NEQUI) {
     if (!paymentData || !paymentData.phone_number) {
-      return res.status(400).json({ error: "Phone number is required for Nequi payments" });
+      return res.status(400).json({ error: "Número de teléfono es requerido para pagos con Nequi" });
     }
   } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.PSE) {
     if (!paymentData || !paymentData.user_legal_id || !paymentData.financial_institution_code || !customer_data?.full_name) {
-      return res.status(400).json({ error: "Complete PSE data including customer info is required" });
+      return res.status(400).json({ error: "Se requieren datos completos de PSE incluyendo información del cliente" });
     }
   } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.BANCOLOMBIA_TRANSFER) {
     if (!paymentData || !paymentData.payment_description) {
-      return res.status(400).json({ error: "Payment description is required for Bancolombia Transfer" });
+      return res.status(400).json({ error: "Descripción de pago es requerida para Transferencia Bancolombia" });
     }
   // } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.DAVIPLATA) { // DISABLED
   //   if (!paymentData || !paymentData.user_legal_id || !paymentData.user_legal_id_type) {
   //     return res.status(400).json({ error: "Legal ID data is required for Daviplata payments" });
   //   }
   } else if (!Object.values(WOMPI_CONFIG.PAYMENT_METHODS).includes(paymentMethod)) {
-    return res.status(400).json({ error: "Unsupported payment method" });
+    return res.status(400).json({ error: "Método de pago no soportado" });
   }
 
   // Enhanced customer information capture for better UX and compliance
@@ -206,7 +206,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
         // Check if event has passed grace period
         if (dynamicPrice === -1) {
           return res.status(400).json({ 
-            error: `Event "${ticket.name}" has already started and is no longer available for purchase.` 
+            error: `El evento "${ticket.name}" ya ha comenzado y ya no está disponible para compra.` 
           });
         }
       } else if (ticket.category === "event" && ticket.availableDate) {
@@ -216,7 +216,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
         // Check if event has passed grace period
         if (dynamicPrice === -1) {
           return res.status(400).json({ 
-            error: `Event "${ticket.name}" has already started and is no longer available for purchase.` 
+            error: `El evento "${ticket.name}" ya ha comenzado y ya no está disponible para compra.` 
           });
         }
       } else {
@@ -233,7 +233,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
         const gracePeriodCheck = computeDynamicEventPrice(Number(ticket.price), new Date(ticket.event.availableDate), ticket.event.openHours);
         if (gracePeriodCheck === -1) {
           return res.status(400).json({ 
-            error: `Event "${ticket.name}" has already started and is no longer available for purchase.` 
+            error: `El evento "${ticket.name}" ya ha comenzado y ya no está disponible para compra.` 
           });
         } else if (gracePeriodCheck > basePrice) {
           // If grace period price is higher than base price, use grace period price
@@ -244,7 +244,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
         const gracePeriodCheck = computeDynamicEventPrice(basePrice, eventDate);
         if (gracePeriodCheck === -1) {
           return res.status(400).json({ 
-            error: `Event "${ticket.name}" has already started and is no longer available for purchase.` 
+            error: `El evento "${ticket.name}" ya ha comenzado y ya no está disponible para compra.` 
           });
         } else if (gracePeriodCheck > basePrice) {
           // If grace period price is higher than base price, use grace period price
@@ -279,7 +279,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
     }
     
     return res.status(400).json({ 
-      error: "El monto mínimo de una transacción es $1,500 COP (exceptuando impuestos). Por favor, agrega más items a tu carrito.",
+      error: "El monto mínimo de una transacción es $1,500 COP (exceptuando impuestos). Por favor, agrega más artículos a tu carrito.",
       details: `Total del carrito: $${finalTotal.toFixed(2)} COP, mínimo requerido: $1,500 COP`
     });
   }
@@ -296,7 +296,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
       console.log("[WOMPI-TICKET-INITIATE] Tokenizing card...");
       tokenResponse = await wompiService().tokenizeCard(paymentData);
     } else if (!Object.values(WOMPI_CONFIG.PAYMENT_METHODS).includes(paymentMethod)) {
-      return res.status(400).json({ error: "Unsupported payment method" });
+      return res.status(400).json({ error: "Método de pago no soportado" });
     }
 
     // Step 3: Create payment source only for CARD
@@ -473,7 +473,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
       transactionId,
       total: finalTotal,
       status: transactionResponse.data.status,
-      message: "Ticket checkout initiated successfully. Processing payment automatically...",
+      message: "Checkout de ticket iniciado exitosamente. Procesando pago automáticamente...",
       automaticCheckout: true,
       // Include customer information for confirmation
       customerInfo: {
@@ -504,11 +504,11 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
         
         response.redirectUrl = asyncUrl;
         response.requiresRedirect = true;
-        response.message = `Please complete payment at ${paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.PSE ? 'your bank' : 'Bancolombia'}. We'll process your order automatically once payment is complete.`;
+        response.message = `Por favor completa el pago en ${paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.PSE ? 'tu banco' : 'Bancolombia'}. Procesaremos tu pedido automáticamente una vez que el pago esté completo.`;
         
       } catch (pollError: any) {
         console.error(`[WOMPI-TICKET-INITIATE] Failed to get async URL for ${paymentMethod}:`, pollError);
-        response.error = "Payment URL not available. Please try again.";
+        response.error = "URL de pago no disponible. Por favor intenta de nuevo.";
       }
     } 
     // Handle Daviplata OTP flow - DISABLED
@@ -529,15 +529,15 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
     // Handle immediate responses (Cards, Nequi)
     else {
       if (transactionResponse.data.status === WOMPI_CONFIG.STATUSES.APPROVED) {
-        response.message = "Payment approved successfully. Processing your order...";
+        response.message = "Pago aprobado exitosamente. Procesando tu pedido...";
       } else if (transactionResponse.data.status === WOMPI_CONFIG.STATUSES.DECLINED) {
-        response.error = "Payment was declined";
+        response.error = "El pago fue rechazado";
         response.status = "DECLINED";
       } else if (transactionResponse.data.status === WOMPI_CONFIG.STATUSES.PENDING) {
         if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.NEQUI) {
-          response.message = "Please check your Nequi app to complete the payment. We'll process your order automatically once confirmed.";
+          response.message = "Por favor revisa tu aplicación Nequi para completar el pago. Procesaremos tu pedido automáticamente una vez confirmado.";
         } else {
-          response.message = "Payment is being processed. We'll update you automatically.";
+          response.message = "El pago está siendo procesado. Te actualizaremos automáticamente.";
         }
       }
     }
@@ -548,7 +548,7 @@ export const initiateWompiTicketCheckout = async (req: Request, res: Response) =
   } catch (error: any) {
     console.error("[WOMPI-TICKET-INITIATE] Error:", error);
     return res.status(400).json({ 
-      error: error.message || "Failed to initiate Wompi checkout" 
+      error: error.message || "Error al iniciar checkout de Wompi" 
     });
   }
 };
@@ -596,7 +596,7 @@ async function startAutomaticTicketCheckout(transactionId: string, req: Request,
           } as any;
           
           // Process the successful checkout - DEPRECATED
-          throw new Error('This endpoint has been deprecated. Use the unified checkout system instead.');
+          throw new Error('Este endpoint ha sido deprecado. Usa el sistema de checkout unificado en su lugar.');
           
           // Remove stored data AFTER checkout is complete and cart is unlocked
           removeStoredTransactionData(transactionId);

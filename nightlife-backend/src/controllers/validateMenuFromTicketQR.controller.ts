@@ -13,7 +13,7 @@ export async function previewMenuFromTicketQR(
     const { qrCode } = req.body;
 
     if (!qrCode) {
-      res.status(400).json({ error: "QR code is required" });
+      res.status(400).json({ error: "Código QR es requerido" });
       return;
     }
 
@@ -54,7 +54,7 @@ export async function previewMenuFromTicketQR(
     res.json(response);
   } catch (error) {
     console.error("❌ Error previewing menu from ticket QR:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -66,7 +66,7 @@ export async function confirmMenuFromTicketQR(
     const { qrCode } = req.body;
 
     if (!qrCode) {
-      res.status(400).json({ error: "QR code is required" });
+      res.status(400).json({ error: "Código QR es requerido" });
       return;
     }
 
@@ -83,7 +83,7 @@ export async function confirmMenuFromTicketQR(
     // Check if already used
     if (purchase.isUsedMenu) {
       res.status(410).json({ 
-        error: "Menu QR code already used",
+        error: "Código QR de menú ya usado",
         usedAt: purchase.menuQRUsedAt
       });
       return;
@@ -121,6 +121,6 @@ export async function confirmMenuFromTicketQR(
     res.json(response);
   } catch (error) {
     console.error("❌ Error confirming menu from ticket QR:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 } 

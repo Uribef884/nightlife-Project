@@ -5,7 +5,7 @@ export const rateLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many requests, please try again later.",
+  message: "Demasiadas solicitudes, por favor intente nuevamente más tarde.",
 });
 
 // 🔐 Rate Limiting on Auth and Search
@@ -15,7 +15,7 @@ export const loginLimiter = rateLimit({
   max: 5, // 5 attempts per 15 minutes
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many login attempts, please try again later.",
+  message: "Demasiados intentos de inicio de sesión, por favor intente nuevamente más tarde.",
 });
 
 export const searchLimiter = rateLimit({ 
@@ -23,7 +23,7 @@ export const searchLimiter = rateLimit({
   max: 20, // 20 searches per minute
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many search requests, please try again later.",
+  message: "Demasiadas solicitudes de búsqueda, por favor intente nuevamente más tarde.",
 });
 
 // 🔐 Rate Limiting for Create Operations
@@ -33,7 +33,7 @@ export const createLimiter = rateLimit({
   max: 10, // 10 creations per 5 minutes
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many creation requests, please try again later.",
+  message: "Demasiadas solicitudes de creación, por favor intente nuevamente más tarde.",
 });
 
 // 🔐 Rate Limiting for Read Operations
@@ -43,7 +43,7 @@ export const readLimiter = rateLimit({
   max: 60, // 60 reads per minute (allows browsing through dates)
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many read requests, please try again later.",
+  message: "Demasiadas solicitudes de lectura, por favor intente nuevamente más tarde.",
 });
 
 // 🔐 Rate Limiting for QR Validation
@@ -53,11 +53,11 @@ export const qrValidationLimiter = rateLimit({
   max: 30, // 30 QR validations per minute
   standardHeaders: true,
   legacyHeaders: false,
-  message: "Too many QR validation requests, please try again later.",
+  message: "Demasiadas solicitudes de validación de QR, por favor intente nuevamente más tarde.",
 });
 
 export const webhookRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 10,              // max 10 requests per minute
-  message: 'Too many requests',
+  message: 'Demasiadas solicitudes',
 });

@@ -8,9 +8,9 @@
 // - POST /api/unified-checkout/start-automatic
 
 export const confirmWompiMenuCheckout = () => {
-  throw new Error('This endpoint has been deprecated. Use the unified checkout system instead.');
+  throw new Error('Este endpoint ha sido deprecado. Usa el sistema de checkout unificado en su lugar.');
 };
 
 export const checkWompiMenuTransactionStatus = () => {
-  throw new Error('This endpoint has been deprecated. Use the unified checkout system instead.');
+  throw new Error('Este endpoint ha sido deprecado. Usa el sistema de checkout unificado en su lugar.');
 };

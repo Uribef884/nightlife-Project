@@ -134,7 +134,7 @@ export const getUserPurchaseById = async (req: AuthenticatedRequest, res: Respon
   });
 
   if (!tx) {
-    res.status(404).json({ error: "Not found" });
+    res.status(404).json({ error: "No encontrado" });
     return;
   }
 
@@ -145,7 +145,7 @@ export const getUserPurchaseById = async (req: AuthenticatedRequest, res: Respon
 export const getClubPurchases = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const clubId = req.user?.clubId;
   if (!clubId) {
-    res.status(403).json({ error: "Unauthorized: No club ID associated with this user" });
+    res.status(403).json({ error: "No autorizado: No hay ID de club asociado con este usuario" });
     return;
   }
   const txs = await findTransactions({ clubId }, "clubowner", req.query);
@@ -162,7 +162,7 @@ export const getClubPurchaseById = async (req: AuthenticatedRequest, res: Respon
     relations: ["purchases", "purchases.ticket"],
   });
   if (!tx) {
-    res.status(404).json({ error: "Not found or unauthorized" });
+    res.status(404).json({ error: "No encontrado o no autorizado" });
     return;
   }
   res.json(await formatTransactionWithMenu(tx, "clubowner"));
@@ -174,14 +174,14 @@ export const validateTicketQR = async (req: AuthenticatedRequest, res: Response)
 
   // 🛡 Only bouncers or clubowners (not outsiders)
   if (!user.clubId) {
-    res.status(403).json({ error: "Forbidden: You do not have access to validate this QR" });
+    res.status(403).json({ error: "Prohibido: No tienes acceso para validar este QR" });
     return;
   }
 
   // ✅ Require explicit POST body confirmation
   const { confirm } = req.body;
   if (confirm !== true) {
-    res.status(400).json({ error: "Validation must be explicitly confirmed" });
+    res.status(400).json({ error: "La validación debe ser confirmada explícitamente" });
     return;
   }
 
@@ -189,13 +189,13 @@ export const validateTicketQR = async (req: AuthenticatedRequest, res: Response)
   const ticket = await purchaseRepo.findOneBy({ id });
 
   if (!ticket) {
-    res.status(404).json({ error: "Ticket not found" });
+    res.status(404).json({ error: "Ticket no encontrado" });
     return;
   }
 
   // 🛡 Club isolation
   if (ticket.clubId !== user.clubId) {
-    res.status(403).json({ error: "You cannot validate purchases from other clubs" });
+    res.status(403).json({ error: "No puedes validar compras de otros clubes" });
     return;
   }
 
@@ -203,13 +203,13 @@ export const validateTicketQR = async (req: AuthenticatedRequest, res: Response)
   const ticketDate = new Date(ticket.date).toISOString().slice(0, 10);
   const today = new Date().toISOString().slice(0, 10);
   if (ticketDate !== today) {
-    res.status(400).json({ error: "This ticket is not valid today" });
+    res.status(400).json({ error: "Este ticket no es válido hoy" });
     return;
   }
 
   // 🔁 One-time use only
   if (ticket.isUsed) {
-    res.status(400).json({ error: "This ticket has already been used and cannot be reused." });
+    res.status(400).json({ error: "Este ticket ya ha sido usado y no puede ser reutilizado." });
     return;
   }
 
@@ -219,7 +219,7 @@ export const validateTicketQR = async (req: AuthenticatedRequest, res: Response)
   await purchaseRepo.save(ticket);
 
   res.json({
-    message: "✅ Ticket successfully marked as used",
+    message: "✅ Ticket marcado como usado exitosamente",
     usedAt: ticket.usedAt,
   });
 };

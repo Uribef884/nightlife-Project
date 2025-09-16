@@ -15,7 +15,7 @@ export const createWaiter = async (req: AuthenticatedRequest, res: Response): Pr
     const password = req.body.password;
     
     if (!sanitizedEmail) {
-      res.status(400).json({ error: "Invalid email format" });
+      res.status(400).json({ error: "Formato de email inválido" });
       return;
     }
     
@@ -28,7 +28,7 @@ export const createWaiter = async (req: AuthenticatedRequest, res: Response): Pr
     const result = authSchemaRegister.safeParse({ email, password });
     if (!result.success) {
       res.status(400).json({
-        error: "Invalid input",
+        error: "Entrada inválida",
         details: result.error.flatten(),
       });
       return;
@@ -36,24 +36,24 @@ export const createWaiter = async (req: AuthenticatedRequest, res: Response): Pr
 
     // Block disposable emails (mirror register)
     if (isDisposableEmail(email)) {
-      res.status(403).json({ error: "Email domain not allowed" });
+      res.status(403).json({ error: "Dominio de email no permitido" });
       return;
     }
 
     if (!requester || requester.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can create waiters" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden crear meseros" });
       return;
     }
 
     const existing = await userRepo.findOneBy({ email });
     if (existing) {
-      res.status(409).json({ error: "Email already in use" });
+      res.status(409).json({ error: "Email ya existe" });
       return;
     }
 
     const club = await clubRepo.findOneBy({ ownerId: requester.id });
     if (!club) {
-      res.status(403).json({ error: "You don't own a club" });
+      res.status(403).json({ error: "No eres propietario de un club" });
       return;
     }
     const clubId = club.id;
@@ -67,10 +67,10 @@ export const createWaiter = async (req: AuthenticatedRequest, res: Response): Pr
     });
 
     await userRepo.save(newWaiter);
-    res.status(201).json({ message: "Waiter created", waiter: newWaiter });
+    res.status(201).json({ message: "Mesero creado", waiter: newWaiter });
   } catch (error) {
     console.error("❌ Error creating waiter:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -79,13 +79,13 @@ export const getWaiters = async (req: AuthenticatedRequest, res: Response): Prom
   const requester = req.user;
 
   if (!requester || requester.role !== "clubowner") {
-    res.status(403).json({ error: "Only club owners can view waiters" });
+    res.status(403).json({ error: "Solo los propietarios de club pueden ver meseros" });
     return;
   }
 
   const club = await AppDataSource.getRepository(Club).findOneBy({ ownerId: requester.id });
   if (!club) {
-    res.status(403).json({ error: "You don't own a club" });
+    res.status(403).json({ error: "No eres propietario de un club" });
     return;
   }
 
@@ -103,22 +103,22 @@ export const deleteWaiter = async (req: AuthenticatedRequest, res: Response): Pr
   const requester = req.user;
 
   if (!requester || requester.role !== "clubowner") {
-    res.status(403).json({ error: "Only club owners can delete waiters" });
+    res.status(403).json({ error: "Solo los propietarios de club pueden eliminar meseros" });
     return;
   }
 
   const waiter = await userRepo.findOneBy({ id, role: "waiter" });
   if (!waiter) {
-    res.status(404).json({ error: "Waiter not found" });
+    res.status(404).json({ error: "Mesero no encontrado" });
     return;
   }
 
   const ownerClub = await AppDataSource.getRepository(Club).findOneBy({ ownerId: requester.id });
   if (!ownerClub || waiter.clubId !== ownerClub.id) {
-    res.status(403).json({ error: "You are not authorized to delete this waiter" });
+    res.status(403).json({ error: "No estás autorizado para eliminar este mesero" });
     return;
   }
 
   await userRepo.remove(waiter);
-  res.status(200).json({ message: "Waiter deleted successfully" });
+  res.status(200).json({ message: "Mesero eliminado exitosamente" });
 }; 

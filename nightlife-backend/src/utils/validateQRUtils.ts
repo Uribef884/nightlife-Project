@@ -124,11 +124,11 @@ export async function previewMenuTransaction(
     const payload = decryptQR(qrCode);
 
     if (!validateQRType(payload.type, "menu")) {
-      return { isValid: false, error: "Invalid QR type for menu validation" };
+      return { isValid: false, error: "Tipo de QR inválido para validación de menú" };
     }
 
     if (!payload.id) {
-      return { isValid: false, error: "Missing transaction ID in QR code" };
+      return { isValid: false, error: "Falta el ID de la transacción en el QR code" };
     }
 
     const transactionRepository = AppDataSource.getRepository(MenuPurchaseTransaction);
@@ -138,18 +138,18 @@ export async function previewMenuTransaction(
     });
 
     if (!transaction) {
-      return { isValid: false, error: "Transaction not found" };
+      return { isValid: false, error: "Transacción no encontrada" };
     }
 
     const hasAccess = await validateClubAccess(user, transaction.clubId);
     if (!hasAccess) {
-      return { isValid: false, error: "Access denied to this club" };
+      return { isValid: false, error: "Access deni  ad to this club" };
     }
 
     // Preview has NO time/date restrictions - bouncers/waiters can preview anytime
     return { isValid: true, transaction };
   } catch (error) {
-    return { isValid: false, error: "Invalid QR code" };
+    return { isValid: false, error: "Código QR inválido" };
   }
 }
 
@@ -165,11 +165,11 @@ export async function validateMenuTransaction(
     const payload = decryptQR(qrCode);
 
     if (!validateQRType(payload.type, "menu")) {
-      return { isValid: false, error: "Invalid QR type for menu validation" };
+      return { isValid: false, error: "Tipo de QR inválido para validación de menú" };
     }
 
     if (!payload.id) {
-      return { isValid: false, error: "Missing transaction ID in QR code" };
+      return { isValid: false, error: "Falta el ID de la transacción en el QR code" };
     }
 
     const transactionRepository = AppDataSource.getRepository(MenuPurchaseTransaction);
@@ -179,12 +179,12 @@ export async function validateMenuTransaction(
     });
 
     if (!transaction) {
-      return { isValid: false, error: "Transaction not found" };
+      return { isValid: false, error: "Transacción no encontrada" };
     }
 
     const hasAccess = await validateClubAccess(user, transaction.clubId);
     if (!hasAccess) {
-      return { isValid: false, error: "Access denied to this club" };
+      return { isValid: false, error: "Aceso denegado a este club" };
     }
 
     // 🎯 SIMPLE RULE: Menu items can only be confirmed on open days, UNLESS there's an event
@@ -194,7 +194,7 @@ export async function validateMenuTransaction(
     });
 
     if (!club) {
-      return { isValid: false, error: "Club not found" };
+      return { isValid: false, error: "Club no encontrado" };
     }
 
     const today = new Date();
@@ -221,7 +221,7 @@ export async function validateMenuTransaction(
     if (!club.openDays || !club.openDays.includes(todayDayName)) {
       return { 
         isValid: false, 
-        error: `This club is not open on ${todayDayName}. Menu items can only be redeemed when the club is operating.` 
+        error: `Este club no está abierto en ${todayDayName}. Los items del menú solo pueden ser canjeados cuando el club está operando.` 
       };
     }
 
@@ -258,14 +258,14 @@ export async function validateMenuTransaction(
       if (!isWithinHours) {
         return { 
           isValid: false, 
-          error: "This club is currently closed. Menu items can only be redeemed during operating hours." 
+          error: "Este club está cerrado actualmente. Los items del menú solo pueden ser canjeados durante las horas de operación." 
         };
       }
     }
 
     return { isValid: true, transaction };
   } catch (error) {
-    return { isValid: false, error: "Invalid QR code" };
+    return { isValid: false, error: "Código QR inválido" };
   }
 }
 
@@ -283,11 +283,11 @@ export async function validateTicketPurchase(
     const payload = decryptQR(qrCode);
 
     if (!validateQRType(payload.type, "ticket")) {
-      return { isValid: false, error: "Invalid QR type for ticket validation" };
+      return { isValid: false, error: "Tipo de QR inválido para validación de ticket" };
     }
 
     if (!payload.id) {
-      return { isValid: false, error: "Missing purchase ID in QR code" };
+      return { isValid: false, error: "Falta el ID de la compra en el QR code" };
     }
 
     const purchaseRepository = AppDataSource.getRepository(TicketPurchase);
@@ -297,12 +297,12 @@ export async function validateTicketPurchase(
     });
 
     if (!purchase) {
-      return { isValid: false, error: "Purchase not found" };
+      return { isValid: false, error: "Compra no encontrada" };
     }
 
     const hasAccess = await validateClubAccess(user, purchase.clubId);
     if (!hasAccess) {
-      return { isValid: false, error: "Access denied to this club" };
+      return { isValid: false, error: "Aceso denegado a este club" };
     }
 
     // For preview: allow any date, but indicate if it's a future event
@@ -349,12 +349,12 @@ export async function validateTicketPurchase(
       if (nowColombia < eventStartColombia) {
         return { 
           isValid: false, 
-          error: `This ticket is for a future event (${eventDateDisplay}). Valid only on event date.` 
+          error: `Este ticket es para un evento futuro (${eventDateDisplay}). Solo es válido en la fecha del evento.` 
         };
       } else {
         return { 
           isValid: false, 
-          error: `This ticket was for ${eventDateDisplay} and is no longer valid (expired at 1:00 AM next day).` 
+          error: `Este ticket era para ${eventDateDisplay} y ya no es válido (expiró a las 1:00 AM del día siguiente).` 
         };
       }
     }
@@ -366,7 +366,7 @@ export async function validateTicketPurchase(
     });
 
     if (!club) {
-      return { isValid: false, error: "Club not found" };
+      return { isValid: false, error: "Club no encontrado" };
     }
 
     const today = new Date();
@@ -408,7 +408,7 @@ export async function validateTicketPurchase(
         if (!isWithinEventHours) {
           return { 
             isValid: false, 
-            error: `This event ticket is only valid during event hours (${open} - ${close}).` 
+            error: `Este ticket de evento solo es válido durante las horas del evento (${open} - ${close}).` 
           };
         }
       }
@@ -420,7 +420,7 @@ export async function validateTicketPurchase(
       if (!club.openDays || !club.openDays.includes(todayDayName)) {
         return { 
           isValid: false, 
-          error: `This club is not open on ${todayDayName}. Tickets can only be redeemed when the club is operating.` 
+          error: `Este club no está abierto en ${todayDayName}. Los tickets solo pueden ser canjeados cuando el club está operando.` 
         };
       }
 
@@ -457,7 +457,7 @@ export async function validateTicketPurchase(
         if (!isWithinHours) {
           return { 
             isValid: false, 
-            error: "This club is currently closed. Tickets can only be redeemed during operating hours." 
+            error: "Este club está cerrado actualmente. Los tickets solo pueden ser canjeados durante las horas de operación." 
           };
         }
       }
@@ -465,7 +465,7 @@ export async function validateTicketPurchase(
 
     return { isValid: true, purchase };
   } catch (error) {
-    return { isValid: false, error: "Invalid QR code" };
+    return { isValid: false, error: "Código QR inválido" };
   }
 } 
 
@@ -483,16 +483,16 @@ export async function previewMenuFromTicketPurchase(
     const payload = decryptQR(qrCode);
 
     if (!validateQRType(payload.type, "menu_from_ticket")) {
-      return { isValid: false, error: "Invalid QR type for menu from ticket validation" };
+      return { isValid: false, error: "Tipo de QR inválido para validación de menú desde ticket" };
     }
 
     if (!payload.ticketPurchaseId) {
-      return { isValid: false, error: "Missing ticket purchase ID in QR code" };
+      return { isValid: false, error: "Falta el ID de la compra de ticket en el QR code" };
     }
 
     // Only waiters can validate menu_from_ticket QRs
     if (user.role !== "waiter") {
-      return { isValid: false, error: "Only waiters can validate menu QR codes from tickets" };
+      return { isValid: false, error: "Solo los meseros pueden validar QR codes de menú desde tickets" };
     }
 
     const purchaseRepository = AppDataSource.getRepository(TicketPurchase);
@@ -502,12 +502,12 @@ export async function previewMenuFromTicketPurchase(
     });
 
     if (!purchase) {
-      return { isValid: false, error: "Ticket purchase not found" };
+      return { isValid: false, error: "Compra de ticket no encontrada" };
     }
 
     const hasAccess = await validateClubAccess(user, purchase.clubId);
     if (!hasAccess) {
-      return { isValid: false, error: "Access denied to this club" };
+      return { isValid: false, error: "Aceso denegado a este club" };
     }
 
     // Preview has NO time/date restrictions - bouncers/waiters can preview anytime
@@ -518,7 +518,7 @@ export async function previewMenuFromTicketPurchase(
       isFutureEvent: isFuture 
     };
   } catch (error) {
-    return { isValid: false, error: "Invalid QR code" };
+    return { isValid: false, error: "Código QR inválido" };
   }
 }
 
@@ -536,16 +536,16 @@ export async function validateMenuFromTicketPurchase(
     const payload = decryptQR(qrCode);
 
     if (!validateQRType(payload.type, "menu_from_ticket")) {
-      return { isValid: false, error: "Invalid QR type for menu from ticket validation" };
+      return { isValid: false, error: "Tipo de QR inválido para validación de menú desde ticket" };
     }
 
     if (!payload.ticketPurchaseId) {
-      return { isValid: false, error: "Missing ticket purchase ID in QR code" };
+      return { isValid: false, error: "Falta el ID de la compra de ticket en el QR code" };
     }
 
     // Only waiters can validate menu_from_ticket QRs
     if (user.role !== "waiter") {
-      return { isValid: false, error: "Only waiters can validate menu QR codes from tickets" };
+      return { isValid: false, error: "Solo los meseros pueden validar QR codes de menú desde tickets" };
     }
 
     const purchaseRepository = AppDataSource.getRepository(TicketPurchase);
@@ -560,7 +560,7 @@ export async function validateMenuFromTicketPurchase(
 
     const hasAccess = await validateClubAccess(user, purchase.clubId);
     if (!hasAccess) {
-      return { isValid: false, error: "Access denied to this club" };
+      return { isValid: false, error: "Aceso denegado a este club" };
     }
 
     // For preview: allow any date, but indicate if it's a future event
@@ -575,7 +575,7 @@ export async function validateMenuFromTicketPurchase(
 
     // For confirmation: check if already used and date validity
     if (purchase.isUsedMenu) {
-      return { isValid: false, error: "Menu QR already used" };
+      return { isValid: false, error: "QR de menú ya usado" };
     }
 
     // Check if ticket date is valid (same logic as ticket validation)
@@ -607,12 +607,12 @@ export async function validateMenuFromTicketPurchase(
       if (nowColombia < eventStartColombia) {
         return { 
           isValid: false, 
-          error: `This menu QR is for a future event (${eventDateDisplay}). Valid only on event date.` 
+          error: `Este QR de menú es para un evento futuro (${eventDateDisplay}). Solo es válido en la fecha del evento.` 
         };
       } else {
         return { 
           isValid: false, 
-          error: `This menu QR was for ${eventDateDisplay} and is no longer valid (expired at 1:00 AM next day).` 
+          error: `Este QR de menú era para ${eventDateDisplay} y ya no es válido (expiró a las 1:00 AM del día siguiente).` 
         };
       }
     }
@@ -624,7 +624,7 @@ export async function validateMenuFromTicketPurchase(
     });
 
     if (!club) {
-      return { isValid: false, error: "Club not found" };
+      return { isValid: false, error: "Club no encontrado" };
     }
 
     const today = new Date();
@@ -651,7 +651,7 @@ export async function validateMenuFromTicketPurchase(
     if (!club.openDays || !club.openDays.includes(todayDayName)) {
       return { 
         isValid: false, 
-        error: `This club is not open on ${todayDayName}. Menu items can only be redeemed when the club is operating.` 
+        error: `Este club no está abierto en ${todayDayName}. Los items del menú solo pueden ser canjeados cuando el club está operando.` 
       };
     }
 
@@ -688,14 +688,14 @@ export async function validateMenuFromTicketPurchase(
       if (!isWithinHours) {
         return { 
           isValid: false, 
-          error: "This club is currently closed. Menu items can only be redeemed during operating hours." 
+          error: "Este club está cerrado actualmente. Los items del menú solo pueden ser canjeados durante las horas de operación." 
         };
       }
     }
 
     return { isValid: true, purchase };
   } catch (error) {
-    return { isValid: false, error: "Invalid QR code" };
+    return { isValid: false, error: "Código QR inválido" };
   }
 }
 
@@ -713,11 +713,11 @@ export async function previewUnifiedMenuTransaction(
     const payload = decryptQR(qrCode);
 
     if (!validateQRType(payload.type, "menu")) {
-      return { isValid: false, error: "Invalid QR type for menu validation" };
+      return { isValid: false, error: "Tipo de QR inválido para validación de menú" };
     }
 
     if (!payload.id) {
-      return { isValid: false, error: "Missing transaction ID in QR code" };
+      return { isValid: false, error: "Falta el ID de la transacción en el QR code" };
     }
 
     const transactionRepository = AppDataSource.getRepository(UnifiedPurchaseTransaction);
@@ -727,18 +727,18 @@ export async function previewUnifiedMenuTransaction(
     });
 
     if (!transaction) {
-      return { isValid: false, error: "Transaction not found" };
+      return { isValid: false, error: "Transacción no encontrada" };
     }
 
     const hasAccess = await validateClubAccess(user, transaction.clubId);
     if (!hasAccess) {
-      return { isValid: false, error: "Access denied to this club" };
+      return { isValid: false, error: "Aceso denegado a este club" };
     }
 
     // Preview has NO time/date restrictions - bouncers/waiters can preview anytime
     return { isValid: true, transaction };
   } catch (error) {
-    return { isValid: false, error: "Invalid QR code" };
+    return { isValid: false, error: "Código QR inválido" };
   }
 }
 
@@ -755,11 +755,11 @@ export async function validateUnifiedMenuTransaction(
     const payload = decryptQR(qrCode);
 
     if (!validateQRType(payload.type, "menu")) {
-      return { isValid: false, error: "Invalid QR type for menu validation" };
+      return { isValid: false, error: "Tipo de QR inválido para validación de menú" };
     }
 
     if (!payload.id) {
-      return { isValid: false, error: "Missing transaction ID in QR code" };
+      return { isValid: false, error: "Falta el ID de la transacción en el QR code" };
     }
 
     const transactionRepository = AppDataSource.getRepository(UnifiedPurchaseTransaction);
@@ -769,17 +769,17 @@ export async function validateUnifiedMenuTransaction(
     });
 
     if (!transaction) {
-      return { isValid: false, error: "Transaction not found" };
+      return { isValid: false, error: "Transacción no encontrada" };
     }
 
     const hasAccess = await validateClubAccess(user, transaction.clubId);
     if (!hasAccess) {
-      return { isValid: false, error: "Access denied to this club" };
+      return { isValid: false, error: "Aceso denegado a este club" };
     }
 
     // Check if already used (using qrPayload as indicator)
     if (transaction.qrPayload && transaction.qrPayload.includes('USED')) {
-      return { isValid: false, error: "QR code already used" };
+      return { isValid: false, error: "QR code ya usado" };
     }
 
     // 🎯 SIMPLE RULE: Menu items can only be confirmed on open days, UNLESS there's an event
@@ -789,7 +789,7 @@ export async function validateUnifiedMenuTransaction(
     });
 
     if (!club) {
-      return { isValid: false, error: "Club not found" };
+      return { isValid: false, error: "Club no encontrado" };
     }
 
     const today = new Date();
@@ -816,7 +816,7 @@ export async function validateUnifiedMenuTransaction(
     if (!club.openDays || !club.openDays.includes(todayDayName)) {
       return { 
         isValid: false, 
-        error: `This club is not open on ${todayDayName}. Menu items can only be redeemed when the club is operating.` 
+        error: `Este club no está abierto en ${todayDayName}. Los items del menú solo pueden ser canjeados cuando el club está operando.` 
       };
     }
 
@@ -853,13 +853,13 @@ export async function validateUnifiedMenuTransaction(
       if (!isWithinHours) {
         return { 
           isValid: false, 
-          error: "This club is currently closed. Menu items can only be redeemed during operating hours." 
+          error: "Este club está cerrado actualmente. Los items del menú solo pueden ser canjeados durante las horas de operación." 
         };
       }
     }
 
     return { isValid: true, transaction };
   } catch (error) {
-    return { isValid: false, error: "Invalid QR code" };
+    return { isValid: false, error: "Código QR inválido" };
   }
 } 

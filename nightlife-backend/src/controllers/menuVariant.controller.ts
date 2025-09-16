@@ -19,7 +19,7 @@ export const getVariantsByMenuItemId = async (req: Request, res: Response): Prom
     const menuItem = await itemRepo.findOne({ where: { id: menuItemId }, relations: ["club"] });
     
     if (!menuItem) {
-      res.status(404).json({ error: "Menu item not found" });
+      res.status(404).json({ error: "Elemento de menú no encontrado" });
       return;
     }
 
@@ -28,7 +28,7 @@ export const getVariantsByMenuItemId = async (req: Request, res: Response): Prom
     // Check if the menu item's club uses PDF menu
     if (club && club.menuType === "pdf") {
       res.status(400).json({ 
-        error: "This menu item belongs to a club that uses a PDF menu. Structured menu variants are not available." 
+        error: "Este elemento de menú pertenece a un club que usa un menú PDF. Las variantes de menú estructurados no están disponibles." 
       });
       return;
     }
@@ -54,7 +54,7 @@ export const getVariantsByMenuItemId = async (req: Request, res: Response): Prom
     res.json(variantsWithDynamic);
   } catch (err) {
     console.error("Error fetching variants:", err);
-    res.status(500).json({ error: "Failed to load variants" });
+    res.status(500).json({ error: "Error al cargar variantes" });
   }
 };
 
@@ -62,7 +62,7 @@ export const createMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
   try {
     const user = req.user;
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can create variants" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden crear variantes" });
       return;
     }
 
@@ -74,19 +74,19 @@ export const createMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
     const { menuItemId, name, price, dynamicPricingEnabled, maxPerPerson } = sanitizedBody;
 
     if (!name || typeof price !== "number" || price <= 0) {
-      res.status(400).json({ error: "Variant name and positive price are required" });
+      res.status(400).json({ error: "Nombre de variante y precio positivo son requeridos" });
       return;
     }
 
     // Validate minimum cost for variants (no free variants allowed)
     if (price < 1500) {
-      res.status(400).json({ error: "Price must be at least 1500 COP for variants." });
+      res.status(400).json({ error: "El precio debe ser al menos 1500 COP para variantes." });
       return;
     }
 
     if (maxPerPerson !== undefined && maxPerPerson !== null) {
       if (typeof maxPerPerson !== "number" || maxPerPerson <= 0) {
-        res.status(400).json({ error: "maxPerPerson must be a positive number" });
+        res.status(400).json({ error: "maxPerPerson debe ser un número positivo" });
         return;
       }
     }
@@ -96,13 +96,13 @@ export const createMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
 
     const menuItem = await itemRepo.findOneBy({ id: menuItemId });
     if (!menuItem || menuItem.clubId !== user.clubId) {
-      res.status(403).json({ error: "Unauthorized or menu item not found" });
+      res.status(403).json({ error: "No autorizado o elemento de menú no encontrado" });
       return;
     }
 
     const existing = await variantRepo.findOne({ where: { name, menuItemId } });
     if (existing) {
-      res.status(400).json({ error: "Variant name must be unique for this item" });
+      res.status(400).json({ error: "El nombre de la variante debe ser único para este elemento" });
       return;
     }
 
@@ -119,7 +119,7 @@ export const createMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
     res.status(201).json(variant);
   } catch (err) {
     console.error("Error creating variant:", err);
-    res.status(500).json({ error: "Server error creating variant" });
+    res.status(500).json({ error: "Error del servidor al crear variante" });
   }
 };
 
@@ -136,7 +136,7 @@ export const updateMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
     const { name, price, isActive, dynamicPricingEnabled, maxPerPerson } = sanitizedBody;
 
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can update variants" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden actualizar variantes" });
       return;
     }
 
@@ -147,24 +147,24 @@ export const updateMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
       where: { id, isDeleted: false } 
     });
     if (!variant) {
-      res.status(404).json({ error: "Variant not found" });
+      res.status(404).json({ error: "Variante no encontrada" });
       return;
     }
 
     const menuItem = await itemRepo.findOneBy({ id: variant.menuItemId });
     if (!menuItem || menuItem.clubId !== user.clubId) {
-      res.status(403).json({ error: "Unauthorized or item not found" });
+      res.status(403).json({ error: "No autorizado o elemento no encontrado" });
       return;
     }
 
     if (name !== undefined) {
       if (!name) {
-        res.status(400).json({ error: "Variant name is invalid" });
+        res.status(400).json({ error: "El nombre de la variante es inválido" });
         return;
       }
       const existing = await variantRepo.findOne({ where: { name, menuItemId: menuItem.id } });
       if (existing && existing.id !== variant.id) {
-        res.status(400).json({ error: "Variant name must be unique" });
+        res.status(400).json({ error: "El nombre de la variante debe ser único" });
         return;
       }
       variant.name = name;
@@ -173,13 +173,13 @@ export const updateMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
     if (price != null) {
       const parsedPrice = parseFloat(price);
       if (isNaN(parsedPrice) || parsedPrice < 0) {
-        res.status(400).json({ error: "Price must be a non-negative number" });
+        res.status(400).json({ error: "El precio debe ser un número no negativo" });
         return;
       }
 
       // Validate minimum cost for variants (no free variants allowed)
       if (parsedPrice < 1500) {
-        res.status(400).json({ error: "Price must be at least 1500 COP for variants." });
+        res.status(400).json({ error: "El precio debe ser al menos 1500 COP para variantes." });
         return;
       }
 
@@ -196,7 +196,7 @@ export const updateMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
 
     if (maxPerPerson !== undefined) {
       if (maxPerPerson !== null && (typeof maxPerPerson !== "number" || maxPerPerson <= 0)) {
-        res.status(400).json({ error: "maxPerPerson must be a positive number or null" });
+        res.status(400).json({ error: "maxPerPerson debe ser un número positivo o null" });
         return;
       }
       variant.maxPerPerson = maxPerPerson;
@@ -206,7 +206,7 @@ export const updateMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
     res.json(variant);
   } catch (err) {
     console.error("Error updating variant:", err);
-    res.status(500).json({ error: "Failed to update variant" });
+    res.status(500).json({ error: "Error al actualizar variante" });
   }
 };
 
@@ -216,7 +216,7 @@ export const deleteMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
     const { id } = req.params;
 
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can delete variants" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden eliminar variantes" });
       return;
     }
 
@@ -229,7 +229,7 @@ export const deleteMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
       where: { id, isDeleted: false } 
     });
     if (!variant) {
-      res.status(404).json({ error: "Variant not found" });
+      res.status(404).json({ error: "Variante no encontrada" });
       return;
     }
 
@@ -237,7 +237,7 @@ export const deleteMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
       where: { id: variant.menuItemId, isDeleted: false } 
     });
     if (!item || item.clubId !== user.clubId) {
-      res.status(403).json({ error: "Unauthorized to delete this variant" });
+      res.status(403).json({ error: "No autorizado para eliminar esta variante" });
       return;
     }
 
@@ -259,23 +259,23 @@ export const deleteMenuItemVariant = async (req: AuthenticatedRequest, res: Resp
       await variantRepo.save(variant);
 
       res.json({ 
-        message: "Variant soft deleted successfully", 
+        message: "Variante eliminada exitosamente (soft delete)", 
         deletedAt: variant.deletedAt,
         includedInTickets,
         existingPurchases,
-        note: "Variant marked as deleted but preserved due to existing purchases or ticket bundles"
+        note: "Variante marcada como eliminada pero preservada debido a compras existentes o paquetes de tickets"
       });
     } else {
       // Hard delete - no associated ticket bundles, safe to completely remove
       await variantRepo.remove(variant);
       res.json({ 
-        message: "Variant permanently deleted successfully",
-        note: "No associated ticket bundles found, variant completely removed"
+        message: "Variante eliminada permanentemente exitosamente",
+        note: "No se encontraron paquetes de tickets asociados, variante eliminada completamente"
       });
     }
   } catch (err) {
     console.error("Error deleting variant:", err);
-    res.status(500).json({ error: "Server error deleting variant" });
+    res.status(500).json({ error: "Error del servidor al eliminar variante" });
   }
 };
 
@@ -286,7 +286,7 @@ export const toggleMenuItemVariantDynamicPricing = async (req: AuthenticatedRequ
     const { id } = req.params;
     
     if (!user || user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can modify menu item variants" });
+      res.status(403).json({ error: "Solo los propietarios de club pueden modificar variantes de elementos del menú" });
       return;
     }
     const repo = AppDataSource.getRepository(MenuItemVariant);
@@ -295,14 +295,14 @@ export const toggleMenuItemVariantDynamicPricing = async (req: AuthenticatedRequ
       relations: ["menuItem"] 
     });
     if (!variant || !variant.menuItem || variant.menuItem.clubId !== user.clubId) {
-      res.status(403).json({ error: "Variant not found or not owned by your club" });
+      res.status(403).json({ error: "Variante no encontrada o no pertenece a tu club" });
       return;
     }
     variant.dynamicPricingEnabled = !variant.dynamicPricingEnabled;
     await repo.save(variant);
-    res.json({ message: "Menu item variant dynamic pricing toggled", dynamicPricingEnabled: variant.dynamicPricingEnabled });
+    res.json({ message: "Precios dinámicos de la variante del elemento de menú cambiados", dynamicPricingEnabled: variant.dynamicPricingEnabled });
   } catch (err) {
     console.error("Error toggling menu item variant dynamic pricing:", err);
-    res.status(500).json({ error: "Server error toggling dynamic pricing" });
+    res.status(500).json({ error: "Error del servidor al cambiar precio dinámico" });
   }
 };

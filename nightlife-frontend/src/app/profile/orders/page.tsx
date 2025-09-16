@@ -1,130 +1,134 @@
+// nightlife-frontend/src/app/profile/orders/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/domain/auth/ProtectedRoute';
+import { apiFetch, apiUrl } from '@/lib/apiClient';
 
-interface Order {
-  id: string;
-  clubName: string;
-  date: string;
-  totalPaid: number;
-  status: 'APPROVED' | 'PENDING' | 'DECLINED' | 'VOIDED';
-  items: {
-    type: 'ticket' | 'menu';
-    name: string;
-    quantity: number;
-    price: number;
-  }[];
-  createdAt: string;
-}
+// ... your interfaces stay the same ...
 
 function OrdersContent() {
-  const { user } = useAuth();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const [purchases, setPurchases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null);
+
+  // ✅ NEW: safe numeric coercion + COP formatting
+  const toAmount = (v: unknown): number => {
+    // Coerce to number first
+    const n =
+      typeof v === 'string'
+        ? Number(v.replace(/,/g, '').trim()) // defensive: strip commas if any
+        : typeof v === 'number'
+        ? v
+        : 0;
+
+    if (!Number.isFinite(n)) return 0;
+
+    // Optional cents heuristic (kept conservative to avoid false positives):
+    // some services return integer cents; if it's HUGE and looks like cents, divide by 100
+    if (Number.isInteger(n) && n > 1_000_000 && n % 100 === 0) {
+      return n / 100;
+    }
+
+    return n;
+  };
+
+  const toCOP = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2, // fees can have decimals
+    }).format(n);
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    if (isAuthenticated && !authLoading) {
+      fetchPurchases();
+    } else if (!authLoading && !isAuthenticated) {
+      setLoading(false);
+      setError('Debes iniciar sesión para ver tus compras');
+    }
+  }, [isAuthenticated, authLoading]);
 
-  const fetchOrders = async () => {
+  const fetchPurchases = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with actual API call
-      // const response = await fetch('/api/orders');
-      // const data = await response.json();
-      
-      // Mock data for now
-      const mockOrders: Order[] = [
-        {
-          id: '1',
-          clubName: 'Club Example',
-          date: '2024-01-15',
-          totalPaid: 150000,
-          status: 'APPROVED',
-          items: [
-            { type: 'ticket', name: 'Entrada General', quantity: 2, price: 50000 },
-            { type: 'menu', name: 'Cerveza', quantity: 4, price: 50000 }
-          ],
-          createdAt: '2024-01-10T10:30:00Z'
-        },
-        {
-          id: '2',
-          clubName: 'Another Club',
-          date: '2024-01-20',
-          totalPaid: 75000,
-          status: 'PENDING',
-          items: [
-            { type: 'ticket', name: 'VIP', quantity: 1, price: 75000 }
-          ],
-          createdAt: '2024-01-18T15:45:00Z'
-        }
-      ];
-      
-      setOrders(mockOrders);
+      setError(null);
+      const data = await apiFetch<any[]>(apiUrl('/unified-purchases'));
+      setPurchases(data);
     } catch (err) {
-      setError('Error al cargar las órdenes');
-      console.error('Error fetching orders:', err);
+      setError('Error al cargar las compras');
+      console.error('Error fetching purchases:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(price);
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('es-CO', {
+      day: '2-digit',
+      month: '2-digit',
+    });
   };
 
-  const formatDate = (dateString: string) => {
+  const formatFullDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-CO', {
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
     });
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'APPROVED':
-        return 'bg-green-100 text-green-800';
+        return 'text-green-600';
       case 'PENDING':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'text-yellow-600';
       case 'DECLINED':
-        return 'bg-red-100 text-red-800';
+        return 'text-red-600';
       case 'VOIDED':
-        return 'bg-gray-100 text-gray-800';
+        return 'text-gray-600';
+      case 'ERROR':
+        return 'text-red-600';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'text-gray-600';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
       case 'APPROVED':
-        return 'Aprobada';
+        return 'Entregado';
       case 'PENDING':
         return 'Pendiente';
       case 'DECLINED':
-        return 'Rechazada';
+        return 'Rechazado';
       case 'VOIDED':
-        return 'Anulada';
+        return 'Anulado';
+      case 'ERROR':
+        return 'Error';
       default:
         return status;
     }
   };
 
-  if (loading) {
+  const toggleExpanded = (purchaseId: string) => {
+    setExpandedPurchase(expandedPurchase === purchaseId ? null : purchaseId);
+  };
+
+  if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-nl-bg flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-b-2 border-nl-secondary mx-auto mb-4"></div>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">Cargando órdenes...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-nl-secondary mx-auto mb-4"></div>
+          <p className="text-sm text-white/70">
+            {authLoading ? 'Verificando autenticación...' : 'Cargando compras...'}
+          </p>
         </div>
       </div>
     );
@@ -132,131 +136,228 @@ function OrdersContent() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-950 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-nl-bg flex items-center justify-center p-4">
         <div className="text-center">
-          <p className="text-sm sm:text-base text-red-600 mb-4">{error}</p>
-          <button
-            onClick={fetchOrders}
-            className="bg-nl-secondary hover:bg-purple-700 text-white px-4 py-2 rounded-md text-sm sm:text-base transition-colors"
-          >
-            Reintentar
-          </button>
+          <p className="text-sm text-red-400 mb-4">{error}</p>
+          {!isAuthenticated ? (
+            <Link
+              href="/auth/login"
+              className="bg-nl-accent hover:bg-red-700 text-white px-4 py-2 rounded-2xl text-sm transition-colors"
+            >
+              Iniciar Sesión
+            </Link>
+          ) : (
+            <button
+              onClick={fetchPurchases}
+              className="bg-nl-accent hover:bg-red-700 text-white px-4 py-2 rounded-2xl text-sm transition-colors"
+            >
+              Reintentar
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-950">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-        {/* Header */}
-        <div className="mb-6 sm:mb-8">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center text-nl-secondary hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 mb-4 transition-colors"
-          >
-            <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className="min-h-screen bg-nl-bg">
+      {/* Header */}
+      <div className="bg-nl-bg border-b border-white/10 px-4 py-4">
+        <div className="flex items-center">
+          <Link href="/dashboard" className="mr-4 p-2 -ml-2">
+            <svg className="w-5 h-5 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            <span className="text-sm sm:text-base">Volver al perfil</span>
           </Link>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Historial de Órdenes</h1>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-2">
-            Aquí puedes ver todas tus compras y reservas
-          </p>
+          <h1 className="text-lg font-semibold text-white/90">Órdenes</h1>
         </div>
+      </div>
 
-        {/* Orders List */}
-        {orders.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 sm:p-8 text-center">
-            <svg className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* Orders List */}
+      <div className="px-4 py-4">
+        {purchases.length === 0 ? (
+          <div className="text-center py-12">
+            <svg className="w-16 h-16 text-white/40 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-2">
-              No tienes órdenes aún
+            <h3 className="text-lg font-medium text-white/90 mb-2">
+              No tienes compras aún
             </h3>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">
+            <p className="text-sm text-white/70 mb-6">
               Cuando hagas una compra, aparecerá aquí
             </p>
             <Link
               href="/clubs"
-              className="bg-nl-secondary hover:bg-purple-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-md font-medium text-sm sm:text-base transition-colors"
+              className="bg-nl-accent hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-medium text-sm transition-colors"
             >
               Explorar clubs
             </Link>
           </div>
         ) : (
-          <div className="space-y-4 sm:space-y-6">
-            {orders.map((order) => (
-              <div
-                key={order.id}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition-shadow"
-              >
-                <div className="p-4 sm:p-6">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 space-y-2 sm:space-y-0">
-                    <div className="flex-1">
-                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                        {order.clubName}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                        Fecha del evento: {formatDate(order.date)}
-                      </p>
-                      <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-500">
-                        Orden realizada: {formatDate(order.createdAt)}
-                      </p>
-                    </div>
-                    <div className="flex flex-col sm:text-right space-y-2">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full w-fit ${getStatusColor(order.status)}`}>
-                        {getStatusText(order.status)}
-                      </span>
-                      <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                        {formatPrice(order.totalPaid)}
-                      </p>
-                    </div>
-                  </div>
+          <div className="space-y-3">
+            {purchases.map((purchase) => {
+              // ✅ Coerce EVERYTHING to numbers before math
+              const ticketSubtotal = toAmount(purchase.ticketSubtotal);
+              const menuSubtotal = toAmount(purchase.menuSubtotal);
+              const totalPaid = toAmount(purchase.totalPaid);
+              const subtotal = ticketSubtotal + menuSubtotal;
+              const serviceFee = totalPaid - subtotal;
 
-                  <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
-                    <h4 className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white mb-2">
-                      Items de la orden:
-                    </h4>
-                    <div className="space-y-2">
-                      {order.items.map((item, index) => (
-                        <div key={index} className="flex flex-col sm:flex-row sm:justify-between sm:items-center text-xs sm:text-sm space-y-1 sm:space-y-0">
-                          <div className="flex items-center flex-wrap">
-                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-2 sm:mr-3 ${
-                              item.type === 'ticket' 
-                                ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200' 
-                                : 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
-                            }`}>
-                              {item.type === 'ticket' ? 'Entrada' : 'Menú'}
-                            </span>
-                            <span className="text-gray-900 dark:text-white">{item.name}</span>
-                            <span className="text-gray-500 dark:text-gray-400 ml-2">x{item.quantity}</span>
-                          </div>
-                          <span className="font-medium text-gray-900 dark:text-white">
-                            {formatPrice(item.price)}
+              return (
+                <div
+                  key={purchase.id}
+                  className="rounded-2xl border border-nl-secondary/30 bg-nl-card shadow-soft overflow-hidden"
+                >
+                  {/* Order Card Header */}
+                  <div
+                    className="p-4 flex items-center cursor-pointer hover:border-nl-secondary/60 transition-colors"
+                    onClick={() => toggleExpanded(purchase.id)}
+                  >
+                    {/* Club Image - matching ClubCard style */}
+                    <div className="relative w-16 h-16 shrink-0 rounded-2xl overflow-hidden ring-2 ring-nl-secondary/60 bg-black/20 mr-4">
+                      {purchase.club?.profileImageUrl ? (
+                        <img
+                          src={purchase.club.profileImageUrl}
+                          alt={purchase.club.name}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#6B3FA0]/20 to-black/60">
+                          <span className="text-white/80 font-semibold text-lg">
+                            {purchase.club?.name?.charAt(0) || 'C'}
                           </span>
                         </div>
-                      ))}
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-white/90 font-semibold text-lg leading-tight truncate">
+                        {purchase.club?.name || 'Club desconocido'}
+                      </h3>
+                      <p className="text-white/70 text-sm">
+                        {getStatusText(purchase.paymentStatus)} - {formatDate(purchase.createdAt)}
+                      </p>
+                    </div>
+
+                    <div className="ml-2">
+                      <svg
+                        className={`w-6 h-6 text-nl-accent transition-transform ${
+                          expandedPurchase === purchase.id ? 'rotate-90' : ''
+                        }`}
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M9.29 6.71a1 1 0 0 0 0 1.41L13.17 12l-3.88 3.88a1 1 0 1 0 1.41 1.41l4.59-4.59a1 1 0 0 0 0-1.41L10.7 6.7a1 1 0 0 0-1.41 0Z" />
+                      </svg>
                     </div>
                   </div>
 
-                  {order.status === 'APPROVED' && (
-                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <Link
-                        href={`/profile/qrs?order=${order.id}`}
-                        className="inline-flex items-center text-nl-secondary hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 text-xs sm:text-sm font-medium transition-colors"
-                      >
-                        Ver códigos QR
-                        <svg className="w-3 h-3 sm:w-4 sm:h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </Link>
+                  {/* Expanded Details */}
+                  {expandedPurchase === purchase.id && (
+                    <div className="border-t border-white/10 bg-white/5">
+                      <div className="p-4 space-y-4">
+                        {/* Items List - Now at the top */}
+                        <div>
+                          <h4 className="text-sm font-semibold text-white/90 mb-3">Items comprados</h4>
+                          <div className="space-y-3">
+                            {/* Ticket Purchases */}
+                            {purchase.ticketPurchases?.map((ticketPurchase: any, index: number) => (
+                              <div key={`ticket-${index}`} className="flex items-center text-sm">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-3 bg-white/10 text-white/80">
+                                  Entrada
+                                </span>
+                                <div className="flex-1">
+                                  <div className="flex flex-col">
+                                    {ticketPurchase.ticket.event ? (
+                                      <div className="flex flex-col">
+                                        <span className="text-white/90 font-medium">{ticketPurchase.ticket.event.name}</span>
+                                        <span className="text-sm text-white/70">- {ticketPurchase.ticket.name}</span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-white/90">{ticketPurchase.ticket.name}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {ticketPurchase.ticket.includesMenuItem && (
+                                      <span className="text-xs text-white/70">
+                                        (Incluye menú)
+                                      </span>
+                                    )}
+                                    {ticketPurchase.isUsed && (
+                                      <span className="text-xs text-green-400">
+                                        ✓ Usada
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* Menu Purchases */}
+                            {purchase.menuPurchases?.map((menuPurchase: any, index: number) => (
+                              <div key={`menu-${index}`} className="flex items-center text-sm">
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-3 bg-white/10 text-white/80">
+                                  Menú
+                                </span>
+                                <div className="flex-1">
+                                  <div className="flex flex-col">
+                                    <span className="text-white/90">{menuPurchase.menuItem.name}</span>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      {menuPurchase.variant && (
+                                        <span className="text-xs text-white/60">
+                                          ({menuPurchase.variant.name})
+                                        </span>
+                                      )}
+                                      <span className="text-xs text-white/60">x{menuPurchase.quantity}</span>
+                                      {menuPurchase.isUsed && (
+                                        <span className="text-xs text-green-400">
+                                          ✓ Usado
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* ✅ Price Breakdown — FIXED */}
+                        <div>
+                          <h4 className="text-sm font-semibold text-white/90 mb-2">Desglose de precios</h4>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-white/70">Subtotal:</span>
+                              <span className="font-medium text-white/90">{toCOP(subtotal)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-white/70">Cargo por servicio:</span>
+                              <span className="font-medium text-white/90">{toCOP(serviceFee)}</span>
+                            </div>
+                            <div className="flex justify-between font-semibold border-t border-white/10 pt-2">
+                              <span className="text-white/90">Total Pagado:</span>
+                              <span className="text-white/90">{toCOP(totalPaid)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Order Details */}
+                        <div className="text-xs text-white/60 space-y-1">
+                          <p>ID de transacción: {purchase.id}</p>
+                          <p>Compra realizada: {formatFullDate(purchase.createdAt)}</p>
+                          {purchase.date && (
+                            <p>Fecha del evento: {formatFullDate(purchase.date)}</p>
+                          )}
+                          {purchase.customerFullName && (
+                            <p>Comprador: {purchase.customerFullName}</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

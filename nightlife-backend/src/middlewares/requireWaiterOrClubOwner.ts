@@ -9,12 +9,12 @@ export function requireWaiterOrClubOwner(
   const user = req.user;
 
   if (!user) {
-    res.status(401).json({ error: "Authentication required" });
+    res.status(401).json({ error: "Autenticación requerida" });
     return;
   }
 
   if (user.role !== "waiter" && user.role !== "clubowner") {
-    res.status(403).json({ error: "Waiter or club owner privileges required" });
+    res.status(403).json({ error: "Privilegios de Mesero o Propietario de Club requeridos" });
     return;
   }
 

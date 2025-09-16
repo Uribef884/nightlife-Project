@@ -8,7 +8,7 @@ export const validateAuthInput: () => RequestHandler = () => {
 
     if (!result.success) {
       res.status(400).json({
-        error: "Invalid input",
+        error: "Entrada inválida",
         details: result.error.flatten(),
       });
       return; // ✅ return void — satisfies Express

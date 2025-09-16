@@ -4,49 +4,49 @@ import { z } from "zod";
 export const authSchemaRegister = z.object({
   email: z
     .string()
-    .email("Invalid email format")
+    .email("Formato de email inválido")
     .trim()
     .transform((val) => val.toLowerCase()),
 
   password: z
     .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must include at least one uppercase letter")
-    .regex(/[0-9]/, "Password must include at least one number")
+    .min(8, "La contraseña debe tener al menos 8 caracteres")
+    .regex(/[A-Z]/, "La contraseña debe incluir al menos una letra mayúscula")
+    .regex(/[0-9]/, "La contraseña debe incluir al menos un número")
     .trim(),
 });
 
 export const authSchemaLogin = z.object({
   email: z
     .string()
-    .email("Invalid credentials")
+    .email("Credenciales inválidas")
     .trim()
     .transform((val) => val.toLowerCase()),
 
   password: z
     .string()
-    .min(1, "Invalid credentials")
+    .min(1, "Credenciales inválidas")
     .trim(),
 });
 
 export const changePasswordSchema = z.object({
   oldPassword: z
     .string()
-    .min(1, "Current password is required")
+    .min(1, "La contraseña actual es requerida")
     .trim(),
 
   newPassword: z
     .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must include at least one uppercase letter")
-    .regex(/[0-9]/, "Password must include at least one number")
+    .min(8, "La contraseña debe tener al menos 8 caracteres")
+    .regex(/[A-Z]/, "La contraseña debe incluir al menos una letra mayúscula")
+    .regex(/[0-9]/, "La contraseña debe incluir al menos un número")
     .trim(),
 
   confirmPassword: z
     .string()
-    .min(1, "Password confirmation is required")
+    .min(1, "La confirmación de contraseña es requerida")
     .trim(),
 }).refine((data) => data.newPassword === data.confirmPassword, {
-  message: "New passwords do not match",
+  message: "Las nuevas contraseñas no coinciden",
   path: ["confirmPassword"],
 });

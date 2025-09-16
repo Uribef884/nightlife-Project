@@ -12,7 +12,7 @@ export async function previewMenuQR(
     const { qrCode } = req.body;
 
     if (!qrCode) {
-      res.status(400).json({ error: "QR code is required" });
+      res.status(400).json({ error: "Código QR es requerido" });
       return;
     }
 
@@ -45,7 +45,7 @@ export async function previewMenuQR(
     res.json(response);
   } catch (error) {
     console.error("❌ Error previewing menu QR:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -57,7 +57,7 @@ export async function confirmMenuQR(
     const { qrCode } = req.body;
 
     if (!qrCode) {
-      res.status(400).json({ error: "QR code is required" });
+      res.status(400).json({ error: "Código QR es requerido" });
       return;
     }
 
@@ -74,7 +74,7 @@ export async function confirmMenuQR(
     // Check if already used
     if (transaction.isUsed) {
       res.status(410).json({ 
-        error: "QR code already used",
+        error: "Código QR ya usado",
         usedAt: transaction.usedAt
       });
       return;
@@ -105,6 +105,6 @@ export async function confirmMenuQR(
     res.json(response);
   } catch (error) {
     console.error("❌ Error confirming menu QR:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 } 

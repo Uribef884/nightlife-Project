@@ -15,7 +15,7 @@ export const createBouncerAdmin = async (req: AuthenticatedRequest, res: Respons
     const password = req.body.password;
     
     if (!sanitizedEmail) {
-      res.status(400).json({ error: "Invalid email format" });
+      res.status(400).json({ error: "Formato de email inválido" });
       return;
     }
     
@@ -25,7 +25,7 @@ export const createBouncerAdmin = async (req: AuthenticatedRequest, res: Respons
     // Check if user already exists
     const existingUser = await userRepo.findOne({ where: { email } });
     if (existingUser) {
-      res.status(409).json({ error: "Email already in use" });
+      res.status(409).json({ error: "El email ya está en uso" });
       return;
     }
 
@@ -48,7 +48,7 @@ export const createBouncerAdmin = async (req: AuthenticatedRequest, res: Respons
     res.status(201).json(bouncerWithoutPassword);
   } catch (error) {
     console.error("❌ Error creating bouncer:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -62,14 +62,14 @@ export const deleteBouncerAdmin = async (req: AuthenticatedRequest, res: Respons
 
     const bouncer = await userRepo.findOne({ where: { id: bouncerId, role: "bouncer" } });
     if (!bouncer) {
-      res.status(404).json({ error: "Bouncer not found" });
+      res.status(404).json({ error: "Portero no encontrado" });
       return;
     }
 
     await userRepo.remove(bouncer);
-    res.status(200).json({ message: "Bouncer deleted successfully" });
+    res.status(200).json({ message: "Portero eliminado exitosamente" });
   } catch (error) {
     console.error("❌ Error deleting bouncer:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }; 

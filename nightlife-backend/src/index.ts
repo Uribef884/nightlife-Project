@@ -41,6 +41,7 @@ import pseRoutes from './routes/pse.routes';
 // Unified Cart and Checkout Routes
 import unifiedCheckoutRoutes from "./routes/unifiedCheckout.routes";
 import unifiedCartRoutes from "./routes/unifiedCart.routes";
+import unifiedPurchasesRoutes from "./routes/unifiedPurchases.routes";
 dotenv.config();
 
 const app = express();
@@ -178,6 +179,7 @@ app.use('/api/pse', pseRoutes);
 // Unified Cart and Checkout Routes
 app.use("/unified-cart", unifiedCartRoutes);
 app.use("/checkout/unified", unifiedCheckoutRoutes);
+app.use("/unified-purchases", unifiedPurchasesRoutes);
 
 // Admin Routes
 app.use("/admin", adminRoutes);

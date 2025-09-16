@@ -22,7 +22,7 @@ export const getPSEBanks = async (req: Request, res: Response) => {
     console.error('[PSE] Error fetching banks:', error);
     res.status(500).json({ 
       success: false,
-      error: 'Failed to fetch PSE banks',
+      error: 'Error al obtener bancos PSE',
       details: error.message 
     });
   }

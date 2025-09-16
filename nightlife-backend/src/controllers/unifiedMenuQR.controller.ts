@@ -15,14 +15,14 @@ export async function previewUnifiedMenuQR(
   try {
     const { qrCode } = req.body;
     if (!qrCode) {
-      res.status(400).json({ error: "QR code is required" });
+      res.status(400).json({ error: "Código QR es requerido" });
       return;
     }
     let payload;
     try {
       payload = decryptQR(qrCode);
     } catch (err) {
-      res.status(400).json({ error: "Invalid QR code" });
+      res.status(400).json({ error: "Código QR inválido" });
       return;
     }
     const user = req.user!;
@@ -103,11 +103,11 @@ export async function previewUnifiedMenuQR(
       };
       res.json(response);
     } else {
-      res.status(400).json({ error: "Unsupported QR type" });
+      res.status(400).json({ error: "Tipo de QR no soportado" });
     }
   } catch (error) {
     console.error("❌ Error previewing unified menu QR:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }
 
@@ -118,14 +118,14 @@ export async function confirmUnifiedMenuQR(
   try {
     const { qrCode } = req.body;
     if (!qrCode) {
-      res.status(400).json({ error: "QR code is required" });
+      res.status(400).json({ error: "QR code es requerido" });
       return;
     }
     let payload;
     try {
       payload = decryptQR(qrCode);
     } catch (err) {
-      res.status(400).json({ error: "Invalid QR code" });
+      res.status(400).json({ error: "Código QR inválido" });
       return;
     }
     const user = req.user!;
@@ -138,7 +138,7 @@ export async function confirmUnifiedMenuQR(
         const transaction = validation.transaction!;
         if (transaction.qrPayload && transaction.qrPayload.includes('USED')) {
           res.status(410).json({
-            error: "QR code already used",
+            error: "Código QR ya usado",
             usedAt: null // We'll need to add this field to track usage
           });
           return;
@@ -176,7 +176,7 @@ export async function confirmUnifiedMenuQR(
       const legacyTransaction = legacyValidation.transaction!;
       if (legacyTransaction.isUsed) {
         res.status(410).json({
-          error: "QR code already used",
+          error: "Código QR ya usado",
           usedAt: legacyTransaction.usedAt
         });
         return;
@@ -210,7 +210,7 @@ export async function confirmUnifiedMenuQR(
       const purchase = validation.purchase!;
       if (purchase.isUsedMenu) {
         res.status(410).json({
-          error: "Menu QR code already used",
+          error: "Código QR de menú ya usado",
           usedAt: purchase.menuQRUsedAt
         });
         return;
@@ -240,10 +240,10 @@ export async function confirmUnifiedMenuQR(
       };
       res.json(response);
     } else {
-      res.status(400).json({ error: "Unsupported QR type" });
+      res.status(400).json({ error: "Tipo de QR no soportado" });
     }
   } catch (error) {
     console.error("❌ Error confirming unified menu QR:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 } 

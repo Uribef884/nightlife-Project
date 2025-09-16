@@ -11,7 +11,7 @@ export const getMenuConfig = async (req: AuthenticatedRequest, res: Response): P
 
     // Only club owners and admins can access menu configuration
     if (user.role !== "admin" && user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can access menu configuration" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden acceder a la configuración del menú" });
       return;
     }
 
@@ -22,13 +22,13 @@ export const getMenuConfig = async (req: AuthenticatedRequest, res: Response): P
       // For admins, use the clubId from the URL parameters
       clubId = req.params.clubId;
       if (!clubId) {
-        res.status(400).json({ error: "clubId parameter is required" });
+        res.status(400).json({ error: "El parámetro clubId es requerido" });
         return;
       }
     } else {
       // For club owners, use their associated clubId
       if (!user.clubId) {
-        res.status(400).json({ error: "User is not associated with any club" });
+        res.status(400).json({ error: "El usuario no está asociado con ningún club" });
         return;
       }
       clubId = user.clubId;
@@ -41,7 +41,7 @@ export const getMenuConfig = async (req: AuthenticatedRequest, res: Response): P
     });
 
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
@@ -58,14 +58,14 @@ export const getMenuConfig = async (req: AuthenticatedRequest, res: Response): P
       pdfMenuName: club.pdfMenuName,
       pdfMenuUrl: club.pdfMenuUrl,
       description: club.menuType === "none" 
-        ? "No menu available"
+        ? "No hay menú disponible"
         : club.menuType === "pdf"
-        ? "PDF menu available"
-        : "Structured menu with cart functionality"
+        ? "Menú PDF disponible"
+        : "Menú estructurado con funcionalidad de carrito"
     });
   } catch (error) {
     console.error("Error getting menu config:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -77,7 +77,7 @@ export const switchMenuType = async (req: AuthenticatedRequest, res: Response): 
 
     // Only club owners and admins can change menu configuration
     if (user.role !== "admin" && user.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can change menu configuration" });
+      res.status(403).json({ error: "Solo los dueños de clubes pueden cambiar la configuración del menú" });
       return;
     }
 
@@ -88,27 +88,27 @@ export const switchMenuType = async (req: AuthenticatedRequest, res: Response): 
       // For admins, use the clubId from the URL parameters
       clubId = req.params.clubId;
       if (!clubId) {
-        res.status(400).json({ error: "clubId parameter is required" });
+        res.status(400).json({ error: "El parámetro clubId es requerido" });
         return;
       }
     } else {
       // For club owners, use their associated clubId
       if (!user.clubId) {
-        res.status(400).json({ error: "User is not associated with any club" });
+        res.status(400).json({ error: "El usuario no está asociado con ningún club" });
         return;
       }
       clubId = user.clubId;
     }
 
     if (!menuType || !["structured", "pdf", "none"].includes(menuType)) {
-      res.status(400).json({ error: "Invalid menu type. Must be 'structured', 'pdf', or 'none'" });
+      res.status(400).json({ error: "Tipo de menú inválido. Debe ser 'structured', 'pdf', o 'none'" });
       return;
     }
     const clubRepo = AppDataSource.getRepository(Club);
     const club = await clubRepo.findOne({ where: { id: clubId } });
 
     if (!club) {
-      res.status(404).json({ error: "Club not found" });
+      res.status(404).json({ error: "Club no encontrado" });
       return;
     }
 
@@ -124,21 +124,21 @@ export const switchMenuType = async (req: AuthenticatedRequest, res: Response): 
     await clubRepo.save(club);
 
     // Create appropriate response message based on the switch
-    let message = `Menu type switched to ${menuType}`;
+    let message = `Tipo de menú cambiado a ${menuType}`;
     let warning = null;
 
     if (previousMenuType === "structured" && menuType === "pdf") {
-      message = "Menu switched to PDF mode";
-      warning = "Your structured menu items are now hidden from customers. Only the uploaded PDF menu will be visible. You can switch back to structured mode anytime to restore menu item visibility.";
+      message = "Menú cambiado a modo PDF";
+      warning = "Tus artículos del menú estructurado ahora están ocultos para los clientes. Solo el menú PDF subido será visible. Puedes cambiar de vuelta al modo estructurado en cualquier momento para restaurar la visibilidad de los artículos del menú.";
     } else if (previousMenuType === "structured" && menuType === "none") {
-      message = "Menu disabled";
-      warning = "Your structured menu items are now hidden from customers. No menu will be available until you switch to structured or PDF mode.";
+      message = "Menú deshabilitado";
+      warning = "Tus artículos del menú estructurado ahora están ocultos para los clientes. No habrá menú disponible hasta que cambies al modo estructurado o PDF.";
     } else if (previousMenuType === "pdf" && menuType === "structured") {
-      message = "Menu switched to structured mode - your menu items are now visible to customers";
+      message = "Menú cambiado a modo estructurado - tus artículos del menú ahora son visibles para los clientes";
     } else if (previousMenuType === "none" && menuType === "structured") {
-      message = "Menu enabled - your structured menu items are now visible to customers";
+      message = "Menú habilitado - tus artículos del menú estructurado ahora son visibles para los clientes";
     } else if (menuType === "pdf") {
-      message = "Menu switched to PDF mode - upload a PDF to make it visible to customers";
+      message = "Menú cambiado a modo PDF - sube un PDF para hacerlo visible a los clientes";
     }
 
     const response: any = {
@@ -154,7 +154,7 @@ export const switchMenuType = async (req: AuthenticatedRequest, res: Response): 
     res.json(response);
   } catch (error) {
     console.error("Error switching menu type:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 

@@ -87,7 +87,7 @@ export const getUserMenuPurchaseById = async (req: AuthenticatedRequest, res: Re
   });
 
   if (!tx)  {
-    res.status(404).json({ error: "Not found" });
+    res.status(404).json({ error: "No encontrado" });
     return;
   }
   res.json(formatTransaction(tx, "user"));
@@ -97,7 +97,7 @@ export const getUserMenuPurchaseById = async (req: AuthenticatedRequest, res: Re
 export const getClubMenuPurchases = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const clubId = req.user?.clubId;
   if (!clubId)  {
-    res.status(403).json({ error: "No club ID assigned" });
+    res.status(403).json({ error: "No hay ID de club asignado" });
     return;
   }
 
@@ -116,7 +116,7 @@ export const getClubMenuPurchaseById = async (req: AuthenticatedRequest, res: Re
   });
 
   if (!tx) {
-    res.status(404).json({ error: "Not found or unauthorized" });
+    res.status(404).json({ error: "No encontrado o no autorizado" });
     return;
   }
   res.json(formatTransaction(tx, "clubowner"));

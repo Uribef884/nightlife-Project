@@ -23,7 +23,7 @@ export const getEventsByClubIdAdmin = async (req: Request, res: Response) => {
     res.status(200).json(events);
   } catch (err) {
     console.error("❌ Failed to fetch events for club:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -40,13 +40,13 @@ export const createEventAdmin = async (req: AuthenticatedRequest, res: Response)
     const { name, description, availableDate, openHours } = sanitizedBody;
 
     if (!name || !availableDate || !openHours) {
-      res.status(400).json({ error: "Missing required fields: name, availableDate, or openHours" });
+      res.status(400).json({ error: "Campos requeridos faltantes: name, availableDate, o openHours" });
       return;
     }
 
     // Validate image
     if (!req.file) {
-      res.status(400).json({ error: "Image file is required." });
+      res.status(400).json({ error: "Archivo de imagen requerido." });
       return;
     }
 
@@ -56,26 +56,26 @@ export const createEventAdmin = async (req: AuthenticatedRequest, res: Response)
       try {
         parsedOpenHours = JSON.parse(openHours);
       } catch (error) {
-        res.status(400).json({ error: "Invalid openHours format. Must be valid JSON." });
+        res.status(400).json({ error: "Formato de openHours inválido. Debe ser JSON válido." });
         return;
       }
     } else if (typeof openHours === 'object') {
       parsedOpenHours = openHours;
     } else {
-      res.status(400).json({ error: "openHours is required and must be provided" });
+      res.status(400).json({ error: "openHours es requerido y debe ser proporcionado" });
       return;
     }
 
     // Validate openHours format
     if (!parsedOpenHours.open || !parsedOpenHours.close) {
-      res.status(400).json({ error: "openHours must have both 'open' and 'close' properties" });
+      res.status(400).json({ error: "openHours debe tener las propiedades 'open' y 'close'" });
       return;
     }
 
     // Validate time format (HH:MM)
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
     if (!timeRegex.test(parsedOpenHours.open) || !timeRegex.test(parsedOpenHours.close)) {
-      res.status(400).json({ error: "Time format must be HH:MM (e.g., '22:00', '02:00')" });
+      res.status(400).json({ error: "El formato de tiempo debe ser HH:MM (ej., '22:00', '02:00')" });
       return;
     }
 
@@ -84,7 +84,7 @@ export const createEventAdmin = async (req: AuthenticatedRequest, res: Response)
     const [year, month, day] = raw.split("-").map(Number);
 
     if (!year || !month || !day) {
-      res.status(400).json({ error: "Invalid availableDate format" });
+      res.status(400).json({ error: "Formato de availableDate inválido" });
       return;
     }
 
@@ -94,7 +94,7 @@ export const createEventAdmin = async (req: AuthenticatedRequest, res: Response)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (normalizedDate < today) {
-      res.status(400).json({ error: "Event date cannot be in the past" });
+      res.status(400).json({ error: "La fecha del evento no puede ser en el pasado" });
       return;
     }
 
@@ -143,7 +143,7 @@ export const createEventAdmin = async (req: AuthenticatedRequest, res: Response)
     res.status(201).json(newEvent);
   } catch (err) {
     console.error("❌ Failed to create event:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -155,7 +155,7 @@ export const updateEventAdmin = async (req: AuthenticatedRequest, res: Response)
 
     const event = await eventRepo.findOne({ where: { id: eventId } });
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
@@ -171,7 +171,7 @@ export const updateEventAdmin = async (req: AuthenticatedRequest, res: Response)
     
     // Prevent changing availableDate
     if (availableDate !== undefined) {
-      res.status(400).json({ error: "Cannot update availableDate after creation" });
+      res.status(400).json({ error: "No se puede actualizar availableDate después de la creación" });
       return;
     }
     
@@ -182,7 +182,7 @@ export const updateEventAdmin = async (req: AuthenticatedRequest, res: Response)
           try {
             parsedOpenHours = JSON.parse(openHours);
           } catch (error) {
-            res.status(400).json({ error: "Invalid openHours format. Must be valid JSON." });
+            res.status(400).json({ error: "Formato de openHours inválido. Debe ser JSON válido." });
             return;
           }
         } else if (typeof openHours === 'object') {
@@ -192,14 +192,14 @@ export const updateEventAdmin = async (req: AuthenticatedRequest, res: Response)
         // Validate openHours format
         if (parsedOpenHours) {
           if (!parsedOpenHours.open || !parsedOpenHours.close) {
-            res.status(400).json({ error: "openHours must have both 'open' and 'close' properties" });
+            res.status(400).json({ error: "openHours debe tener las propiedades 'open' y 'close'" });
             return;
           }
 
           // Validate time format (HH:MM)
           const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
           if (!timeRegex.test(parsedOpenHours.open) || !timeRegex.test(parsedOpenHours.close)) {
-            res.status(400).json({ error: "Time format must be HH:MM (e.g., '22:00', '02:00')" });
+            res.status(400).json({ error: "El formato de tiempo debe ser HH:MM (ej., '22:00', '02:00')" });
             return;
           }
         }
@@ -211,7 +211,7 @@ export const updateEventAdmin = async (req: AuthenticatedRequest, res: Response)
     res.status(200).json(event);
   } catch (err) {
     console.error("❌ Failed to update event:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -222,13 +222,13 @@ export const updateEventImageAdmin = async (req: AuthenticatedRequest, res: Resp
     const eventRepo = AppDataSource.getRepository(Event);
 
     if (!req.file) {
-      res.status(400).json({ error: "Image file is required" });
+      res.status(400).json({ error: "Archivo de imagen requerido" });
       return;
     }
 
     const event = await eventRepo.findOne({ where: { id: eventId } });
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
@@ -265,7 +265,7 @@ export const updateEventImageAdmin = async (req: AuthenticatedRequest, res: Resp
     res.status(200).json({ bannerUrl: event.bannerUrl });
   } catch (err) {
     console.error("❌ Failed to update event image:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -281,7 +281,7 @@ export const toggleEventVisibilityAdmin = async (req: AuthenticatedRequest, res:
       relations: ["tickets"]
     });
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
@@ -300,13 +300,13 @@ export const toggleEventVisibilityAdmin = async (req: AuthenticatedRequest, res:
     }
 
     res.status(200).json({ 
-      message: "Event and all child tickets visibility toggled",
+      message: "Visibilidad del evento y todos los tickets hijos cambiada",
       isActive: event.isActive,
       ticketsUpdated: updatedTickets
     });
   } catch (err) {
     console.error("❌ Failed to toggle event visibility:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -324,7 +324,7 @@ export const deleteEventAdmin = async (req: AuthenticatedRequest, res: Response)
     });
     
     if (!event) {
-      res.status(404).json({ error: "Event not found" });
+      res.status(404).json({ error: "Evento no encontrado" });
       return;
     }
 
@@ -368,7 +368,7 @@ export const deleteEventAdmin = async (req: AuthenticatedRequest, res: Response)
       const s3CleanupResult = await cleanupEventS3Files(event);
       
       res.status(200).json({ 
-        message: "Event and related tickets soft deleted due to existing purchases",
+        message: "Evento y tickets relacionados eliminados suavemente debido a compras existentes",
         adCleanupResult,
         s3CleanupResult,
         note: "Associated ads have been automatically deactivated. S3 banner has been cleaned up."
@@ -381,7 +381,7 @@ export const deleteEventAdmin = async (req: AuthenticatedRequest, res: Response)
       await eventRepo.remove(event);
       
       res.status(200).json({ 
-        message: "Event and associated tickets deleted successfully",
+        message: "Evento y tickets asociados eliminados exitosamente",
         adCleanupResult,
         s3CleanupResult,
         note: "Associated ads have been automatically deactivated. S3 banner has been cleaned up."
@@ -389,6 +389,6 @@ export const deleteEventAdmin = async (req: AuthenticatedRequest, res: Response)
     }
   } catch (err) {
     console.error("❌ Failed to delete event:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }; 

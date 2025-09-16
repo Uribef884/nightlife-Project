@@ -53,14 +53,14 @@ function validateTargetType(type: any): boolean {
 export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only admins can create admin ads." });
+      res.status(403).json({ error: "Solo los administradores pueden crear anuncios de Globales." });
       return;
     }
     const { priority, isVisible, targetType, targetId, externalUrl } = req.body;
     // Validate priority
     const prio = priority !== undefined ? parseInt(priority) : 1;
     if (!validatePriority(prio)) {
-      res.status(400).json({ error: "Priority must be a positive integer (min 1)." });
+      res.status(400).json({ error: "La prioridad debe ser un entero positivo (mín 1)." });
       return;
     }
     // Validate target and get clubId if targeting ticket/event
@@ -70,19 +70,19 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
     
     if (targetType) {
       if (!validateTargetType(targetType)) {
-        res.status(400).json({ error: "targetType must be 'ticket', 'event', or 'external' if provided." });
+        res.status(400).json({ error: "targetType debe ser 'ticket', 'event', o 'external' si se proporciona." });
         return;
       }
       
       if (targetType === "external") {
         // External ads validation
         if (!externalUrl) {
-          res.status(400).json({ error: "externalUrl is required for external ads." });
+          res.status(400).json({ error: "externalUrl es requerido para anuncios externos." });
           return;
         }
         // External ads cannot have targetId
         if (targetId) {
-          res.status(400).json({ error: "External ads cannot have targetId. Use externalUrl instead." });
+          res.status(400).json({ error: "Los anuncios externos no pueden tener targetId. Usa externalUrl en su lugar." });
           return;
         }
         // Validate external URL with cybersecurity checks
@@ -95,26 +95,26 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
       } else {
         // Internal ads validation (ticket/event)
         if (!targetId) {
-          res.status(400).json({ error: "targetId is required for ticket/event ads." });
+          res.status(400).json({ error: "targetId es requerido para anuncios de ticket/evento." });
           return;
         }
         // Internal ads cannot have external URLs
         if (externalUrl) {
-          res.status(400).json({ error: "Internal ads (ticket/event) cannot have external URLs." });
+          res.status(400).json({ error: "Los anuncios internos (ticket/evento) no pueden tener URLs externas." });
           return;
         }
         // Validate existence and get clubId
         if (targetType === "ticket") {
           const ticket = await AppDataSource.getRepository(Ticket).findOne({ where: { id: targetId } });
           if (!ticket) {
-            res.status(400).json({ error: "Target ticket not found." });
+            res.status(400).json({ error: "Ticket objetivo no encontrado." });
             return;
           }
           clubId = ticket.clubId; // Automatically get clubId from ticket
         } else if (targetType === "event") {
           const event = await AppDataSource.getRepository(Event).findOne({ where: { id: targetId } });
           if (!event) {
-            res.status(400).json({ error: "Target event not found." });
+            res.status(400).json({ error: "Evento objetivo no encontrado." });
             return;
           }
           clubId = event.clubId; // Automatically get clubId from event
@@ -124,7 +124,7 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
     }
     // Validate image
     if (!req.file) {
-      res.status(400).json({ error: "Image file is required." });
+      res.status(400).json({ error: "Archivo de imagen requerido." });
       return;
     }
     const processed = await (await import("../services/imageService")).ImageService.processImage(req.file.buffer);
@@ -150,7 +150,7 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
     res.status(201).json(adToResponse(ad));
   } catch (error) {
     console.error("Error creating admin ad:", error);
-    res.status(500).json({ error: "Failed to create admin ad." });
+    res.status(500).json({ error: "Error al crear anuncio de Global." });
   }
 };
 
@@ -158,7 +158,7 @@ export const createAdminAdGlobal = async (req: AuthenticatedRequest, res: Respon
 export const createClubAd = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (req.user?.role !== "clubowner" && req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only club owners and admins can create club ads." });
+      res.status(403).json({ error: "Solo los propietarios de club y administradores pueden crear anuncios de club." });
       return;
     }
     const { priority, isVisible, targetType, targetId, externalUrl } = req.body;
@@ -170,14 +170,14 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
       // For admins, use the clubId from the URL parameters
       const paramClubId = req.params.clubId;
       if (!paramClubId) {
-        res.status(400).json({ error: "clubId parameter is required for admin ad creation" });
+        res.status(400).json({ error: "El parámetro clubId es requerido para la creación de anuncios Globales" });
         return;
       }
       clubId = paramClubId;
     } else {
       // For club owners, use their associated clubId
       if (!req.user?.clubId) {
-        res.status(400).json({ error: "No clubId found for user." });
+        res.status(400).json({ error: "No se encontró clubId para el usuario." });
         return;
       }
       clubId = req.user.clubId;
@@ -191,46 +191,46 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
       } 
     });
     if (adCount >= 7) {
-      res.status(400).json({ error: "You have reached the maximum of 7 ads for your club. Please delete an existing ad before uploading a new one." });
+      res.status(400).json({ error: "Has alcanzado el máximo de 7 anuncios para tu club. Por favor elimina un anuncio existente antes de subir uno nuevo." });
       return;
     }
     // Validate priority
     const prio = priority !== undefined ? parseInt(priority) : 1;
     if (!validatePriority(prio)) {
-      res.status(400).json({ error: "Priority must be a positive integer (min 1)." });
+      res.status(400).json({ error: "La prioridad debe ser un entero positivo (mín 1)." });
       return;
     }
     // Validate target - club ads cannot be external
     let validatedTargetId: string | null = null;
     if (targetType) {
       if (targetType === "external") {
-        res.status(400).json({ error: "Club ads cannot be external. Only global ads can link to external URLs." });
+        res.status(400).json({ error: "Los anuncios de club no pueden ser externos. Solo los anuncios globales pueden vincular a URLs externas." });
         return;
       }
       if (!validateTargetType(targetType)) {
-        res.status(400).json({ error: "targetType must be 'ticket' or 'event' for club ads." });
+        res.status(400).json({ error: "targetType debe ser 'ticket' o 'event' para anuncios de club." });
         return;
       }
       if (!targetId) {
-        res.status(400).json({ error: "targetId is required if targetType is provided." });
+        res.status(400).json({ error: "targetId es requerido si se proporciona targetType." });
         return;
       }
       // Club ads cannot have external URLs
       if (externalUrl) {
-        res.status(400).json({ error: "Club ads cannot have external URLs. Only global ads can link to external URLs." });
+        res.status(400).json({ error: "Los anuncios de club no pueden tener URLs externas. Solo los anuncios globales pueden vincular a URLs externas." });
         return;
       }
       // Validate existence and club ownership
       if (targetType === "ticket") {
         const ticket = await AppDataSource.getRepository(Ticket).findOne({ where: { id: targetId, clubId } });
         if (!ticket) {
-          res.status(400).json({ error: "Target ticket not found or not owned by your club." });
+          res.status(400).json({ error: "Ticket objetivo no encontrado o no pertenece a tu club." });
           return;
         }
       } else if (targetType === "event") {
         const event = await AppDataSource.getRepository(Event).findOne({ where: { id: targetId, clubId } });
         if (!event) {
-          res.status(400).json({ error: "Target event not found or not owned by your club." });
+          res.status(400).json({ error: "Evento objetivo no encontrado o no pertenece a tu club." });
           return;
         }
       }
@@ -238,7 +238,7 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
     }
     // Validate image
     if (!req.file) {
-      res.status(400).json({ error: "Image file is required." });
+      res.status(400).json({ error: "Archivo de imagen requerido." });
       return;
     }
     const processed = await (await import("../services/imageService")).ImageService.processImage(req.file.buffer);
@@ -263,7 +263,7 @@ export const createClubAd = async (req: AuthenticatedRequest, res: Response): Pr
     res.status(201).json(adToResponse(ad));
   } catch (error) {
     console.error("Error creating club ad:", error);
-    res.status(500).json({ error: "Failed to create club ad." });
+    res.status(500).json({ error: "Error al crear anuncio de club." });
   }
 };
 
@@ -274,21 +274,21 @@ export const updateAd = async (req: AuthenticatedRequest, res: Response): Promis
     const adRepo = AppDataSource.getRepository(Ad);
     const ad = await adRepo.findOne({ where: { id, isActive: true, isDeleted: false } });
     if (!ad) {
-      res.status(404).json({ error: "Ad not found." });
+      res.status(404).json({ error: "Anuncio no encontrado." });
       return;
     }
     // Permission check based on label and clubId
     if (ad.label === "global" && req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only admins can update global ads." });
+      res.status(403).json({ error: "Solo los administradores pueden actualizar anuncios globales." });
       return;
     }
     if (ad.label === "club") {
       if (req.user?.role === "clubowner" && req.user.clubId !== ad.clubId) {
-        res.status(403).json({ error: "Only the club owner can update this ad." });
+        res.status(403).json({ error: "Solo el propietario del club puede actualizar este anuncio." });
         return;
       }
       if (req.user?.role !== "clubowner" && req.user?.role !== "admin") {
-        res.status(403).json({ error: "Only club owners and admins can update club ads." });
+        res.status(403).json({ error: "Solo los propietarios de club y administradores pueden actualizar anuncios de club." });
         return;
       }
     }
@@ -302,7 +302,7 @@ export const updateAd = async (req: AuthenticatedRequest, res: Response): Promis
     if (priority !== undefined) {
       const prio = parseInt(priority);
       if (!validatePriority(prio)) {
-        res.status(400).json({ error: "Priority must be a positive integer (min 1)." });
+        res.status(400).json({ error: "La prioridad debe ser un entero positivo (mín 1)." });
         return;
       }
       ad.priority = prio;
@@ -313,7 +313,7 @@ export const updateAd = async (req: AuthenticatedRequest, res: Response): Promis
     // Target validation - targetType, targetId, and externalUrl cannot be changed once created
     if (targetType !== undefined || targetId !== undefined || externalUrl !== undefined) {
       res.status(400).json({ 
-        error: "targetType, targetId, and externalUrl cannot be modified after ad creation. Please delete the ad and create a new one if you need to change the target." 
+        error: "targetType, targetId y externalUrl no pueden modificarse después de la creación del anuncio. Por favor elimina el anuncio y crea uno nuevo si necesitas cambiar el objetivo." 
       });
       return;
     }
@@ -331,7 +331,7 @@ export const updateAd = async (req: AuthenticatedRequest, res: Response): Promis
     res.json(adToResponse(ad));
   } catch (error) {
     console.error("Error updating ad:", error);
-    res.status(500).json({ error: "Failed to update ad." });
+    res.status(500).json({ error: "Error al actualizar anuncio." });
   }
 };
 
@@ -344,7 +344,7 @@ export const deleteAd = async (req: Request, res: Response): Promise<void> => {
 
     const ad = await adRepo.findOne({ where: { id } });
     if (!ad) {
-      res.status(404).json({ error: "Ad not found" });
+      res.status(404).json({ error: "Anuncio no encontrado" });
       return;
     }
 
@@ -377,7 +377,7 @@ export const deleteAd = async (req: Request, res: Response): Promise<void> => {
       const s3CleanupResult = await cleanupAdS3Files(ad);
       
       res.json({ 
-        message: "Ad soft deleted successfully", 
+        message: "Anuncio eliminado suavemente exitosamente", 
         deletedAt: ad.deletedAt,
         hasRelatedPurchases,
         s3CleanupResult,
@@ -391,14 +391,14 @@ export const deleteAd = async (req: Request, res: Response): Promise<void> => {
       // Delete ad from DB
       await adRepo.remove(ad);
       res.json({ 
-        message: "Ad permanently deleted successfully",
+        message: "Anuncio eliminado permanentemente exitosamente",
         s3CleanupResult,
         note: "No related purchases found, ad completely removed"
       });
     }
   } catch (error) {
     console.error("Error deleting ad:", error);
-    res.status(500).json({ error: "Failed to delete ad." });
+    res.status(500).json({ error: "Error al eliminar anuncio." });
   }
 };
 
@@ -429,7 +429,7 @@ export const getGlobalAds = async (req: Request, res: Response): Promise<void> =
     res.json(ads.map(adToResponse));
   } catch (error) {
     console.error("Error fetching global ads:", error);
-    res.status(500).json({ error: "Failed to fetch global ads." });
+    res.status(500).json({ error: "Error al obtener anuncios globales." });
   }
 };
 
@@ -463,7 +463,7 @@ export const getClubAds = async (req: Request, res: Response): Promise<void> => 
     res.json(ads.map(adToResponse));
   } catch (error) {
     console.error("Error fetching club ads:", error);
-    res.status(500).json({ error: "Failed to fetch club ads." });
+    res.status(500).json({ error: "Error al obtener anuncios de club." });
   }
 };
 
@@ -471,12 +471,12 @@ export const getClubAds = async (req: Request, res: Response): Promise<void> => 
 export const getMyClubAds = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (req.user?.role !== "clubowner") {
-      res.status(403).json({ error: "Only club owners can view their ads." });
+      res.status(403).json({ error: "Solo los propietarios de club pueden ver sus anuncios." });
       return;
     }
     const clubId = req.user.clubId;
     if (!clubId) {
-      res.status(400).json({ error: "No clubId found for user." });
+      res.status(400).json({ error: "No se encontró clubId para el usuario." });
       return;
     }
     const adRepo = AppDataSource.getRepository(Ad);
@@ -487,7 +487,7 @@ export const getMyClubAds = async (req: AuthenticatedRequest, res: Response): Pr
     res.json(ads.map(adToResponse));
   } catch (error) {
     console.error("Error fetching my club ads:", error);
-    res.status(500).json({ error: "Failed to fetch my club ads." });
+    res.status(500).json({ error: "Error al obtener mis anuncios de club." });
   }
 };
 
@@ -495,7 +495,7 @@ export const getMyClubAds = async (req: AuthenticatedRequest, res: Response): Pr
 export const getGlobalAdsAdmin = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only admins can view all global ads." });
+      res.status(403).json({ error: "Solo los administradores pueden ver todos los anuncios globales." });
       return;
     }
     const adRepo = AppDataSource.getRepository(Ad);
@@ -506,7 +506,7 @@ export const getGlobalAdsAdmin = async (req: AuthenticatedRequest, res: Response
     res.json(ads.map(adToResponse));
   } catch (error) {
     console.error("Error fetching global ads (admin):", error);
-    res.status(500).json({ error: "Failed to fetch global ads." });
+    res.status(500).json({ error: "Error al obtener anuncios globales." });
   }
 };
 
@@ -514,12 +514,12 @@ export const getGlobalAdsAdmin = async (req: AuthenticatedRequest, res: Response
 export const getClubAdsAdmin = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (req.user?.role !== "admin") {
-      res.status(403).json({ error: "Only admins can view all club ads." });
+      res.status(403).json({ error: "Solo los administradores pueden ver todos los anuncios de club." });
       return;
     }
     const { clubId } = req.params;
     if (!clubId) {
-      res.status(400).json({ error: "clubId parameter is required" });
+      res.status(400).json({ error: "El parámetro clubId es requerido" });
       return;
     }
     const adRepo = AppDataSource.getRepository(Ad);
@@ -530,6 +530,6 @@ export const getClubAdsAdmin = async (req: AuthenticatedRequest, res: Response):
     res.json(ads.map(adToResponse));
   } catch (error) {
     console.error("Error fetching club ads (admin):", error);
-    res.status(500).json({ error: "Failed to fetch club ads." });
+    res.status(500).json({ error: "Error al obtener anuncios de club." });
   }
 }; 

@@ -21,7 +21,7 @@ export const getAllMenuCategoriesAdmin = async (req: Request, res: Response): Pr
     res.status(200).json(categories);
   } catch (error) {
     console.error("❌ Error fetching menu categories:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -38,7 +38,7 @@ export const createMenuCategoryAdmin = async (req: AuthenticatedRequest, res: Re
     const { name, isActive } = sanitizedBody;
 
     if (!name) {
-      res.status(400).json({ error: "Missing required field: name" });
+      res.status(400).json({ error: "Campo requerido faltante: name" });
       return;
     }
 
@@ -53,7 +53,7 @@ export const createMenuCategoryAdmin = async (req: AuthenticatedRequest, res: Re
     res.status(201).json(newCategory);
   } catch (error) {
     console.error("❌ Error creating menu category:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -65,7 +65,7 @@ export const updateMenuCategoryAdmin = async (req: AuthenticatedRequest, res: Re
 
     const category = await categoryRepo.findOne({ where: { id: categoryId } });
     if (!category) {
-      res.status(404).json({ error: "Menu category not found" });
+      res.status(404).json({ error: "Categoría de menú no encontrada" });
       return;
     }
 
@@ -83,7 +83,7 @@ export const updateMenuCategoryAdmin = async (req: AuthenticatedRequest, res: Re
     res.status(200).json(category);
   } catch (error) {
     console.error("❌ Error updating menu category:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -95,7 +95,7 @@ export const deleteMenuCategoryAdmin = async (req: AuthenticatedRequest, res: Re
 
     const category = await categoryRepo.findOne({ where: { id: categoryId } });
     if (!category) {
-      res.status(404).json({ error: "Menu category not found" });
+      res.status(404).json({ error: "Categoría de menú no encontrada" });
       return;
     }
 
@@ -134,7 +134,7 @@ export const deleteMenuCategoryAdmin = async (req: AuthenticatedRequest, res: Re
       }
 
       res.status(200).json({ 
-        message: "Menu category soft deleted successfully", 
+        message: "Categoría de menú eliminada suavemente exitosamente", 
         deletedAt: category.deletedAt,
         hasPurchases,
         menuItemsDeleted: menuItems.length,
@@ -144,12 +144,12 @@ export const deleteMenuCategoryAdmin = async (req: AuthenticatedRequest, res: Re
       // Hard delete - no associated purchases, safe to completely remove
       await categoryRepo.remove(category);
       res.status(200).json({ 
-        message: "Menu category permanently deleted successfully",
+        message: "Categoría de menú eliminada permanentemente exitosamente",
         note: "No associated purchases found, category completely removed"
       });
     }
   } catch (error) {
     console.error("❌ Error deleting menu category:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }; 

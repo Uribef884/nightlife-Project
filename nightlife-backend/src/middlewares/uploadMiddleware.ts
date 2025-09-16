@@ -38,15 +38,15 @@ export const handleMulterError = (error: any, req: Request, res: Response, next:
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       res.status(400).json({ 
-        error: `File too large. Maximum size is ${process.env.MAX_PDF_SIZE_MB || '10'}MB.` 
+        error: `Archivo demasiado grande. El tamaño máximo es ${process.env.MAX_PDF_SIZE_MB || '10'}MB.` 
       });
     } else if (error.code === 'LIMIT_UNEXPECTED_FILE') {
       res.status(400).json({ 
-        error: `Unexpected field name "${error.field}". For PDF uploads use field name "pdf", for images use field name "image".` 
+        error: `Nombre de campo inesperado "${error.field}". Para subidas de PDF use el nombre de campo "pdf", para imágenes use el nombre de campo "image".` 
       });
     } else {
       res.status(400).json({ 
-        error: `Upload error: ${error.message}` 
+        error: `Error de subida: ${error.message}` 
       });
     }
   } else {
@@ -59,7 +59,7 @@ export const validatePdfUpload = (req: Request, res: Response, next: NextFunctio
   // Check if file exists
   if (!req.file) {
     res.status(400).json({ 
-      error: 'No file uploaded. Please select a PDF file to upload. Make sure the field name is "pdf".' 
+      error: 'No se ha subido ningún archivo. Por favor, seleccione un archivo PDF para subir. Asegúrese de que el nombre del campo es "pdf".' 
     });
     return;
   }
@@ -67,7 +67,7 @@ export const validatePdfUpload = (req: Request, res: Response, next: NextFunctio
   // Check if it's a PDF
   if (req.file.mimetype !== 'application/pdf') {
     res.status(400).json({ 
-      error: `Invalid file type '${req.file.mimetype}'. Only PDF files are allowed for menu uploads.` 
+      error: `Tipo de archivo inválido '${req.file.mimetype}'. Solo se permiten archivos PDF para subidas de menú.` 
     });
     return;
   }
@@ -76,7 +76,7 @@ export const validatePdfUpload = (req: Request, res: Response, next: NextFunctio
   const maxPdfSize = parseInt(process.env.MAX_PDF_SIZE_MB || '10') * 1024 * 1024;
   if (req.file.size > maxPdfSize) {
     res.status(400).json({ 
-      error: `File too large. Maximum size for PDF files is ${process.env.MAX_PDF_SIZE_MB || '10'}MB.` 
+      error: `Archivo demasiado grande. El tamaño máximo para archivos PDF es ${process.env.MAX_PDF_SIZE_MB || '10'}MB.` 
     });
     return;
   }
@@ -89,7 +89,7 @@ export const validateImageUpload = (req: Request, res: Response, next: NextFunct
   // Check if file exists
   if (!req.file) {
     res.status(400).json({ 
-      error: 'No file uploaded. Please select an image file to upload. Make sure the field name is "image".' 
+      error: 'No se ha subido ningún archivo. Por favor, seleccione un archivo de imagen para subir. Asegúrese de que el nombre del campo es "image".' 
     });
     return;
   }
@@ -103,7 +103,7 @@ export const validateImageUpload = (req: Request, res: Response, next: NextFunct
   // Check if it's an allowed image type
   if (!allowedImageTypes.includes(req.file.mimetype)) {
     res.status(400).json({ 
-      error: `Invalid file type '${req.file.mimetype}'. Allowed image types: ${allowedImageTypes.join(', ')}.` 
+      error: `Tipo de archivo inválido '${req.file.mimetype}'. Tipos de archivo permitidos: ${allowedImageTypes.join(', ')}.` 
     });
     return;
   }
@@ -112,7 +112,7 @@ export const validateImageUpload = (req: Request, res: Response, next: NextFunct
   const maxImageSize = parseInt(process.env.MAX_IMAGE_SIZE_MB || '5') * 1024 * 1024;
   if (req.file.size > maxImageSize) {
     res.status(400).json({ 
-      error: `File too large. Maximum size for image files is ${process.env.MAX_IMAGE_SIZE_MB || '5'}MB.` 
+      error: `Archivo demasiado grande. El tamaño máximo para archivos de imagen es ${process.env.MAX_IMAGE_SIZE_MB || '5'}MB.` 
     });
     return;
   }
@@ -124,7 +124,7 @@ export const validateImageUpload = (req: Request, res: Response, next: NextFunct
 export const validateFileUpload = (req: Request, res: Response, next: NextFunction): void => {
   if (!req.file) {
     res.status(400).json({ 
-      error: 'No file uploaded. Please select a file to upload. Check that you are using the correct field name for your upload type.' 
+      error: 'No se ha subido ningún archivo. Por favor, seleccione un archivo para subir. Asegúrese de que está usando el nombre de campo correcto para su tipo de subida.' 
     });
     return;
   }

@@ -23,7 +23,7 @@ export const getMenuForClubAdmin = async (req: Request, res: Response): Promise<
     res.status(200).json(menuItems);
   } catch (error) {
     console.error("❌ Error fetching menu for club:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -39,14 +39,14 @@ export const getMenuItemByIdAdmin = async (req: AuthenticatedRequest, res: Respo
     });
 
     if (!menuItem) {
-      res.status(404).json({ error: "Menu item not found" });
+      res.status(404).json({ error: "Elemento de menú no encontrado" });
       return;
     }
 
     res.status(200).json(menuItem);
   } catch (error) {
     console.error("❌ Error fetching menu item:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -77,51 +77,51 @@ export const createMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
     const maxPerPersonNum = maxPerPerson && maxPerPerson !== "" ? Number(maxPerPerson) : undefined;
 
     if (!name) {
-      res.status(400).json({ error: "Name is required" });
+      res.status(400).json({ error: "El nombre es requerido" });
       return;
     }
 
     if (!categoryId) {
-      res.status(400).json({ error: "Category ID is required" });
+      res.status(400).json({ error: "ID de categoría es requerido" });
       return;
     }
 
     // Validate image file
     if (!req.file) {
-      res.status(400).json({ error: "Image file is required." });
+      res.status(400).json({ error: "Archivo de imagen requerido." });
       return;
     }
 
     if (hasVariantsBool && priceNum !== null && priceNum !== undefined) {
-      res.status(400).json({ error: "Price must be null when hasVariants is true" });
+      res.status(400).json({ error: "El precio debe ser null cuando hasVariants es true" });
       return;
     }
 
     if (!hasVariantsBool && (typeof priceNum !== "number" || priceNum <= 0)) {
-      res.status(400).json({ error: "Price must be a positive number (greater than 0) if hasVariants is false" });
+      res.status(400).json({ error: "El precio debe ser un número positivo (mayor que 0) si hasVariants es false" });
       return;
     }
 
     // Validate minimum cost for menu items (no free items allowed)
     if (!hasVariantsBool && priceNum !== undefined && priceNum < 1500) {
-      res.status(400).json({ error: "Price must be at least 1500 COP for menu items." });
+      res.status(400).json({ error: "El precio debe ser al menos 1500 COP para elementos de menú." });
       return;
     }
 
     if (hasVariantsBool && maxPerPersonNum !== null && maxPerPersonNum !== undefined) {
-      res.status(400).json({ error: "maxPerPerson must be null when hasVariants is true" });
+      res.status(400).json({ error: "maxPerPerson debe ser null cuando hasVariants es true" });
       return;
     }
 
     if (!hasVariantsBool && (typeof maxPerPersonNum !== "number" || maxPerPersonNum <= 0)) {
-      res.status(400).json({ error: "maxPerPerson must be a positive number if hasVariants is false" });
+      res.status(400).json({ error: "maxPerPerson debe ser un número positivo si hasVariants es false" });
       return;
     }
 
     // Enforce that parent menu items with variants cannot have dynamic pricing enabled
     if (hasVariantsBool && dynamicPricingEnabledBool) {
       res.status(400).json({ 
-        error: "Parent menu items with variants cannot have dynamic pricing enabled. Dynamic pricing should be configured on individual variants instead." 
+        error: "Los elementos de menú padre con variantes no pueden tener precios dinámicos habilitados. Los precios dinámicos deben configurarse en variantes individuales." 
       });
       return;
     }
@@ -158,7 +158,7 @@ export const createMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
     res.status(201).json(newMenuItem);
   } catch (error) {
     console.error("❌ Error creating menu item:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -170,7 +170,7 @@ export const updateMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
 
     const menuItem = await menuItemRepo.findOne({ where: { id } });
     if (!menuItem) {
-      res.status(404).json({ error: "Menu item not found" });
+      res.status(404).json({ error: "Elemento de menú no encontrado" });
       return;
     }
 
@@ -183,7 +183,7 @@ export const updateMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
 
     if (name !== undefined) {
       if (!name) {
-        res.status(400).json({ error: "Name is required" });
+        res.status(400).json({ error: "El nombre es requerido" });
         return;
       }
       menuItem.name = name;
@@ -218,7 +218,7 @@ export const updateMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
       } else {
         const parsedMaxPerPerson = parseInt(maxPerPerson);
         if (isNaN(parsedMaxPerPerson) || parsedMaxPerPerson <= 0) {
-          res.status(400).json({ error: "Max per person must be a positive integer" });
+          res.status(400).json({ error: "Max per person must debe ser un entero positivo" });
           return;
         }
         menuItem.maxPerPerson = parsedMaxPerPerson;
@@ -229,7 +229,7 @@ export const updateMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
     res.status(200).json(menuItem);
   } catch (error) {
     console.error("❌ Error updating menu item:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -241,7 +241,7 @@ export const deleteMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
 
     const menuItem = await menuItemRepo.findOne({ where: { id: menuItemId } });
     if (!menuItem) {
-      res.status(404).json({ error: "Menu item not found" });
+      res.status(404).json({ error: "Elemento de menú no encontrado" });
       return;
     }
 
@@ -252,13 +252,13 @@ export const deleteMenuItemAdmin = async (req: AuthenticatedRequest, res: Respon
     await menuItemRepo.save(menuItem);
 
     res.status(200).json({ 
-      message: "Menu item deleted successfully",
+      message: "Elemento de menú eliminado exitosamente",
       s3CleanupResult,
       note: "S3 image has been cleaned up"
     });
   } catch (error) {
     console.error("❌ Error deleting menu item:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -270,14 +270,14 @@ export const toggleMenuItemDynamicPricingAdmin = async (req: Request, res: Respo
 
     const menuItem = await menuItemRepo.findOne({ where: { id: menuItemId } });
     if (!menuItem) {
-      res.status(404).json({ error: "Menu item not found" });
+      res.status(404).json({ error: "Elemento de menú no encontrado" });
       return;
     }
 
     // Reject if the menu item has variants
     if (menuItem.hasVariants) {
       res.status(400).json({ 
-        error: "Parent menu items with variants cannot have dynamic pricing enabled. Dynamic pricing should be configured on individual variants instead." 
+        error: "Los elementos de menú padre con variantes no pueden tener precios dinámicos habilitados. Los precios dinámicos deben configurarse en variantes individuales." 
       });
       return;
     }
@@ -288,7 +288,7 @@ export const toggleMenuItemDynamicPricingAdmin = async (req: Request, res: Respo
     res.status(200).json({ dynamicPricingEnabled: menuItem.dynamicPricingEnabled });
   } catch (error) {
     console.error("❌ Error toggling menu item dynamic pricing:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -303,7 +303,7 @@ export const updateMenuItemImageAdmin = async (req: AuthenticatedRequest, res: R
     const item = await itemRepo.findOne({ where: { id } });
 
     if (!item) {
-      res.status(404).json({ error: 'Menu item not found' });
+      res.status(404).json({ error: ' Elemento de menú no encontrado' });
       return;
     }
 
@@ -333,11 +333,11 @@ export const updateMenuItemImageAdmin = async (req: AuthenticatedRequest, res: R
     }
 
     res.status(200).json({
-      message: 'Menu item image updated successfully',
+      message: 'Imagen del elemento de menú actualizada exitosamente',
       imageUrl: uploadResult.url
     });
   } catch (error) {
     console.error("❌ Error updating menu item image:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }; 

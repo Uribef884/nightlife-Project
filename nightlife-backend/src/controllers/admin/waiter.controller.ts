@@ -15,7 +15,7 @@ export const createWaiterAdmin = async (req: AuthenticatedRequest, res: Response
     const password = req.body.password;
     
     if (!sanitizedEmail) {
-      res.status(400).json({ error: "Invalid email format" });
+      res.status(400).json({ error: "Formato de email inválido" });
       return;
     }
     
@@ -25,7 +25,7 @@ export const createWaiterAdmin = async (req: AuthenticatedRequest, res: Response
     // Check if user already exists
     const existingUser = await userRepo.findOne({ where: { email } });
     if (existingUser) {
-      res.status(409).json({ error: "Email already in use" });
+      res.status(409).json({ error: "El email ya está en uso" });
       return;
     }
 
@@ -48,7 +48,7 @@ export const createWaiterAdmin = async (req: AuthenticatedRequest, res: Response
     res.status(201).json(waiterWithoutPassword);
   } catch (error) {
     console.error("❌ Error creating waiter:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -62,14 +62,14 @@ export const deleteWaiterAdmin = async (req: AuthenticatedRequest, res: Response
 
     const waiter = await userRepo.findOne({ where: { id: waiterId, role: "waiter" } });
     if (!waiter) {
-      res.status(404).json({ error: "Waiter not found" });
+      res.status(404).json({ error: "Mesero no encontrado" });
       return;
     }
 
     await userRepo.remove(waiter);
-    res.status(200).json({ message: "Waiter deleted successfully" });
+    res.status(200).json({ message: "Mesero eliminado exitosamente" });
   } catch (error) {
     console.error("❌ Error deleting waiter:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 }; 

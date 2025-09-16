@@ -25,7 +25,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -33,13 +33,13 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'ticket');
     if (isLocked) {
       res.status(423).json({ 
-        error: "Cart is currently being processed. Please wait for your payment to complete before adding more items." 
+        error: "Carrito está siendo procesado. Por favor, espera a que se complete tu pago antes de agregar más elementos." 
       });
       return;
     }
 
     if (!ticketId || !date || quantity == null || quantity <= 0) {
-      res.status(400).json({ error: "Missing or invalid fields" });
+      res.status(400).json({ error: "Campos faltantes o inválidos" });
       return;
     }
 
@@ -48,7 +48,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     const todayStr = today.toISOString().split('T')[0];
 
     if (date < todayStr) {
-      res.status(400).json({ error: "Cannot select a past date" });
+      res.status(400).json({ error: "No se puede seleccionar una fecha pasada" });
       return;
     }
 
@@ -57,7 +57,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     const ticket = await ticketRepo.findOne({ where: { id: ticketId }, relations: ["club", "event"] });
 
     if (!ticket || !ticket.isActive) {
-      res.status(404).json({ error: "Ticket not found or inactive" });
+      res.status(404).json({ error: "Ticket no encontrado o inactivo" });
       return;
     }
 
@@ -72,7 +72,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
       } else if (ticket.availableDate) {
         eventDate = new Date(ticket.availableDate);
       } else {
-        res.status(400).json({ error: "Event ticket missing event date" });
+        res.status(400).json({ error: "Ev ent ticket missing event date" });
         return;
       }
 
@@ -80,7 +80,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
       const dynamicPrice = computeDynamicEventPrice(Number(ticket.price), eventDate, eventOpenHours);
       if (dynamicPrice === -1) {
         res.status(400).json({ 
-          error: `Event "${ticket.name}" has already started and is no longer available for purchase.` 
+          error: `Evento "${ticket.name}" ha comenzado y ya no está disponible para compra.` 
         });
         return;
       }
@@ -89,7 +89,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     const menuCartRepo = AppDataSource.getRepository(MenuCartItem);
     const existingMenuItems = await menuCartRepo.find({ where: userId ? { userId } : { sessionId } });
     if (existingMenuItems.length > 0) {
-      res.status(400).json({ error: "You must complete or clear your menu cart before adding tickets." });
+      res.status(400).json({ error: "Debes completar o limpiar tu carrito de menú antes de agregar tickets." });
       return;
     }
 
@@ -101,7 +101,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
         : undefined;
 
     if (isFree && (!ticketDate || ticketDate !== date)) {
-      res.status(400).json({ error: "This free ticket is only valid on its available date" });
+      res.status(400).json({ error: "Este ticket gratuito solo es válido en su fecha disponible" });
       return;
     }
 
@@ -117,24 +117,24 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
 
       if (conflictEvent) {
         res.status(400).json({
-          error: `You cannot buy a general cover for ${date} because a paid event already exists.`,
+          error: `No puedes comprar un general para ${date} porque ya existe un evento pagado.`,
         });
         return;
       }
 
       const maxDateStr = new Date(Date.now() + 21 * 86400000).toISOString().split("T")[0];
       if (date > maxDateStr) {
-        res.status(400).json({ error: "You can only select dates within 3 weeks" });
+        res.status(400).json({ error: "Solo puedes seleccionar fechas dentro de 3 semanas" });
         return;
       }
 
       const selectedDay = new Date(`${date}T12:00:00`).toLocaleString("en-US", { weekday: "long" });
       if (!(ticket.club.openDays || []).includes(selectedDay)) {
-        res.status(400).json({ error: `This club is not open on ${selectedDay}` });
+        res.status(400).json({ error: `Este club no está abierto en ${selectedDay}` });
         return;
       }
     } else if (!isFree && ticketDate !== date) {
-      res.status(400).json({ error: "This ticket is not available on that date" });
+      res.status(400).json({ error: "Este ticket no está disponible en esa fecha" });
       return;
     }
 
@@ -150,13 +150,13 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     
     if (hasEventTickets) {
       if (!isEventTicket) {
-        res.status(400).json({ error: "Cannot add non-event tickets when event tickets are in cart. Event tickets have priority." });
+        res.status(400).json({ error: "No se pueden agregar tickets que no sean eventos cuando hay tickets de evento en el carrito. Los tickets de evento tienen prioridad." });
         return;
       }
     } else if (isEventTicket) {
       // Event tickets cannot coexist with any other tickets
       if (existingItems.length > 0) {
-        res.status(400).json({ error: "Cannot add event tickets when other tickets are in cart. Please clear your cart first." });
+        res.status(400).json({ error: "No se pueden agregar tickets de evento cuando hay otros tickets en el carrito. Por favor, limpia tu carrito primero." });
         return;
       }
     }
@@ -164,11 +164,11 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     // Check club and date consistency
     for (const item of existingItems) {
       if (item.ticket.club.id !== ticket.club.id) {
-        res.status(400).json({ error: "All tickets in cart must be from the same nightclub" });
+        res.status(400).json({ error: "Todos los tickets en el carrito deben ser del mismo club" });
         return;
       }
       if (item.date !== date) {
-        res.status(400).json({ error: "All tickets in cart must be for the same date" });
+        res.status(400).json({ error: "Todos los tickets en el carrito deben ser para la misma fecha" });
         return;
       }
     }
@@ -181,7 +181,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     if (existing) {
       const newTotal = existing.quantity + quantity;
       if (newTotal > ticket.maxPerPerson) {
-        res.status(400).json({ error: `Cannot exceed maximum of ${ticket.maxPerPerson} tickets per person` });
+        res.status(400).json({ error: `No se puede exceder el máximo de ${ticket.maxPerPerson} tickets por persona` });
         return;
       }
 
@@ -201,7 +201,7 @@ export const addToCart = async (req: AuthenticatedRequest, res: Response): Promi
     }
   } catch (err) {
     console.error("❌ Error adding to ticket cart:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -213,7 +213,7 @@ export const updateCartItem = async (req: AuthenticatedRequest, res: Response): 
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -221,13 +221,13 @@ export const updateCartItem = async (req: AuthenticatedRequest, res: Response): 
     const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'ticket');
     if (isLocked) {
       res.status(423).json({ 
-        error: "Cart is currently being processed. Please wait for your payment to complete before modifying items." 
+        error: "Carrito está siendo procesado. Por favor, espera a que se complete tu pago antes de modificar elementos." 
       });
       return;
     }
 
     if (!id || typeof quantity !== "number" || quantity <= 0) {
-      res.status(400).json({ error: "Valid ID and quantity are required" });
+      res.status(400).json({ error: "ID y cantidad válidos son requeridos" });
       return;
     }
 
@@ -238,24 +238,24 @@ export const updateCartItem = async (req: AuthenticatedRequest, res: Response): 
     });
 
     if (!item) {
-      res.status(404).json({ error: "Cart item not found" });
+      res.status(404).json({ error: "Elemento del carrito no encontrado" });
       return;
     }
 
     const ownsItem = (userId && item.userId === userId) || (sessionId && item.sessionId === sessionId);
     if (!ownsItem) {
-      res.status(403).json({ error: "You cannot update another user's cart item" });
+      res.status(403).json({ error: "No puedes actualizar el carrito de otro usuario" });
       return;
     }
 
     const ticket = item.ticket;
     if (!ticket) {
-      res.status(404).json({ error: "Associated ticket not found" });
+      res.status(404).json({ error: "Ticket asociado no encontrado" });
       return;
     }
 
     if (quantity > ticket.maxPerPerson) {
-      res.status(400).json({ error: `You can only buy up to ${ticket.maxPerPerson} tickets` });
+      res.status(400).json({ error: `Solo puedes comprar hasta ${ticket.maxPerPerson} tickets` });
       return;
     }
 
@@ -272,7 +272,7 @@ export const updateCartItem = async (req: AuthenticatedRequest, res: Response): 
       if (otherCartQuantity + quantity > ticket.quantity) {
         const remaining = ticket.quantity - otherCartQuantity;
         res.status(400).json({
-          error: `Only ${remaining} tickets are available for this event`,
+          error: `Solo ${remaining} tickets están disponibles para este evento`,
         });
         return;
       }
@@ -284,7 +284,7 @@ export const updateCartItem = async (req: AuthenticatedRequest, res: Response): 
     res.status(200).json(item);
   } catch (err) {
     console.error("❌ Error updating cart item:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -296,7 +296,7 @@ export const removeCartItem = async (req: AuthenticatedRequest, res: Response): 
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -304,7 +304,7 @@ export const removeCartItem = async (req: AuthenticatedRequest, res: Response): 
     const isLocked = await isCartLockedSmart(userId || null, sessionId || null, 'ticket');
     if (isLocked) {
       res.status(423).json({ 
-        error: "Cart is currently being processed. Please wait for your payment to complete before removing items." 
+        error: "Carrito está siendo procesado. Por favor, espera a que se complete tu pago antes de eliminar elementos." 
       });
       return;
     }
@@ -313,12 +313,12 @@ export const removeCartItem = async (req: AuthenticatedRequest, res: Response): 
     const item = await cartRepo.findOneBy({ id });
 
     if (!item) {
-      res.status(404).json({ error: "Cart item not found" });
+      res.status(404).json({ error: "Elemento del carrito no encontrado" });
       return;
     }
 
     if (!ownsCartItem(item, userId, sessionId)) {
-      res.status(403).json({ error: "You cannot delete another user's cart item" });
+      res.status(403).json({ error: "No puedes eliminar el carrito de otro usuario" });
       return;
     }
 
@@ -326,7 +326,7 @@ export const removeCartItem = async (req: AuthenticatedRequest, res: Response): 
     res.status(204).send();
   } catch (err) {
     console.error("❌ Error removing cart item:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -336,7 +336,7 @@ export const getCartItems = async (req: AuthenticatedRequest, res: Response): Pr
     const sessionId: string | undefined = !userId && req.sessionId ? req.sessionId : undefined;
 
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -412,7 +412,7 @@ export const getCartItems = async (req: AuthenticatedRequest, res: Response): Pr
     res.status(200).json(itemsWithDynamicPrices);
   } catch (err) {
     console.error("❌ Error fetching cart items:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -422,7 +422,7 @@ export const getCartSummary = async (req: AuthenticatedRequest, res: Response): 
     const sessionId: string | undefined = !userId && req.sessionId ? req.sessionId : undefined;
 
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -504,7 +504,7 @@ export const getCartSummary = async (req: AuthenticatedRequest, res: Response): 
     res.status(200).json(summary);
   } catch (err) {
     console.error("❌ Error fetching cart summary:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -515,7 +515,7 @@ export const clearCart = async (req: AuthenticatedRequest, res: Response): Promi
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -526,7 +526,7 @@ export const clearCart = async (req: AuthenticatedRequest, res: Response): Promi
     res.status(204).send();
   } catch (err) {
     console.error("❌ Error clearing ticket cart:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
 
@@ -538,7 +538,7 @@ export const clearMenuCartFromTicket = async (req: AuthenticatedRequest, res: Re
 
     // Ensure we have either a userId or sessionId
     if (!userId && !sessionId) {
-      res.status(401).json({ error: "Missing or invalid token" });
+      res.status(401).json({ error: "Token faltante o inválido" });
       return;
     }
 
@@ -549,6 +549,6 @@ export const clearMenuCartFromTicket = async (req: AuthenticatedRequest, res: Re
     res.status(204).send();
   } catch (err) {
     console.error("❌ Error clearing menu cart from ticket flow:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Error interno del servidor" });
   }
 };
