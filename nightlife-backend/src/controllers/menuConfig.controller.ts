@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Club } from "../entities/Club";
-import { MenuCartItem } from "../entities/MenuCartItem";
+import { UnifiedCartItem } from "../entities/UnifiedCartItem";
 import { AuthenticatedRequest } from "../types/express";
 
 // Get current menu configuration
@@ -114,7 +114,7 @@ export const switchMenuType = async (req: AuthenticatedRequest, res: Response): 
 
     // If switching away from structured mode, clear all cart items for this club
     if (club.menuType === "structured" && (menuType === "pdf" || menuType === "none")) {
-      const cartRepo = AppDataSource.getRepository(MenuCartItem);
+      const cartRepo = AppDataSource.getRepository(UnifiedCartItem);
       await cartRepo.delete({ clubId });
     }
 

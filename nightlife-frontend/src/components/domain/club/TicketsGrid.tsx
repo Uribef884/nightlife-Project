@@ -173,6 +173,17 @@ export default function TicketsGrid({
     );
   }
 
+  // Check if there are any tickets available for the selected date
+  const hasAnyTickets = combos.length > 0 || general.length > 0 || gratis.length > 0;
+  
+  if (!hasAnyTickets) {
+    return (
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/70">
+        No hay reservas disponibles para esta fecha. Selecciona otra fecha para ver las opciones disponibles.
+      </section>
+    );
+  }
+
   // Handlers
   async function handleAdd(t: TicketDTO) {
     if (!selectedDate) return;

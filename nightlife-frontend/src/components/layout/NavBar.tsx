@@ -76,7 +76,15 @@ export default function NavBar() {
   }, [mobileOpen]);
 
   const onTabChange = (t: TabKey) => {
-    if (typeof window !== "undefined") window.location.hash = t;
+    if (typeof window !== "undefined") {
+      // Scroll to top immediately when clicking tabs
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.location.hash = t;
+      
+      // Additional scroll attempts to override any interfering components
+      setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 100);
+      setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 300);
+    }
   };
 
   const row1 = [

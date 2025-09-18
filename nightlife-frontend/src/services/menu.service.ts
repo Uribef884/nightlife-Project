@@ -167,7 +167,7 @@ export async function getAvailableMenuForDate(
 
 /** MENU CART — Add (no variant) */
 export async function addMenuItemToCart(input: { menuItemId: string; quantity: number }): Promise<void> {
-  const url = joinUrl(API_BASE_CSR, `/menu/cart/add`);
+  const url = joinUrl(API_BASE_CSR, `/unified-cart/add`);
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -179,7 +179,7 @@ export async function addMenuItemToCart(input: { menuItemId: string; quantity: n
 
 /** MENU CART — Add (with variant) */
 export async function addMenuVariantToCart(input: { menuItemId: string; variantId: string; quantity: number }): Promise<void> {
-  const url = joinUrl(API_BASE_CSR, `/menu/cart/add`);
+  const url = joinUrl(API_BASE_CSR, `/unified-cart/add`);
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -191,7 +191,7 @@ export async function addMenuVariantToCart(input: { menuItemId: string; variantI
 
 /** MENU CART — Update qty */
 export async function updateMenuCartQty(input: { id: string; quantity: number }): Promise<void> {
-  const url = joinUrl(API_BASE_CSR, `/menu/cart/update`);
+  const url = joinUrl(API_BASE_CSR, `/unified-cart/update`);
   const res = await fetch(url, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -203,7 +203,7 @@ export async function updateMenuCartQty(input: { id: string; quantity: number })
 
 /** MENU CART — Remove a line item */
 export async function removeMenuCartItem(cartItemId: string): Promise<void> {
-  const url = joinUrl(API_BASE_CSR, `/menu/cart/item/${encodeURIComponent(cartItemId)}`);
+  const url = joinUrl(API_BASE_CSR, `/unified-cart/item/${encodeURIComponent(cartItemId)}`);
   const res = await fetch(url, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
@@ -214,7 +214,7 @@ export async function removeMenuCartItem(cartItemId: string): Promise<void> {
 
 /** MENU CART — Get summary */
 export async function getMenuCartSummaryCSR(): Promise<MenuCartSummary> {
-  const url = joinUrl(API_BASE_CSR, `/menu/cart/summary`);
+  const url = joinUrl(API_BASE_CSR, `/unified-cart/summary`);
   const res = await fetch(url, { method: "GET", cache: "no-store" });
   if (!res.ok) throw new Error("No se pudo obtener el carrito del menú.");
   return (await res.json()) as MenuCartSummary;
@@ -222,14 +222,14 @@ export async function getMenuCartSummaryCSR(): Promise<MenuCartSummary> {
 
 /** MENU CART — Clear only menu cart */
 export async function clearMenuCartCSR(): Promise<void> {
-  const url = joinUrl(API_BASE_CSR, `/menu/cart/clear`);
+  const url = joinUrl(API_BASE_CSR, `/unified-cart/clear`);
   const res = await fetch(url, { method: "DELETE", cache: "no-store" });
   if (!res.ok) throw new Error("No se pudo limpiar el carrito del menú.");
 }
 
 /** MENU CART — Clear the OTHER cart (Tickets) */
 export async function clearTicketCartForMenuCSR(): Promise<void> {
-  const url = joinUrl(API_BASE_CSR, `/menu/cart/clear-other-cart`);
+  const url = joinUrl(API_BASE_CSR, `/unified-cart/clear-other-cart`);
   const res = await fetch(url, { method: "DELETE", cache: "no-store" });
   if (!res.ok) throw new Error("No se pudo limpiar el carrito de entradas.");
 }

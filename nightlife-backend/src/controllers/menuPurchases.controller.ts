@@ -1,6 +1,5 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
-import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
 import { MenuPurchase } from "../entities/MenuPurchase";
 import { ILike, Between } from "typeorm";
 import { AuthenticatedRequest } from "../types/express";
@@ -8,118 +7,116 @@ import { JwtPayload } from "../types/jwt";
 
 type Role = JwtPayload["role"];
 
-function formatTransaction(tx: MenuPurchaseTransaction, role: Role) {
+function formatTransaction(tx: MenuPurchase, role: Role) {
   const base = {
     id: tx.id,
     email: tx.email,
-    userId: tx.user?.id ?? null,
+    date: tx.date,
     clubId: tx.clubId,
+    menuItemId: tx.menuItemId,
+    variantId: tx.variantId,
+    quantity: tx.quantity,
+    originalBasePrice: tx.originalBasePrice,
+    priceAtCheckout: tx.priceAtCheckout,
+    dynamicPricingWasApplied: tx.dynamicPricingWasApplied,
+    clubReceives: tx.clubReceives,
+    platformFee: tx.platformFee,
+    platformFeeApplied: tx.platformFeeApplied,
+    isUsed: tx.isUsed,
     createdAt: tx.createdAt,
-    purchases: tx.purchases.map((p) => ({
-      id: p.id,
-      menuItem: p.menuItem,
-      variant: p.variant ?? null,
-      quantity: p.quantity,
-      priceAtCheckout: p.priceAtCheckout,
-    })),
+    menuItem: tx.menuItem,
+    variant: tx.variant,
+    transaction: tx.transaction
   };
 
-
-
-  if (role === "clubowner") {
+  // Admin can see everything
+  if (role === "admin") {
     return {
       ...base,
-      totalPaid: tx.totalPaid,
-      clubReceives: tx.clubReceives,
-      platformReceives: tx.platformReceives,
+      userId: tx.userId,
+      sessionId: tx.sessionId,
+      transactionId: tx.transactionId
     };
   }
 
   return base;
 }
 
-async function findMenuTransactions(where: any, role: Role, query: any): Promise<MenuPurchaseTransaction[]> {
-  const txRepo = AppDataSource.getRepository(MenuPurchaseTransaction);
+async function findMenuPurchases(where: any, role: Role, query: any): Promise<MenuPurchase[]> {
+  const txRepo = AppDataSource.getRepository(MenuPurchase);
   const filters: any = { ...where };
 
   if (query.startDate && query.endDate) {
-    filters.createdAt = Between(new Date(query.startDate), new Date(query.endDate));
+    filters.date = Between(query.startDate, query.endDate);
   }
 
   if (query.email) {
-    filters.email = ILike(`%${query.email.trim()}%`);
+    filters.email = ILike(`%${query.email}%`);
   }
 
-  if (query.userId) {
-    filters.user = { id: query.userId };
+  if (query.isUsed !== undefined) {
+    filters.isUsed = query.isUsed === 'true';
   }
 
-
-
-  if (query.orderId) {
-    filters.id = query.orderId;
-  }
-
-  const transactions = await txRepo.find({
+  const purchases = await txRepo.find({
     where: filters,
-    relations: ["user", "purchases", "purchases.menuItem", "purchases.variant"],
+    relations: ["menuItem", "variant", "menuItem.club", "transaction"],
     order: { createdAt: "DESC" },
+    take: query.limit ? parseInt(query.limit) : 50,
+    skip: query.offset ? parseInt(query.offset) : 0,
   });
 
-  return transactions;
+  return purchases;
 }
 
-// 🧑 Normal User
-export const getUserMenuPurchases = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const userId = req.user!.id;
-  const results = await findMenuTransactions({ user: { id: userId } }, "user", req.query);
-  res.json(results.map((tx) => formatTransaction(tx, "user")));
-};
-
-export const getUserMenuPurchaseById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const id = req.params.id;
-  const userId = req.user!.id;
-  const txRepo = AppDataSource.getRepository(MenuPurchaseTransaction);
-
-  const tx = await txRepo.findOne({
-    where: { id, user: { id: userId } },
-    relations: ["purchases", "purchases.menuItem", "purchases.variant"],
-  });
-
-  if (!tx)  {
-    res.status(404).json({ error: "No encontrado" });
-    return;
-  }
-  res.json(formatTransaction(tx, "user"));
-};
-
-// 🏢 Club Owner
 export const getClubMenuPurchases = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-  const clubId = req.user?.clubId;
-  if (!clubId)  {
-    res.status(403).json({ error: "No hay ID de club asignado" });
+  const clubId = req.params.clubId;
+  const role = req.user!.role;
+
+  if (role !== "admin") {
+    res.status(403).json({ error: "Access denied" });
     return;
   }
 
-  const txs = await findMenuTransactions({ clubId }, "clubowner", req.query);
-  res.json(txs.map((tx) => formatTransaction(tx, "clubowner")));
+  try {
+    const purchases = await findMenuPurchases({ clubId }, role, req.query);
+    const formattedPurchases = purchases.map(tx => formatTransaction(tx, role));
+    
+    res.json({
+      purchases: formattedPurchases,
+      total: formattedPurchases.length
+    });
+  } catch (err) {
+    console.error("❌ Error fetching club menu purchases:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };
 
 export const getClubMenuPurchaseById = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const id = req.params.id;
-  const clubId = req.user?.clubId;
-  const txRepo = AppDataSource.getRepository(MenuPurchaseTransaction);
+  const clubId = req.params.clubId;
+  const role = req.user!.role;
 
-  const tx = await txRepo.findOne({
-    where: { id, clubId },
-    relations: ["purchases", "purchases.menuItem", "purchases.variant"],
-  });
-
-  if (!tx) {
-    res.status(404).json({ error: "No encontrado o no autorizado" });
+  if (role !== "admin") {
+    res.status(403).json({ error: "Access denied" });
     return;
   }
-  res.json(formatTransaction(tx, "clubowner"));
+
+  try {
+    const purchaseRepo = AppDataSource.getRepository(MenuPurchase);
+    const purchase = await purchaseRepo.findOne({
+      where: { id, clubId },
+      relations: ["menuItem", "variant", "menuItem.club", "transaction"]
+    });
+
+    if (!purchase) {
+      res.status(404).json({ error: "Purchase not found" });
+      return;
+    }
+
+    res.json(formatTransaction(purchase, role));
+  } catch (err) {
+    console.error("❌ Error fetching menu purchase:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };
-
-

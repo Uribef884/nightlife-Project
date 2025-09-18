@@ -41,7 +41,7 @@ function assertOk(resp: Response, label: string) {
 
 /** POST /cart/add */
 export async function addTicketToCart(body: AddTicketBody) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/cart/add"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/add"), {
     method: "POST",
     headers: JSON_HEADERS,
     credentials: "include",
@@ -53,7 +53,7 @@ export async function addTicketToCart(body: AddTicketBody) {
 
 /** PATCH /cart/update */
 export async function updateTicketQty(body: UpdateQtyBody) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/cart/update"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/update"), {
     method: "PATCH",
     headers: JSON_HEADERS,
     credentials: "include",
@@ -65,7 +65,7 @@ export async function updateTicketQty(body: UpdateQtyBody) {
 
 /** DELETE /cart/item/:id */
 export async function removeTicketItem(itemId: Id) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, `/cart/item/${encodeURIComponent(itemId)}`), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, `/unified-cart/item/${encodeURIComponent(itemId)}`), {
     method: "DELETE",
     credentials: "include",
   });
@@ -75,7 +75,7 @@ export async function removeTicketItem(itemId: Id) {
 
 /** GET /cart */
 export async function getTicketCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/cart"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart"), {
     method: "GET",
     headers: { Accept: "application/json" },
     credentials: "include",
@@ -86,7 +86,7 @@ export async function getTicketCart() {
 
 /** DELETE /cart/clear */
 export async function clearTicketCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/cart/clear"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/clear"), {
     method: "DELETE",
     credentials: "include",
   });
@@ -96,7 +96,7 @@ export async function clearTicketCart() {
 
 /** DELETE /cart/clear-other-cart */
 export async function clearOtherTicketCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/cart/clear-other-cart"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/clear-other-cart"), {
     method: "DELETE",
     credentials: "include",
   });
@@ -104,9 +104,9 @@ export async function clearOtherTicketCart() {
   return true;
 }
 
-/** GET /cart/summary (used to calculate DP/mix rules) */
+/** GET /unified-cart/summary (used to calculate DP/mix rules) */
 export async function getTicketCartSummary() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/cart/summary"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/summary"), {
     method: "GET",
     headers: { Accept: "application/json" },
     credentials: "include",
@@ -125,7 +125,7 @@ export type AddMenuBody = {
 
 /** POST /menu/cart/add */
 export async function addMenuItemToCart(body: AddMenuBody) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/menu/cart/add"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/add"), {
     method: "POST",
     headers: JSON_HEADERS,
     credentials: "include",
@@ -137,7 +137,7 @@ export async function addMenuItemToCart(body: AddMenuBody) {
 
 /** PATCH /menu/cart/update */
 export async function updateMenuItemQty(body: UpdateQtyBody) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/menu/cart/update"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/update"), {
     method: "PATCH",
     headers: JSON_HEADERS,
     credentials: "include",
@@ -149,7 +149,7 @@ export async function updateMenuItemQty(body: UpdateQtyBody) {
 
 /** DELETE /menu/cart/item/:id */
 export async function removeMenuItem(itemId: Id) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, `/menu/cart/item/${encodeURIComponent(itemId)}`), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, `/unified-cart/item/${encodeURIComponent(itemId)}`), {
     method: "DELETE",
     credentials: "include",
   });
@@ -170,7 +170,7 @@ export async function getMenuCart() {
 
 /** DELETE /menu/cart/clear */
 export async function clearMenuCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/menu/cart/clear"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/clear"), {
     method: "DELETE",
     credentials: "include",
   });
@@ -180,7 +180,7 @@ export async function clearMenuCart() {
 
 /** DELETE /menu/cart/clear-other-cart */
 export async function clearOtherMenuCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/menu/cart/clear-other-cart"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/clear-other-cart"), {
     method: "DELETE",
     credentials: "include",
   });
@@ -190,7 +190,7 @@ export async function clearOtherMenuCart() {
 
 /** GET /menu/cart/summary */
 export async function getMenuCartSummary() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/menu/cart/summary"), {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/summary"), {
     method: "GET",
     headers: { Accept: "application/json" },
     credentials: "include",

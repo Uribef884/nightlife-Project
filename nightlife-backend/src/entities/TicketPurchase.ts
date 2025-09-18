@@ -59,6 +59,12 @@ export class TicketPurchase {
   @Column({ type: "timestamp", nullable: true })
   menuQRUsedAt?: Date;
 
+  @Column({ default: false })
+  hasIncludedItems!: boolean;
+
+  @Column({ nullable: true })
+  includedQrCodeEncrypted?: string;
+
   // 🎯 Individual ticket pricing information
   @Column("numeric", { transformer: { to: v => v, from: v => parseFloat(v) } })
   originalBasePrice!: number;

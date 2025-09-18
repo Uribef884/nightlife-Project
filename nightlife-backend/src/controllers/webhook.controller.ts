@@ -3,8 +3,6 @@ import crypto from "crypto";
 import { Request, Response } from "express";
 import { getEventKey } from "../config/wompi";
  import { AppDataSource } from "../config/data-source";
-import { PurchaseTransaction } from "../entities/TicketPurchaseTransaction";
-import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
 import { getValueByPath } from "../utils/wompiUtils";
 // Optional: if/when you want DB idempotency, wire this in later
 // import { upsertWompiTransaction } from "../services/wompiWebhook.service";
@@ -111,51 +109,30 @@ export const handleWompiWebhook = async (req: Request, res: Response): Promise<v
     //   return ack();
     // }
 
-    // Idempotent DB update by reference prefix
-    if (reference && (reference.startsWith("ticket_") || reference.startsWith("menu_"))) {
-      const isTicket = reference.startsWith("ticket_");
+    // Handle unified transactions by reference
+    if (reference && reference.startsWith("unified_")) {
       try {
-        if (isTicket) {
-          const repo = AppDataSource.getRepository(PurchaseTransaction);
-          const existing = await repo.findOne({ where: { paymentProviderReference: reference } });
-          if (!existing) {
-            console.warn("[WOMPI] Ticket reference not found", { reference, txId: wompiTxId });
-          } else {
-            // Idempotency: skip if no state change
-            if (
-              existing.paymentProviderTransactionId === wompiTxId &&
-              String(existing.paymentStatus).toUpperCase() === status
-            ) {
-              console.log("[WOMPI] Ticket already up-to-date", { reference, txId: wompiTxId, status });
-            } else {
-              existing.paymentProvider = "wompi";
-              existing.paymentProviderTransactionId = wompiTxId;
-              // clamp status to allowed enum values
-              const allowed: any = new Set(["APPROVED", "DECLINED", "PENDING", "VOIDED"]);
-              existing.paymentStatus = (allowed.has(status) ? status : "PENDING") as any;
-              await repo.save(existing);
-              console.log("[WOMPI] Ticket updated", { id: existing.id, reference, status });
-            }
-          }
+        const { UnifiedPurchaseTransaction } = await import("../entities/UnifiedPurchaseTransaction");
+        const repo = AppDataSource.getRepository(UnifiedPurchaseTransaction);
+        const existing = await repo.findOne({ where: { paymentProviderReference: reference } });
+        
+        if (!existing) {
+          console.warn("[WOMPI] Unified transaction reference not found", { reference, txId: wompiTxId });
         } else {
-          const repo = AppDataSource.getRepository(MenuPurchaseTransaction);
-          const existing = await repo.findOne({ where: { paymentProviderReference: reference } });
-          if (!existing) {
-            console.warn("[WOMPI] Menu reference not found", { reference, txId: wompiTxId });
+          // Idempotency: skip if no state change
+          if (
+            existing.paymentProviderTransactionId === wompiTxId &&
+            String(existing.paymentStatus).toUpperCase() === status
+          ) {
+            console.log("[WOMPI] Unified transaction already up-to-date", { reference, txId: wompiTxId, status });
           } else {
-            if (
-              existing.paymentProviderTransactionId === wompiTxId &&
-              String(existing.paymentStatus).toUpperCase() === status
-            ) {
-              console.log("[WOMPI] Menu already up-to-date", { reference, txId: wompiTxId, status });
-            } else {
-              existing.paymentProvider = "wompi";
-              existing.paymentProviderTransactionId = wompiTxId;
-              const allowed: any = new Set(["APPROVED", "DECLINED", "PENDING", "VOIDED"]);
-              existing.paymentStatus = (allowed.has(status) ? status : "PENDING") as any;
-              await repo.save(existing);
-              console.log("[WOMPI] Menu updated", { id: existing.id, reference, status });
-            }
+            existing.paymentProvider = "wompi";
+            existing.paymentProviderTransactionId = wompiTxId;
+            // clamp status to allowed enum values
+            const allowed: any = new Set(["APPROVED", "DECLINED", "PENDING", "VOIDED"]);
+            existing.paymentStatus = (allowed.has(status) ? status : "PENDING") as any;
+            await repo.save(existing);
+            console.log("[WOMPI] Unified transaction updated", { id: existing.id, reference, status });
           }
         }
       } catch (dbErr) {
@@ -164,6 +141,9 @@ export const handleWompiWebhook = async (req: Request, res: Response): Promise<v
         res.status(200).json({ received: true, updated: false });
         return;
       }
+    } else if (reference && (reference.startsWith("ticket_") || reference.startsWith("menu_"))) {
+      // Legacy transactions - just log for now
+      console.warn("[WOMPI] Legacy transaction reference received - unified system handles this now", { reference, txId: wompiTxId, status });
     } else {
       console.warn("[WOMPI] Missing or unrecognized reference", { txId: wompiTxId, reference });
     }

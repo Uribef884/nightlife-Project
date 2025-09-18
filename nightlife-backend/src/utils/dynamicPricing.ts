@@ -266,18 +266,10 @@ export function computeDynamicMenuNormalPrice(input: {
   
   const isOpenDay = clubOpenDays.includes(dayName);
   
-  console.log(`[MENU-DP-NORMAL] Normal day pricing calculation:`, {
-    selectedDate: referenceDate.toISOString(),
-    dayName,
-    isOpenDay,
-    clubOpenDays,
-    basePrice
-  });
   
   if (!isOpenDay) {
     // Club Closed Days: 30% discount
     const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
-    console.log(`[MENU-DP-NORMAL] Club closed day: ${basePrice} * 0.7 = ${finalPrice}`);
     return finalPrice;
   }
   
@@ -286,7 +278,6 @@ export function computeDynamicMenuNormalPrice(input: {
   if (!hours) {
     // No hours defined for this day, treat as closed
     const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
-    console.log(`[MENU-DP-NORMAL] No hours defined for ${dayName}: ${basePrice} * 0.7 = ${finalPrice}`);
     return finalPrice;
   }
   
@@ -307,33 +298,21 @@ export function computeDynamicMenuNormalPrice(input: {
   const minutesUntilOpen = Math.round((openTime.getTime() - now.getTime()) / 60000);
   const isCurrentlyOpen = now >= openTime && now < closeTime;
   
-  console.log(`[MENU-DP-NORMAL] Time calculation:`, {
-    currentTime: now.toISOString(),
-    openTime: openTime.toISOString(),
-    closeTime: closeTime.toISOString(),
-    minutesUntilOpen,
-    isCurrentlyOpen,
-    hours: `${hours.open} - ${hours.close}`
-  });
   
   if (isCurrentlyOpen) {
     // During Club Open Hours: Base price (no discount)
-    console.log(`[MENU-DP-NORMAL] Currently open: ${basePrice} (no discount)`);
     return basePrice;
   } else if (minutesUntilOpen > 180) {
     // Club Open Days, 3+ hours before opening: 30% discount
     const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
-    console.log(`[MENU-DP-NORMAL] 3+ hours before opening: ${basePrice} * 0.7 = ${finalPrice} (${minutesUntilOpen}min away)`);
     return finalPrice;
   } else if (minutesUntilOpen > 0) {
     // Club Open Days, < 3 hours before opening: 10% discount
     const finalPrice = Math.round(basePrice * 0.9 * 100) / 100;
-    console.log(`[MENU-DP-NORMAL] <3 hours before opening: ${basePrice} * 0.9 = ${finalPrice} (${minutesUntilOpen}min away)`);
     return finalPrice;
   } else {
     // Club is closed for the day (after hours)
     const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
-    console.log(`[MENU-DP-NORMAL] After hours: ${basePrice} * 0.7 = ${finalPrice} (${minutesUntilOpen}min past close)`);
     return finalPrice;
   }
 }

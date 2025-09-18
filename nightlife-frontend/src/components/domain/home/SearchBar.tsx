@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useKeyboardInsets } from "@/hooks/useKeyboardInsets";
 
 type SearchBarProps = {
   defaultValue?: string;
@@ -20,7 +21,10 @@ export function SearchBar({
 }: SearchBarProps) {
   const [value, setValue] = useState(defaultValue);
   const [focused, setFocused] = useState(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const searchSectionRef = useRef<HTMLDivElement | null>(null);
+  const keyboardInset = useKeyboardInsets();
 
   // --- WHY these refs? ---
   // 1) timerRef keeps a single timeout across renders (stable debounce).
@@ -45,7 +49,7 @@ export function SearchBar({
       // If your backend is case-insensitive, normalize to lower for dedupe only:
       .toLowerCase();
 
-  // Core debounced effect
+  // Core debounced effect with improved keyboard handling
   useEffect(() => {
     if (skipNextEffect.current) {
       // One-shot skip used by clearNow()
@@ -67,6 +71,9 @@ export function SearchBar({
 
     if (!shouldFire) return;
 
+    // Use shorter debounce when keyboard is open to improve responsiveness
+    const effectiveDelay = keyboardInset > 0 ? Math.min(delay, 150) : delay;
+
     // Debounce
     timerRef.current = setTimeout(() => {
       // Dedupe: only call if changed since last emission
@@ -74,7 +81,7 @@ export function SearchBar({
         onSearchRef.current(normalized);
         lastSentRef.current = normalized;
       }
-    }, delay);
+    }, effectiveDelay);
 
     return () => {
       if (timerRef.current) {
@@ -82,7 +89,7 @@ export function SearchBar({
         timerRef.current = null;
       }
     };
-  }, [value, delay, minLength]);
+  }, [value, delay, minLength, keyboardInset]);
 
   const showLabel = !focused && value.trim().length === 0;
 
@@ -95,6 +102,7 @@ export function SearchBar({
     }
     skipNextEffect.current = true;
     setValue("");
+    setHasUserInteracted(true);         // Mark as user interaction
     lastSentRef.current = "";           // keep dedupe in sync
     onSearchRef.current("");            // immediate clear (no debounce)
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -102,6 +110,7 @@ export function SearchBar({
 
   // Flush immediately on Enter (skips debounce)
   const flushNow = () => {
+    setHasUserInteracted(true);         // Mark as user interaction
     const normalized = normalize(value);
     const shouldFire =
       normalized.length === 0 || normalized.length >= minLength;
@@ -118,8 +127,53 @@ export function SearchBar({
     }
   };
 
+  // Auto-scroll search section into view when focused or when results arrive
+  const scrollIntoView = () => {
+    if (searchSectionRef.current) {
+      searchSectionRef.current.scrollIntoView({ 
+        block: 'start', 
+        behavior: 'smooth' 
+      });
+    }
+  };
+
+  // Handle focus with auto-scroll
+  const handleFocus = () => {
+    setFocused(true);
+    setHasUserInteracted(true);
+    // Small delay to ensure keyboard is opening
+    setTimeout(scrollIntoView, 100);
+  };
+
+  // Handle input changes to track user interaction
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue(e.target.value);
+    setHasUserInteracted(true);
+  };
+
+  // Handle search results arrival with auto-scroll (only after user interaction)
+  useEffect(() => {
+    if (hasUserInteracted && value.trim().length >= minLength) {
+      // Small delay to ensure results are rendered
+      setTimeout(scrollIntoView, 200);
+    }
+  }, [value, minLength, hasUserInteracted]);
+
+  // Prevent form submission from stealing focus/scroll
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    flushNow();
+  };
+
   return (
-    <div className="w-full">
+    <form onSubmit={handleSubmit}>
+      <div 
+        ref={searchSectionRef}
+        className="w-full"
+        style={{
+          paddingBottom: `max(var(--kb-inset, 0px), env(safe-area-inset-bottom))`
+        }}
+      >
       <div
         className="
           relative rounded-full h-12
@@ -145,9 +199,10 @@ export function SearchBar({
           type="text"
           role="searchbox"
           autoComplete="off"
+          enterKeyHint="search"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onFocus={() => setFocused(true)}
+          onChange={handleInputChange}
+          onFocus={handleFocus}
           onBlur={() => setFocused(false)}
           onKeyDown={(e) => {
             if (e.key === "Escape" && value) {
@@ -164,7 +219,7 @@ export function SearchBar({
           className="
             w-full h-full rounded-full
             bg-transparent text-white/90
-            text-[15px] leading-5
+            text-base leading-5
             pl-10 pr-10 pt-2 pb-3
             outline-none focus:outline-none
             border-0 focus:border-0
@@ -207,6 +262,7 @@ export function SearchBar({
           </button>
         )}
       </div>
-    </div>
+      </div>
+    </form>
   );
 }

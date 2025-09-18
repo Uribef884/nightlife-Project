@@ -8,7 +8,6 @@ import {
   OneToMany,
 } from "typeorm";
 import { Club } from "./Club";
-import { CartItem } from "./TicketCartItem";
 import { Event } from "./Event";
 
 export enum TicketCategory {
@@ -80,8 +79,6 @@ export class Ticket {
   @ManyToOne(() => Event, (event) => event.tickets, { onDelete: "CASCADE", nullable: true })
   event?: Event;
 
-  @OneToMany(() => CartItem, (cartItem: CartItem) => cartItem.ticket)
-  cartItems!: CartItem[];
 
   @CreateDateColumn()
   createdAt!: Date;

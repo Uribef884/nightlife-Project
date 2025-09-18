@@ -796,6 +796,11 @@ export class UnifiedCheckoutService {
             const menuEncryptedPayload = await generateEncryptedQR(menuPayload);
             const menuQrDataUrl = await QRCode.toDataURL(menuEncryptedPayload);
 
+            // Update the ticket purchase with included items info and QR code
+            savedTicketPurchase.hasIncludedItems = true;
+            savedTicketPurchase.includedQrCodeEncrypted = menuEncryptedPayload;
+            await transactionalEntityManager.save(savedTicketPurchase);
+
             // Create records for analytics
             const menuItemFromTicketRepo = transactionalEntityManager.getRepository('MenuItemFromTicket');
             const menuItemFromTicketRecords = includedMenuItems.map(item => 

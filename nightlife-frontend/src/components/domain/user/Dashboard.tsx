@@ -110,15 +110,6 @@ function PerfilContent() {
           <span className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">Historial de órdenes</span>
         </Link>
 
-        {/* Mis QRs → only for role user */}
-        {user?.role === 'user' && (
-          <Link
-            href="/profile/qrs"
-            className="block bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <span className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">Mis QR&apos;s</span>
-          </Link>
-        )}
 
         {/* Ajustes → both user + clubowner */}
         <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow space-y-3 sm:space-y-4">

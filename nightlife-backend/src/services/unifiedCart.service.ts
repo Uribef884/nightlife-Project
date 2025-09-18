@@ -740,20 +740,10 @@ export class UnifiedCartService {
         eventDate = new Date(event.availableDate);
       }
       
-      console.log(`[CART-DP] Using EVENT pricing for ${selectedDate.toISOString()}:`, {
-        eventName: event.name,
-        eventDate: eventDate.toISOString(),
-        basePrice
-      });
       
       return computeDynamicMenuEventPrice(basePrice, eventDate, event.openHours);
     } else {
       // For non-event dates, use menu-specific normal day pricing logic
-      console.log(`[CART-DP] Using NORMAL pricing for ${selectedDate?.toISOString() || 'no date'}:`, {
-        basePrice,
-        clubOpenDays,
-        hasOpenHours: Array.isArray(openHours) && openHours.length > 0
-      });
       
       return computeDynamicMenuNormalPrice({
         basePrice,

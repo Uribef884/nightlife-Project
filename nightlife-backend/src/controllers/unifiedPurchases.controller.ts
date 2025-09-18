@@ -58,6 +58,8 @@ function formatUnifiedTransaction(tx: UnifiedPurchaseTransaction, role: Role) {
     date: purchase.date,
     email: purchase.email,
     qrCodeEncrypted: purchase.qrCodeEncrypted,
+    hasIncludedItems: purchase.hasIncludedItems,
+    includedQrCodeEncrypted: purchase.includedQrCodeEncrypted,
     isUsed: purchase.isUsed,
     usedAt: purchase.usedAt,
     isUsedMenu: purchase.isUsedMenu,
@@ -115,6 +117,10 @@ function formatUnifiedTransaction(tx: UnifiedPurchaseTransaction, role: Role) {
     paymentProvider: tx.paymentProvider,
     customerFullName: tx.customerFullName,
     customerPhoneNumber: tx.customerPhoneNumber,
+    qrPayload: tx.qrPayload,
+    unifiedPurchaseTransaction: {
+      qrPayload: tx.qrPayload
+    },
     ticketPurchases,
     menuPurchases
   };
@@ -139,13 +145,6 @@ function formatUnifiedTransaction(tx: UnifiedPurchaseTransaction, role: Role) {
     menuSubtotal: tx.menuSubtotal
   };
   
-  // Debug logging
-  console.log(`[UNIFIED-PURCHASES] Transaction ${tx.id} values:`, {
-    totalPaid: tx.totalPaid,
-    ticketSubtotal: tx.ticketSubtotal,
-    menuSubtotal: tx.menuSubtotal,
-    calculatedItemsTotal: tx.ticketSubtotal + tx.menuSubtotal
-  });
   
   return result;
 }
@@ -194,8 +193,8 @@ export const getUserUnifiedPurchases = async (req: AuthenticatedRequest, res: Re
   try {
     const userId = req.user!.id;
     const results = await findUnifiedTransactions({ user: { id: userId } }, "user", req.query);
-    const formatted = results.map((tx) => formatUnifiedTransaction(tx, "user"));
-    res.json(formatted);
+  const formatted = results.map((tx) => formatUnifiedTransaction(tx, "user"));
+  res.json(formatted);
   } catch (error) {
     console.error("❌ Error fetching user unified purchases:", error);
     res.status(500).json({ error: "Error interno del servidor" });

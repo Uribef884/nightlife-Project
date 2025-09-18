@@ -7,11 +7,10 @@ import jwt from "jsonwebtoken";
 import { isDisposableEmail } from "../utils/disposableEmailValidator";
 import { clearAnonymousCart } from "../utils/clearAnonymousCart";
 import { AuthenticatedRequest } from "../types/express";
-import { CartItem } from "../entities/TicketCartItem";
+import { UnifiedCartItem } from "../entities/UnifiedCartItem";
 import { authSchemaRegister, changePasswordSchema } from "../schemas/auth.schema";
 import { forgotPasswordSchema, resetPasswordSchema } from "../schemas/forgot.schema";
-import { sendPasswordResetEmail } from "../services/emailService"; 
-import { MenuCartItem } from "../entities/MenuCartItem";
+import { sendPasswordResetEmail } from "../services/emailService";
 import { OAuthService, GoogleUserInfo } from "../services/oauthService";
 import { sanitizeInput } from "../utils/sanitizeInput";
 import { anonymizeUser, canUserBeDeleted } from "../utils/anonymizeUser";
@@ -176,13 +175,11 @@ export async function logout(req: Request, res: Response): Promise<void> {
   const sessionId = !typedReq.user?.id && typedReq.sessionId ? typedReq.sessionId : null;
   const userId = (req as AuthenticatedRequest).user?.id;
 
-  const cartRepo = AppDataSource.getRepository(CartItem);
-  const menuCartRepo = AppDataSource.getRepository(MenuCartItem);
+  const unifiedCartRepo = AppDataSource.getRepository(UnifiedCartItem);
 
   try {
     if (userId) {
-      await cartRepo.delete({ userId });
-      await menuCartRepo.delete({ userId });
+      await unifiedCartRepo.delete({ userId });
       res.clearCookie("token", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",

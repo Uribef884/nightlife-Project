@@ -197,46 +197,9 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       ? "calendar-host-carta"
       : null;
 
-  // Helper function to scroll to tickets section
-  const scrollToTickets = () => {
-    const attemptScroll = (attempt: number = 1) => {
-      const maxAttempts = 5;
-      const delay = attempt * 100;
-      setTimeout(() => {
-        const ticketsSection = document.getElementById("tickets-section");
-        if (ticketsSection) {
-          try {
-            ticketsSection.scrollIntoView({ behavior: "smooth", block: "start" });
-          } catch {
-            const rect = ticketsSection.getBoundingClientRect();
-            window.scrollTo({ top: window.pageYOffset + rect.top - 100, behavior: "smooth" });
-          }
-          return;
-        }
-        const eventsSection = document.getElementById("events-section");
-        if (eventsSection) {
-          try {
-            eventsSection.scrollIntoView({ behavior: "smooth", block: "start" });
-          } catch {
-            const rect = eventsSection.getBoundingClientRect();
-            window.scrollTo({ top: window.pageYOffset + rect.top - 100, behavior: "smooth" });
-          }
-          return;
-        }
-        const reservasTab = document.querySelector('[data-tab="reservas"]');
-        if (reservasTab) {
-          try {
-            (reservasTab as HTMLElement).scrollIntoView({ behavior: "smooth", block: "start" });
-          } catch {
-            const rect = (reservasTab as HTMLElement).getBoundingClientRect();
-            window.scrollTo({ top: window.pageYOffset + rect.top - 100, behavior: "smooth" });
-          }
-          return;
-        }
-        if (attempt < maxAttempts) attemptScroll(attempt + 1);
-      }, delay);
-    };
-    attemptScroll();
+  // Helper function to scroll to top of page
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   /* Publish effective menu type for global consumers (e.g., tabs CSS visibility) */
@@ -281,7 +244,16 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       history.replaceState({}, "", clean);
     }
 
-    setTab((prev) => (prev !== t ? t : prev));
+    setTab((prev) => {
+      if (prev !== t) {
+        // Scroll to top when tab actually changes
+        setTimeout(() => {
+          scrollToTop();
+        }, 100); // Shorter delay for URL-based changes
+        return t;
+      }
+      return prev;
+    });
 
     // Date from ?date (only when present); otherwise keep user's date (init once if null)
     const qdate = sp.get("date");
@@ -316,10 +288,22 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#reservas") {
       setTimeout(() => {
-        scrollToTickets();
+        scrollToTop();
       }, 500);
     }
   }, []); // Only run once on mount
+
+  // Scroll to top whenever tab changes (backup to syncFromLocation)
+  useEffect(() => {
+    // Multiple attempts to ensure scroll to top works even with interfering components
+    const scrollAttempts = [100, 300, 500]; // Try at different intervals
+    
+    scrollAttempts.forEach((delay) => {
+      setTimeout(() => {
+        scrollToTop();
+      }, delay);
+    });
+  }, [tab]);
 
   // ── CSR data loads ──
   useEffect(() => {
@@ -503,7 +487,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                 club={club}
                 onReservarClick={() => {
                   window.location.hash = "reservas";
-                  scrollToTickets();
+                  scrollToTop();
                 }}
               />
 
@@ -525,7 +509,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                 <button
                   onClick={() => {
                     window.location.hash = "reservas";
-                    scrollToTickets();
+                    scrollToTop();
                   }}
                   className="w-full rounded-full bg-[#7A48D3] hover:bg-[#6B3FA0] text-white py-3 font-semibold shadow"
                 >

@@ -106,7 +106,12 @@ export default async function HomePage({ searchParams }: PageProps) {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 space-y-6">
+    <main 
+      className="mx-auto max-w-7xl px-4 space-y-6"
+      style={{
+        paddingBottom: `max(var(--kb-inset, 0px), env(safe-area-inset-bottom))`
+      }}
+    >
       {/* Client shell (ads + search/filters); renderGrid=false to avoid duplicate client grid */}
       <Suspense fallback={<div className="text-white/60">Cargando…</div>}>
         <ClientHome cities={cities} ads={ads} renderGrid={false} />

@@ -1,9 +1,8 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../types/express";
 import { decryptQR } from "../utils/decryptQR";
-import { previewMenuTransaction, previewMenuFromTicketPurchase, validateMenuTransaction, validateMenuFromTicketPurchase, previewUnifiedMenuTransaction, validateUnifiedMenuTransaction } from "../utils/validateQRUtils";
+import { previewMenuFromTicketPurchase, validateMenuFromTicketPurchase, previewUnifiedMenuTransaction, validateUnifiedMenuTransaction } from "../utils/validateQRUtils";
 import { AppDataSource } from "../config/data-source";
-import { MenuPurchaseTransaction } from "../entities/MenuPurchaseTransaction";
 import { UnifiedPurchaseTransaction } from "../entities/UnifiedPurchaseTransaction";
 import { TicketPurchase } from "../entities/TicketPurchase";
 import { MenuItemFromTicket } from "../entities/MenuItemFromTicket";
@@ -27,50 +26,28 @@ export async function previewUnifiedMenuQR(
     }
     const user = req.user!;
     if (payload.type === "menu") {
-      // Try unified menu transaction first (new simplified structure)
+      // Handle unified menu transaction
       let validation = await previewUnifiedMenuTransaction(qrCode, user);
       
-      if (validation.isValid) {
-        // Handle unified menu transaction
-        const transaction = validation.transaction!;
-        const response = {
-          used: transaction.qrPayload && transaction.qrPayload.includes('USED'),
-          usedAt: null, // We'll need to add this field to track usage
-          items: transaction.menuPurchases.map((purchase: any) => ({
-            itemName: purchase.menuItem.name,
-            variant: purchase.variant?.name || null,
-            quantity: purchase.quantity,
-            unitPrice: purchase.priceAtCheckout
-          })),
-          totalPaid: transaction.menuSubtotal,
-          purchaseDate: transaction.createdAt,
-          clubId: transaction.clubId,
-          transactionId: transaction.id
-        };
-        res.json(response);
+      if (!validation.isValid) {
+        res.status(400).json({ error: validation.error });
         return;
       }
       
-      // Fallback to legacy menu transaction
-      const legacyValidation = await previewMenuTransaction(qrCode, user);
-      if (!legacyValidation.isValid) {
-        res.status(400).json({ error: legacyValidation.error });
-        return;
-      }
-      const legacyTransaction = legacyValidation.transaction!;
+      const transaction = validation.transaction!;
       const response = {
-        used: legacyTransaction.isUsed,
-        usedAt: legacyTransaction.usedAt,
-        items: legacyTransaction.purchases.map((purchase: any) => ({
+        used: transaction.qrPayload && transaction.qrPayload.includes('USED'),
+        usedAt: null, // We'll need to add this field to track usage
+        items: transaction.menuPurchases.map((purchase: any) => ({
           itemName: purchase.menuItem.name,
           variant: purchase.variant?.name || null,
           quantity: purchase.quantity,
           unitPrice: purchase.priceAtCheckout
         })),
-        totalPaid: legacyTransaction.totalPaid,
-        purchaseDate: legacyTransaction.createdAt,
-        clubId: legacyTransaction.clubId,
-        transactionId: legacyTransaction.id
+        totalPaid: transaction.menuSubtotal,
+        purchaseDate: transaction.createdAt,
+        clubId: transaction.clubId,
+        transactionId: transaction.id
       };
       res.json(response);
     } else if (payload.type === "menu_from_ticket") {
@@ -130,74 +107,41 @@ export async function confirmUnifiedMenuQR(
     }
     const user = req.user!;
     if (payload.type === "menu") {
-      // Try unified menu transaction first (new simplified structure)
+      // Handle unified menu transaction
       let validation = await validateUnifiedMenuTransaction(qrCode, user);
       
-      if (validation.isValid) {
-        // Handle unified menu transaction
-        const transaction = validation.transaction!;
-        if (transaction.qrPayload && transaction.qrPayload.includes('USED')) {
-          res.status(410).json({
-            error: "Código QR ya usado",
-            usedAt: null // We'll need to add this field to track usage
-          });
-          return;
-        }
-        
-        // Mark as used by updating qrPayload
-        const transactionRepository = AppDataSource.getRepository(UnifiedPurchaseTransaction);
-        transaction.qrPayload = transaction.qrPayload + '_USED_' + Date.now();
-        await transactionRepository.save(transaction);
-        
-        const response = {
-          used: true,
-          usedAt: new Date(),
-          items: transaction.menuPurchases.map((purchase: any) => ({
-            itemName: purchase.menuItem.name,
-            variant: purchase.variant?.name || null,
-            quantity: purchase.quantity,
-            unitPrice: purchase.priceAtCheckout
-          })),
-          totalPaid: transaction.menuSubtotal,
-          purchaseDate: transaction.createdAt,
-          clubId: transaction.clubId,
-          transactionId: transaction.id
-        };
-        res.json(response);
+      if (!validation.isValid) {
+        res.status(400).json({ error: validation.error });
         return;
       }
       
-      // Fallback to legacy menu transaction
-      const legacyValidation = await validateMenuTransaction(qrCode, user);
-      if (!legacyValidation.isValid) {
-        res.status(400).json({ error: legacyValidation.error });
-        return;
-      }
-      const legacyTransaction = legacyValidation.transaction!;
-      if (legacyTransaction.isUsed) {
+      const transaction = validation.transaction!;
+      if (transaction.qrPayload && transaction.qrPayload.includes('USED')) {
         res.status(410).json({
           error: "Código QR ya usado",
-          usedAt: legacyTransaction.usedAt
+          usedAt: null // We'll need to add this field to track usage
         });
         return;
       }
-      const transactionRepository = AppDataSource.getRepository(MenuPurchaseTransaction);
-      legacyTransaction.isUsed = true;
-      legacyTransaction.usedAt = new Date();
-      await transactionRepository.save(legacyTransaction);
+      
+      // Mark as used by updating qrPayload
+      const transactionRepository = AppDataSource.getRepository(UnifiedPurchaseTransaction);
+      transaction.qrPayload = transaction.qrPayload + '_USED_' + Date.now();
+      await transactionRepository.save(transaction);
+      
       const response = {
         used: true,
-        usedAt: legacyTransaction.usedAt,
-        items: legacyTransaction.purchases.map((purchase: any) => ({
+        usedAt: new Date(),
+        items: transaction.menuPurchases.map((purchase: any) => ({
           itemName: purchase.menuItem.name,
           variant: purchase.variant?.name || null,
           quantity: purchase.quantity,
           unitPrice: purchase.priceAtCheckout
         })),
-        totalPaid: legacyTransaction.totalPaid,
-        purchaseDate: legacyTransaction.createdAt,
-        clubId: legacyTransaction.clubId,
-        transactionId: legacyTransaction.id
+        totalPaid: transaction.menuSubtotal,
+        purchaseDate: transaction.createdAt,
+        clubId: transaction.clubId,
+        transactionId: transaction.id
       };
       res.json(response);
     } else if (payload.type === "menu_from_ticket") {

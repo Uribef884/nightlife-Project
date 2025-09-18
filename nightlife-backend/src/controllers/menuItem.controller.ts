@@ -6,6 +6,7 @@ import { MenuItemVariant } from "../entities/MenuItemVariant";
 import { TicketIncludedMenuItem } from "../entities/TicketIncludedMenuItem";
 import { MenuPurchase } from "../entities/MenuPurchase";
 import { Club } from "../entities/Club";
+import { Event } from "../entities/Event";
 import { AuthenticatedRequest } from "../types/express";
 import { sanitizeInput, sanitizeObject } from "../utils/sanitizeInput";
 import { computeDynamicPrice } from "../utils/dynamicPricing";
@@ -735,7 +736,7 @@ export const getAvailableMenuForDate = async (req: Request, res: Response): Prom
 
     const repo = AppDataSource.getRepository(MenuItem);
     const clubRepo = AppDataSource.getRepository(Club);
-    const eventRepo = AppDataSource.getRepository('Event');
+    const eventRepo = AppDataSource.getRepository(Event);
 
     // Get club
     const club = await clubRepo.findOne({

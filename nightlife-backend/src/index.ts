@@ -10,15 +10,11 @@ import ticketRoutes from "./routes/ticket.routes";
 import authRoutes from "./routes/auth.routes";
 import cookieParser from "cookie-parser";
 import bouncerRoutes from "./routes/bouncer.routes";
-import cartRoutes from "./routes/ticketCart.routes";
 import { attachSessionId } from "./middlewares/sessionMiddleware";
-import purchaseRoutes from "./routes/ticketPurchases.routes";
 import eventRoutes from "./routes/event.routes";
 import menuCategoryRoutes from "./routes/menuCategory.routes";
 import menuItemRoutes from "./routes/menuItem.routes";
 import menuVariantRoutes from "./routes/menuVariant.routes";
-import menuCartRoutes from "./routes/menuCart.routes";
-import menuPurchaseRoutes from "./routes/menuPurchases.routes";
 import waiterRoutes from "./routes/waiter.routes";
 import menuQRRoutes from "./routes/menuQR.routes";
 import ticketQRRoutes from "./routes/ticketQR.routes";
@@ -31,10 +27,6 @@ import adminRoutes from "./routes/admin";
 
 
 // Wompi Integration Routes
-import ticketInitiateWompiRoutes from "./routes/ticketInitiateWompi.routes";
-import ticketCheckoutWompiRoutes from "./routes/ticketCheckoutWompi.routes";
-import menuInitiateWompiRoutes from "./routes/menuInitiateWompi.routes";
-import menuCheckoutWompiRoutes from "./routes/menuCheckoutWompi.routes";
 import webhookRoutes from './routes/webhook.routes';
 import pseRoutes from './routes/pse.routes';
 
@@ -144,8 +136,6 @@ app.use("/clubs", clubRoutes);
 app.use("/tickets", ticketRoutes); // public GET access
 app.use("/bouncers", bouncerRoutes);
 app.use("/waiters", waiterRoutes);
-app.use("/cart", cartRoutes);
-app.use("/purchases", purchaseRoutes);
 app.use("/events", eventRoutes);
 app.use("/ads", adRoutes);
 
@@ -153,8 +143,6 @@ app.use("/ads", adRoutes);
 app.use("/menu/categories", menuCategoryRoutes);
 app.use("/menu/items", menuItemRoutes);
 app.use("/menu/variants", menuVariantRoutes);
-app.use("/menu/cart", menuCartRoutes);
-app.use("/menu/purchases", menuPurchaseRoutes);
 app.use("/menu", menuConfigRoutes);
 
 // File Upload System
@@ -169,10 +157,6 @@ app.use("/validate/menu-from-ticket", menuFromTicketQRRoutes);
 app.use("/ticket-menu", ticketIncludedMenuRoutes);
 
 // Wompi Integration Routes
-app.use("/wompi/tickets/initiate", ticketInitiateWompiRoutes);
-app.use("/wompi/tickets/checkout", ticketCheckoutWompiRoutes);
-app.use("/wompi/menu/initiate", menuInitiateWompiRoutes);
-app.use("/wompi/menu/checkout", menuCheckoutWompiRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/pse', pseRoutes);
 
