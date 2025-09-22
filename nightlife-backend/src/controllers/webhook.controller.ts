@@ -2,8 +2,9 @@
 import crypto from "crypto";
 import { Request, Response } from "express";
 import { getEventKey } from "../config/wompi";
- import { AppDataSource } from "../config/data-source";
+import { AppDataSource } from "../config/data-source";
 import { getValueByPath } from "../utils/wompiUtils";
+// Import SSE controller dynamically to avoid circular dependencies
 // Optional: if/when you want DB idempotency, wire this in later
 // import { upsertWompiTransaction } from "../services/wompiWebhook.service";
 
@@ -125,14 +126,61 @@ export const handleWompiWebhook = async (req: Request, res: Response): Promise<v
             String(existing.paymentStatus).toUpperCase() === status
           ) {
             console.log("[WOMPI] Unified transaction already up-to-date", { reference, txId: wompiTxId, status });
+            res.status(200).json({ success: true, message: "Already processed" });
+            return;
           } else {
             existing.paymentProvider = "wompi";
             existing.paymentProviderTransactionId = wompiTxId;
             // clamp status to allowed enum values
-            const allowed: any = new Set(["APPROVED", "DECLINED", "PENDING", "VOIDED"]);
+            const allowed: any = new Set(["APPROVED", "DECLINED", "PENDING", "VOIDED", "ERROR"]);
             existing.paymentStatus = (allowed.has(status) ? status : "PENDING") as any;
             await repo.save(existing);
             console.log("[WOMPI] Unified transaction updated", { id: existing.id, reference, status });
+            
+            // 🚨 CRITICAL: Handle late APPROVED transactions (after polling timeout)
+            if (status === "APPROVED" && String(existing.paymentStatus).toUpperCase() === "TIMEOUT") {
+              console.log("[WOMPI] 🚨 Late APPROVED transaction detected! Processing order...", { 
+                transactionId: existing.id, 
+                wompiTxId 
+              });
+              
+              try {
+                // Import the checkout controller to process the late payment
+                const { UnifiedCheckoutController } = await import("./unifiedCheckout.controller");
+                const checkoutController = new UnifiedCheckoutController();
+                
+                // Process the successful checkout
+                await checkoutController.processWompiSuccessfulUnifiedCheckout({
+                  userId: existing.userId || null,
+                  sessionId: existing.sessionId || null,
+                  email: existing.buyerEmail || 'unknown@example.com',
+                  req: {} as any, // Mock request object for webhook context
+                  res: {} as any, // Mock response object for webhook context
+                  transactionId: existing.id,
+                  cartItems: [], // Will be fetched from stored data
+                });
+                
+                console.log("[WOMPI] ✅ Late APPROVED transaction processed successfully", { 
+                  transactionId: existing.id 
+                });
+              } catch (lateProcessError) {
+                console.error("[WOMPI] ❌ Failed to process late APPROVED transaction:", lateProcessError);
+                // Don't throw - we still want to acknowledge the webhook
+              }
+            }
+            
+            // Broadcast status update via SSE (dynamic import to avoid circular dependencies)
+            try {
+              const { SSEController } = await import("./sse.controller");
+              console.log(`[WOMPI] Broadcasting status update via SSE: ${existing.id} -> ${existing.paymentStatus}`);
+              SSEController.broadcastStatusUpdate(existing.id, existing.paymentStatus, {
+                wompiTransactionId: wompiTxId,
+                reference: reference
+              });
+              console.log(`[WOMPI] SSE broadcast completed for transaction: ${existing.id}`);
+            } catch (sseError) {
+              console.error("[WOMPI] Failed to broadcast SSE update:", sseError);
+            }
           }
         }
       } catch (dbErr) {

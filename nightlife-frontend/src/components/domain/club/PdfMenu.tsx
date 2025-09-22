@@ -178,6 +178,8 @@ export function PdfMenu({
       }
     };
 
+    // Note: passive: false is required here because we need to call preventDefault()
+    // for Ctrl/Cmd + wheel zoom functionality
     document.addEventListener("wheel", onWheel, { passive: false });
     return () => document.removeEventListener("wheel", onWheel); // cleanup
   }, [isDesktop, zoomDesktop]);

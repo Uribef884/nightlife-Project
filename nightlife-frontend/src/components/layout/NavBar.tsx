@@ -4,12 +4,13 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { LogIn, ShoppingCart, Menu as MenuIcon, X, User } from "lucide-react";
+import { LogIn, ShoppingCart, User } from "lucide-react";
 import { ClubTabs } from "@/components/domain/club/ClubTabs";
 import { useAuthStore } from "@/stores/auth.store";
 import { saveRedirectPath } from "@/utils/redirect";
 import { scrollToTop } from "@/utils/scrollUtils";
-import { AnimatePresence, motion } from "framer-motion";
+import { CartButton, CartDrawer } from "@/components/cart";
+import { useCart } from "@/hooks/useCart";
 
 type TabKey = "general" | "reservas" | "carta";
 
@@ -27,8 +28,9 @@ function resolveTabFromURL(): TabKey {
 }
 
 export default function NavBar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const { isAuthenticated } = useAuthStore();
+  const { itemCount } = useCart();
 
   const pathname = usePathname() || "/";
   const isClubRoute = pathname.startsWith("/clubs/");
@@ -49,31 +51,6 @@ export default function NavBar() {
     setCurrentTab(resolveTabFromURL());
   }, [pathname]);
 
-  // Close mobile menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: Event) => {
-      if (mobileOpen) {
-        const target = event.target as Element;
-        const mobileMenu = document.getElementById('mobile-menu');
-        const menuButton = document.getElementById('mobile-menu-button');
-        
-        // Check if click is outside the mobile menu and not on the menu button
-        if (mobileMenu && !mobileMenu.contains(target) && menuButton && !menuButton.contains(target)) {
-          setMobileOpen(false);
-        }
-      }
-    };
-
-    if (mobileOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [mobileOpen]);
 
   const onTabChange = (t: TabKey) => {
     if (typeof window !== "undefined") {
@@ -93,11 +70,12 @@ export default function NavBar() {
   ].join(" ");
 
   return (
-    <header
-      id="app-navbar"
-      role="banner"
-      className="sticky top-0 z-40 w-full border-b border-slate-800/60 bg-slate-900/80 backdrop-blur"
-    >
+    <>
+      <header
+        id="app-navbar"
+        role="banner"
+        className="sticky top-0 z-40 w-full border-b border-slate-800/60 bg-slate-900/80 backdrop-blur"
+      >
       {/* Row 1: brand + actions */}
       <div className={row1}>
         <Link
@@ -111,51 +89,75 @@ export default function NavBar() {
 
         {/* Only show actions if not on auth routes */}
         {!isAuthRoute && (
-          <div className="hidden items-center gap-3 md:flex">
-            <button
-              aria-label="Abrir carrito"
-              className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
-            >
-              <ShoppingCart className="h-4 w-4" />
-            </button>
+          <>
+            {/* Desktop actions */}
+            <div className="hidden items-center gap-3 md:flex">
+              <CartButton
+                variant="icon"
+                size="md"
+                showCount={true}
+                onClick={() => setCartDrawerOpen(true)}
+                className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
+              />
 
-            {isAuthenticated ? (
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
-              >
-                <User className="h-4 w-4" />
-                Ver Perfil
-              </Link>
-            ) : (
-              <Link
-                href="/auth/login"
-                onClick={() => {
-                  saveRedirectPath();
-                  scrollToTop();
-                }}
-                className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
-              >
-                <LogIn className="h-4 w-4" />
-                Iniciar Sesión
-              </Link>
-            )}
-          </div>
+              {isAuthenticated ? (
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
+                >
+                  <User className="h-4 w-4" />
+                  Ver Perfil
+                </Link>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  onClick={() => {
+                    saveRedirectPath();
+                    scrollToTop();
+                  }}
+                  className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Iniciar Sesión
+                </Link>
+              )}
+            </div>
+
+            {/* Mobile buttons */}
+            <div className="flex items-center gap-2 md:hidden">
+              <CartButton
+                variant="icon"
+                size="md"
+                showCount={true}
+                onClick={() => setCartDrawerOpen(true)}
+                className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
+              />
+
+              {isAuthenticated ? (
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-violet-600 text-white hover:bg-violet-500"
+                  title="Ver Perfil"
+                >
+                  <User className="h-5 w-5" />
+                </Link>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  onClick={() => {
+                    saveRedirectPath();
+                    scrollToTop();
+                  }}
+                  className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-violet-600 text-white hover:bg-violet-500"
+                  title="Iniciar Sesión"
+                >
+                  <LogIn className="h-5 w-5" />
+                </Link>
+              )}
+            </div>
+          </>
         )}
 
-        {/* Only show mobile menu button if not on auth routes */}
-        {!isAuthRoute && (
-          <button
-            id="mobile-menu-button"
-            className="rounded-md p-2 text-slate-200 hover:bg-slate-800 md:hidden"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open menu"
-            aria-controls="mobile-menu"
-            aria-expanded={mobileOpen}
-          >
-            <MenuIcon className="h-6 w-6" />
-          </button>
-        )}
       </div>
 
       {/* Row 2: tabs — transparent, centered; only on /clubs/* */}
@@ -167,92 +169,19 @@ export default function NavBar() {
         </div>
       )}
 
-      {/* Mobile sheet - only show if not on auth routes */}
-      <AnimatePresence>
-        {mobileOpen && !isAuthRoute && (
-          <>
-            {/* Backdrop/Overlay */}
-            <motion.div 
-              className="fixed inset-0 bg-black/20 z-30 md:hidden"
-              onClick={() => setMobileOpen(false)}
-              aria-hidden="true"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            />
-            
-            {/* Mobile Menu */}
-            <motion.div 
-              id="mobile-menu" 
-              className="relative z-40 md:hidden" 
-              role="dialog" 
-              aria-modal="true" 
-              aria-label="Mobile menu"
-              initial={{ y: -10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ 
-                y: -10, 
-                opacity: 0,
-                transition: {
-                  type: "tween",
-                  duration: 0.15,
-                  ease: "easeIn"
-                }
-              }}
-              transition={{ 
-                type: "tween",
-                duration: 0.3,
-                ease: "easeOut"
-              }}
-            >
-              <div className="border-t border-slate-800/60 bg-slate-900 px-4 py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-slate-200 font-semibold">Menu</span>
-              <button
-                onClick={() => setMobileOpen(false)}
-                className="rounded-md p-2 text-slate-200 hover:bg-slate-800"
-                aria-label="Close menu"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
 
-            <div className="mt-3 space-y-2">
-              <button className="flex w-full items-center gap-2 rounded-md border border-slate-700/60 px-3 py-2 text-left text-slate-200 hover:bg-slate-800 transition-colors duration-150">
-                <ShoppingCart className="h-4 w-4" />
-                Carrito
-              </button>
-
-              {isAuthenticated ? (
-                <Link
-                  href="/dashboard"
-                  className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500 transition-colors duration-150"
-                  onClick={() => setMobileOpen(false)}
-                >
-                  <User className="h-4 w-4" />
-                  Ver Perfil
-                </Link>
-              ) : (
-                <Link
-                  href="/auth/login"
-                  className="flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500 transition-colors duration-150"
-                  onClick={() => {
-                    saveRedirectPath();
-                    setMobileOpen(false);
-                    scrollToTop();
-                  }}
-                >
-                  <LogIn className="h-4 w-4" />
-                  Iniciar Sesión
-                </Link>
-              )}
-            </div>
-          </div>
-        </motion.div>
-        </>
-        )}
-      </AnimatePresence>
-    </header>
+      </header>
+      
+      {/* Cart Drawer - Outside header to avoid z-index issues */}
+      <CartDrawer
+        isOpen={cartDrawerOpen}
+        onClose={() => setCartDrawerOpen(false)}
+        onCheckout={() => {
+          setCartDrawerOpen(false);
+          // Navigate to checkout page
+          window.location.href = '/checkout';
+        }}
+      />
+    </>
   );
 }

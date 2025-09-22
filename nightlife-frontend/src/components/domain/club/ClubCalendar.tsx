@@ -37,7 +37,7 @@ const WEEK_ES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 type DayCell = {
   iso: string; // "" for leading blanks
-  disabled: boolean; // past days
+  disabled: boolean; // past days and dates more than 3 weeks in the future
   kind: "event" | "open" | "free" | null; // status badge
   isToday: boolean;
 };
@@ -49,6 +49,8 @@ export function ClubCalendar({
   openDays,
   selectedDate,
   onSelect,
+  hasCartItems = false,
+  onDateChangeBlocked,
 }: {
   monthOffset?: number;
   eventDates: Set<string>;
@@ -56,6 +58,8 @@ export function ClubCalendar({
   openDays: Set<string>; // lowercased full names: sunday..saturday
   selectedDate: string | null;
   onSelect: (iso: string) => void;
+  hasCartItems?: boolean;
+  onDateChangeBlocked?: () => void;
 }) {
   /** Stabilize "today" so we don't churn state on each render */
   const todayISO = useMemo(() => toISO(new Date()), []);
@@ -81,12 +85,17 @@ export function ClubCalendar({
   /** ===== Derived month (no `cursor` state at all) =====
    * We derive the *visible month start* from focusISO + monthOffset.
    * That means there is no cursor↔focus ping-pong anymore.
+   * Never allow navigation to past months.
    */
   const visibleMonthStart = useMemo(() => {
     const base = parseISO(focusISO || todayISO);
     const v = addMonths(new Date(base.getFullYear(), base.getMonth(), 1), monthOffset);
-    return new Date(v.getFullYear(), v.getMonth(), 1);
-  }, [focusISO, monthOffset, todayISO]);
+    const requestedMonth = new Date(v.getFullYear(), v.getMonth(), 1);
+    
+    // Never allow showing past months - always show at least the current month
+    const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    return requestedMonth < currentMonth ? currentMonth : requestedMonth;
+  }, [focusISO, monthOffset, todayISO, today]);
   
   /** Build month cells (with leading blanks) */
   const meta = useMemo(() => {
@@ -108,9 +117,12 @@ export function ClubCalendar({
       const date = new Date(y, m, d);
       const iso = toISO(date);
 
-      // Disable past dates (based on local midnight)
-      const inPast =
-        date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      // Disable past dates and dates more than 3 weeks in the future
+      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000); // 3 weeks from today
+      const isPast = date < todayDate;
+      const isTooFarFuture = date > maxDate;
+      const inPast = isPast || isTooFarFuture;
       const isToday = iso === todayISO;
 
       // openDays contains full weekday names in lowercase
@@ -130,7 +142,7 @@ export function ClubCalendar({
       else if (freeDates.has(iso)) kind = "free";
       else if (openDays.has(weekdayFull)) kind = "open";
 
-      cells.push({ iso, disabled: inPast, kind, isToday });
+      cells.push({ iso, disabled: inPast, kind, isToday }); // disabled for past dates or dates > 3 weeks
     }
 
     return { y, m, cells };
@@ -144,8 +156,14 @@ export function ClubCalendar({
   }
   function computeAnchoredFocus(target: Date) {
     // Prefer selectedDate if it falls into target month; otherwise first of month
-    const y = target.getFullYear();
-    const m = target.getMonth();
+    // But never allow going to past months
+    const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const targetMonth = new Date(target.getFullYear(), target.getMonth(), 1);
+    
+    // If target is in the past, use current month instead
+    const actualTarget = targetMonth < currentMonth ? currentMonth : target;
+    const y = actualTarget.getFullYear();
+    const m = actualTarget.getMonth();
 
     if (selectedDate) {
       const s = parseISO(selectedDate);
@@ -185,6 +203,13 @@ export function ClubCalendar({
         disabled={!c.iso || c.disabled}
         onClick={() => {
           if (!c.iso) return;
+          
+          // Check if user is trying to change date while having cart items
+          if (hasCartItems && c.iso !== selectedDate) {
+            onDateChangeBlocked?.();
+            return;
+          }
+          
           onSelect(c.iso);
           if (c.iso !== focusRef.current) setFocusISO(c.iso); // keep the strip anchored to the chosen day
         }}
@@ -206,25 +231,124 @@ export function ClubCalendar({
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
-              // New: arrows set focus directly to previous month's anchored day
-              const prevMonth = addMonths(visibleMonthStart, -1);
-              const desired = computeAnchoredFocus(prevMonth);
-              if (desired !== focusRef.current) setFocusISO(desired);
+              if (collapsed) {
+                // Week mode: navigate by weeks
+                const currentDate = parseISO(focusISO);
+                const prevWeek = new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const prevWeekISO = toISO(prevWeek);
+                
+                // Prevent going to past weeks (before current week)
+                const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                const currentWeekStart = new Date(todayDate);
+                currentWeekStart.setDate(todayDate.getDate() - todayDate.getDay()); // Start of current week
+                
+                if (prevWeek >= currentWeekStart) {
+                  setFocusISO(prevWeekISO);
+                }
+              } else {
+                // Month mode: navigate by months
+                const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                if (visibleMonthStart.getTime() <= currentMonth.getTime()) return;
+                
+                const prevMonth = addMonths(visibleMonthStart, -1);
+                const desired = computeAnchoredFocus(prevMonth);
+                if (desired !== focusRef.current) setFocusISO(desired);
+              }
             }}
-            className="rounded-md bg-white/10 hover:bg-white/15 px-2 py-1 text-white"
-            aria-label="Mes anterior"
+            disabled={
+              collapsed 
+                ? (() => {
+                    // Week mode: disable if current week is the earliest allowed week
+                    const currentDate = parseISO(focusISO);
+                    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    const currentWeekStart = new Date(todayDate);
+                    currentWeekStart.setDate(todayDate.getDate() - todayDate.getDay());
+                    return currentDate.getTime() <= currentWeekStart.getTime();
+                  })()
+                : visibleMonthStart.getTime() <= new Date(today.getFullYear(), today.getMonth(), 1).getTime()
+            }
+            className="rounded-md bg-white/10 hover:bg-white/15 disabled:bg-white/5 disabled:cursor-not-allowed px-2 py-1 text-white disabled:text-white/50"
+            aria-label={collapsed ? "Semana anterior" : "Mes anterior"}
           >
             ‹
           </button>
           <button
             onClick={() => {
-              // New: arrows set focus directly to next month's anchored day
-              const nextMonth = addMonths(visibleMonthStart, 1);
-              const desired = computeAnchoredFocus(nextMonth);
-              if (desired !== focusRef.current) setFocusISO(desired);
+              if (collapsed) {
+                // Week mode: navigate by weeks
+                const currentDate = parseISO(focusISO);
+                const nextWeek = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+                const nextWeekISO = toISO(nextWeek);
+                
+                // Check if next week is within 3 weeks limit OR has events
+                const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                const hasEventsInNextWeek = Array.from(eventDates).some(eventDate => {
+                  const eventDateObj = parseISO(eventDate);
+                  const weekStart = new Date(nextWeek);
+                  weekStart.setDate(nextWeek.getDate() - nextWeek.getDay());
+                  const weekEnd = new Date(weekStart);
+                  weekEnd.setDate(weekStart.getDate() + 6);
+                  return eventDateObj >= weekStart && eventDateObj <= weekEnd;
+                });
+                
+                if (nextWeek <= maxDate || hasEventsInNextWeek) {
+                  setFocusISO(nextWeekISO);
+                }
+              } else {
+                // Month mode: navigate by months
+                const nextMonth = addMonths(visibleMonthStart, 1);
+                
+                // Check if next month would exceed 3 weeks limit OR has events
+                const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                const hasEventsInNextMonth = Array.from(eventDates).some(eventDate => {
+                  const eventDateObj = parseISO(eventDate);
+                  const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
+                  const nextMonthEnd = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0);
+                  return eventDateObj >= nextMonthStart && eventDateObj <= nextMonthEnd;
+                });
+                
+                if (nextMonth <= maxDate || hasEventsInNextMonth) {
+                  const desired = computeAnchoredFocus(nextMonth);
+                  if (desired !== focusRef.current) setFocusISO(desired);
+                }
+              }
             }}
-            className="rounded-md bg-white/10 hover:bg-white/15 px-2 py-1 text-white"
-            aria-label="Mes siguiente"
+            disabled={
+              collapsed
+                ? (() => {
+                    // Week mode: disable if next week would exceed 3 weeks limit AND has no events
+                    const currentDate = parseISO(focusISO);
+                    const nextWeek = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+                    const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                    
+                    const hasEventsInNextWeek = Array.from(eventDates).some(eventDate => {
+                      const eventDateObj = parseISO(eventDate);
+                      const weekStart = new Date(nextWeek);
+                      weekStart.setDate(nextWeek.getDate() - nextWeek.getDay());
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekStart.getDate() + 6);
+                      return eventDateObj >= weekStart && eventDateObj <= weekEnd;
+                    });
+                    
+                    return nextWeek > maxDate && !hasEventsInNextWeek;
+                  })()
+                : (() => {
+                    // Month mode: disable if next month would exceed 3 weeks limit AND has no events
+                    const nextMonth = addMonths(visibleMonthStart, 1);
+                    const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                    
+                    const hasEventsInNextMonth = Array.from(eventDates).some(eventDate => {
+                      const eventDateObj = parseISO(eventDate);
+                      const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
+                      const nextMonthEnd = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0);
+                      return eventDateObj >= nextMonthStart && eventDateObj <= nextMonthEnd;
+                    });
+                    
+                    return nextMonth > maxDate && !hasEventsInNextMonth;
+                  })()
+            }
+            className="rounded-md bg-white/10 hover:bg-white/15 disabled:bg-white/5 disabled:cursor-not-allowed px-2 py-1 text-white disabled:text-white/50"
+            aria-label={collapsed ? "Semana siguiente" : "Mes siguiente"}
           >
             ›
           </button>

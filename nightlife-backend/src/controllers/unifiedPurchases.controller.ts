@@ -192,9 +192,13 @@ async function findUnifiedTransactions(where: any, role: Role, query: any): Prom
 export const getUserUnifiedPurchases = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
-    const results = await findUnifiedTransactions({ user: { id: userId } }, "user", req.query);
-  const formatted = results.map((tx) => formatUnifiedTransaction(tx, "user"));
-  res.json(formatted);
+    // Only return APPROVED transactions for user orders
+    const results = await findUnifiedTransactions({ 
+      user: { id: userId }, 
+      paymentStatus: "APPROVED" 
+    }, "user", req.query);
+    const formatted = results.map((tx) => formatUnifiedTransaction(tx, "user"));
+    res.json(formatted);
   } catch (error) {
     console.error("❌ Error fetching user unified purchases:", error);
     res.status(500).json({ error: "Error interno del servidor" });
@@ -209,7 +213,11 @@ export const getUserUnifiedPurchaseById = async (req: AuthenticatedRequest, res:
     const txRepo = AppDataSource.getRepository(UnifiedPurchaseTransaction);
 
     const tx = await txRepo.findOne({
-      where: { id, user: { id: userId } },
+      where: { 
+        id, 
+        user: { id: userId }, 
+        paymentStatus: "APPROVED" 
+      },
       relations: ["user", "ticketPurchases", "ticketPurchases.ticket", "ticketPurchases.ticket.event", "ticketPurchases.club", "menuPurchases", "menuPurchases.menuItem", "menuPurchases.variant", "menuPurchases.club"]
     });
 

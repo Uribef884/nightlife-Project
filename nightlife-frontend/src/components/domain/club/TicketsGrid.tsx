@@ -3,14 +3,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import {
-  addTicketToCart,
-  getMenuCartSummary,
-  getTicketCartSummary,
-  updateTicketQty,
-  removeTicketItem,
-  clearMenuCart,
-} from "@/services/cart.service";
+import { useCartContext } from "@/contexts/CartContext";
+import { useClubProtection } from "@/hooks/useClubProtection";
+import { CartClubChangeModal } from "@/components/cart";
 import type { ClubDTO, EventDTO, TicketDTO } from "@/services/clubs.service";
 import type { AvailableTicketsResponse } from "@/services/tickets.service";
 import TicketCard from "./TicketCard";
@@ -38,8 +33,6 @@ function smoothScrollTo(el: HTMLElement, offset = 80) {
   }
 }
 
-type CartSummary = { items: Array<{ id: string; ticketId: string; quantity: number }> };
-
 export default function TicketsGrid({
   club,
   selectedDate,
@@ -56,13 +49,24 @@ export default function TicketsGrid({
     "dateHasEvent" | "event" | "eventTickets" | "generalTickets" | "freeTickets"
   >;
 }) {
+  const {
+    items: cartItems,
+    addTicket,
+    updateItemQuantity,
+    removeItem,
+    isLoading: cartLoading,
+    error: cartError
+  } = useCartContext();
+
+  // Club protection
+  const clubProtection = useClubProtection({
+    clubId: club.id,
+    clubName: club.name,
+  });
+  
   if (process.env.NODE_ENV !== "production") {
     console.assert(typeof TicketCard === "function", "[TicketsGrid] TicketCard import invalid");
   }
-
-  // Carts
-  const [ticketCart, setTicketCart] = useState<CartSummary | null>(null);
-  const [menuCart, setMenuCart] = useState<{ items: any[] } | null>(null);
 
 
 
@@ -74,29 +78,26 @@ export default function TicketsGrid({
   };
   const [activeChip, setActiveChip] = useState<"combos" | "general" | "gratis" | null>(null);
 
-  // Modal
-  const [showConfirmClearMenu, setShowConfirmClearMenu] = useState(false);
-  const [pendingTicket, setPendingTicket] = useState<TicketDTO | null>(null);
 
-  async function refreshCarts() {
-    const [t, m] = await Promise.all([getTicketCartSummary(), getMenuCartSummary()]);
-    setTicketCart(t as any);
-    setMenuCart(m as any);
-  }
-  useEffect(() => {
-    refreshCarts().catch(() => {});
-  }, []);
-
-  // qty map
+  // qty map - get ticket quantities from unified cart
   const qtyByTicketId = useMemo(() => {
     const map = new Map<string, { qty: number; itemId: string }>();
-    for (const it of ticketCart?.items ?? []) map.set(it.ticketId, { qty: it.quantity, itemId: it.id });
+    for (const item of cartItems) {
+      if (item.itemType === 'ticket' && item.ticketId) {
+        map.set(item.ticketId, { qty: item.quantity, itemId: item.id });
+      }
+    }
     return map;
-  }, [ticketCart]);
+  }, [cartItems]);
+
 
   // Category slices from enriched
   const ticketsGeneral = useMemo(() => tickets.filter((t) => (t as any).category === "general"), [tickets]);
-  const ticketsFree = useMemo(() => tickets.filter((t) => (t as any).category === "free"), [tickets]);
+  const ticketsFree = useMemo(() => tickets.filter((t) => {
+    const category = (t as any).category;
+    const price = Number(t.price || 0);
+    return category === "free" || (category === "event" && price === 0);
+  }), [tickets]);
 
   // Merge available ordering
   const mergedGeneral = useMemo(
@@ -187,30 +188,22 @@ export default function TicketsGrid({
   // Handlers
   async function handleAdd(t: TicketDTO) {
     if (!selectedDate) return;
-    if (menuCart && (menuCart.items?.length ?? 0) > 0) {
-      setPendingTicket(t);
-      setShowConfirmClearMenu(true);
-      return;
-    }
-    await addTicketToCart({ ticketId: t.id, date: selectedDate, quantity: 1 });
-    await refreshCarts();
+    
+    const addFunction = async () => {
+      await addTicket(t.id, selectedDate, 1);
+    };
+    
+    await clubProtection.handleAddWithProtection(addFunction);
   }
+  
   async function handleChangeQty(itemId: string, nextQty: number) {
-    if (nextQty <= 0) await removeTicketItem(itemId);
-    else await updateTicketQty({ id: itemId, quantity: nextQty });
-    await refreshCarts();
-  }
-  async function confirmClearMenuAndAdd() {
-    if (!pendingTicket || !selectedDate) return;
-    try {
-      await clearMenuCart();
-      await addTicketToCart({ ticketId: pendingTicket.id, date: selectedDate, quantity: 1 });
-    } finally {
-      setPendingTicket(null);
-      setShowConfirmClearMenu(false);
-      await refreshCarts();
+    if (nextQty <= 0) {
+      await removeItem(itemId);
+    } else {
+      await updateItemQuantity(itemId, nextQty);
     }
   }
+  
 
   // Section shell (ref type = React.Ref<HTMLDivElement> so useRef<HTMLDivElement|null> is OK)
   function Section({
@@ -340,17 +333,15 @@ export default function TicketsGrid({
         })}
       </Section>
 
-      {showConfirmClearMenu && (
-        <ConfirmModal
-          title="Tienes consumos en el carrito"
-          body="Para comprar entradas debes vaciar primero el carrito de consumos. ¿Quieres vaciarlo y continuar?"
-          onClose={() => {
-            setShowConfirmClearMenu(false);
-            setPendingTicket(null);
-          }}
-          onConfirm={confirmClearMenuAndAdd}
-        />
-      )}
+      {/* Club Change Modal */}
+      <CartClubChangeModal
+        isOpen={clubProtection.showClubModal}
+        onClose={clubProtection.handleCancelClubChange}
+        onClearCart={clubProtection.handleClearCartAndClose}
+        currentClubName={clubProtection.currentClubName}
+        newClubName={club.name}
+      />
+
     </section>
   );
 }

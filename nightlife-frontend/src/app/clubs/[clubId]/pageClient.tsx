@@ -1,7 +1,7 @@
 // src/app/clubs/[clubId]/pageClient.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { AnimatePresence, motion, type Transition } from "framer-motion";
 
 import { ClubHeader } from "@/components/domain/club/ClubHeader";
@@ -15,6 +15,8 @@ import TicketsGrid from "@/components/domain/club/TicketsGrid";
 import { PdfMenu } from "@/components/domain/club/PdfMenu";
 import { StructuredMenu } from "@/components/domain/club/menu/StructuredMenu";
 import GlobalCalendarPortal from "@/components/domain/club/GlobalCalendarPortal";
+import { CartDateChangeModal, CartClubChangeModal } from "@/components/cart";
+import { useCartContext } from "@/contexts/CartContext";
 
 import {
   getClubAdsCSR,
@@ -168,7 +170,70 @@ const tabMotion = {
 };
 
 export default function ClubPageClient({ clubId, clubSSR }: Props) {
+  // Cart context
+  const { items: cartItems, clearCart, isLoading } = useCartContext();
+  
+  // Modal state for date change warning
+  const [showDateChangeModal, setShowDateChangeModal] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<{ date: string; href?: string } | null>(null);
   const [tab, setTab] = useState<TabKey>("general");
+  
+  // Modal handlers
+  const handleDateChangeBlocked = () => {
+    setShowDateChangeModal(true);
+  };
+  
+  const handleClearCartAndClose = async () => {
+    await clearCart();
+    setShowDateChangeModal(false);
+    // If there's a pending navigation, execute it and switch to reservas tab
+    if (pendingNavigation) {
+      setSelectedDate(pendingNavigation.date);
+      setTab("reservas");
+      setPendingNavigation(null);
+    }
+  };
+
+  const handleCancelNavigation = () => {
+    setShowDateChangeModal(false);
+    setPendingNavigation(null);
+  };
+
+  // Safe date change handler that checks for cart items
+  const handleDateChange = useCallback((newDate: string) => {
+    if (cartItems.length > 0) {
+      // Store the pending navigation and show modal
+      setPendingNavigation({ date: newDate });
+      setShowDateChangeModal(true);
+    } else {
+      // Safe to change date
+      setSelectedDate(newDate);
+    }
+  }, [cartItems.length]);
+
+  // Handle ad date change requests
+  useEffect(() => {
+    const handleAdDateChangeRequest = (event: CustomEvent) => {
+      const { date, href } = event.detail;
+      
+      if (cartItems.length > 0) {
+        // Store the pending navigation and show modal (don't switch tabs yet)
+        setPendingNavigation({ date, href });
+        setShowDateChangeModal(true);
+      } else {
+        // Safe to change date immediately and switch to reservas tab
+        setSelectedDate(date);
+        setTab("reservas");
+      }
+    };
+
+    window.addEventListener('adDateChangeRequest', handleAdDateChangeRequest as EventListener);
+    
+    return () => {
+      window.removeEventListener('adDateChangeRequest', handleAdDateChangeRequest as EventListener);
+    };
+  }, [cartItems.length]);
+  
 
   // Start with SSR club; CSR will MERGE into this (not overwrite)
   const [club, setClub] = useState<ClubDTO>(clubSSR);
@@ -267,6 +332,37 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
         setDateCache({});
         return urlDate;
       }
+      
+      // If cart is still loading, don't set any date yet - let CartEffect handle it
+      if (isLoading) {
+        return prev;
+      }
+      
+      // Check if there are items in cart first, use most common date
+      // This applies both when prev is null AND when switching to reservas tab
+      if (cartItems.length > 0) {
+        const dateCounts = new Map<string, number>();
+        cartItems.forEach(item => {
+          if (item.date) {
+            dateCounts.set(item.date, (dateCounts.get(item.date) || 0) + 1);
+          }
+        });
+        
+        if (dateCounts.size > 0) {
+          const mostCommonDate = Array.from(dateCounts.entries())
+            .sort(([,a], [,b]) => b - a)[0][0];
+          
+          // Only change date if it's different from current or if switching to reservas tab
+          if (prev !== mostCommonDate && (prev == null || t === "reservas")) {
+            setAvailable(null);
+            setAvailError(null);
+            setDateCache({});
+            return mostCommonDate;
+          }
+        }
+      }
+      
+      // If no cart items and no previous date, fallback to today
       if (prev == null) {
         const today = todayLocal();
         setAvailable(null);
@@ -274,6 +370,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
         setDateCache({});
         return today;
       }
+      
       return prev;
     });
   };
@@ -282,7 +379,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     syncFromLocation();
     const off = installLocationObserver(syncFromLocation);
     return () => off();
-  }, [clubId, clubSSR]); // intentionally not depending on menuMeta to avoid loops
+  }, [clubId, clubSSR, cartItems]); // include cartItems to re-sync when cart changes
 
   // Test scroll function on mount when coming from ad
   useEffect(() => {
@@ -386,8 +483,9 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       const date = (t as any)?.availableDate;
       if (!date) continue;
 
-      const qty = (t as any)?.quantity;
-      if (qty != null && Number(qty) <= 0) continue;
+      // Include tickets with quantity = 0 so they show as "AGOTADO" in calendar
+      // const qty = (t as any)?.quantity;
+      // if (qty != null && Number(qty) <= 0) continue;
 
       if ((t as any).category !== "free") continue; // strict free category
       s.add(date);
@@ -413,15 +511,16 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     [club]
   );
 
-  // If user lands on "reservas" with no selection, auto-pick first event date
+  // Cart-based date selection is now handled in syncFromLocation function
+  // This ensures it works both on initial load and when switching tabs
+
+  // Auto-select date for first event when on reservas tab (fallback)
   useEffect(() => {
-    if (tab === "reservas" && !selectedDate) {
-      if (safeEvents.length > 0) {
-        const first = pickEventDate(safeEvents[0]);
-        setSelectedDate(first);
-      }
+    if (!isLoading && !selectedDate && tab === "reservas" && safeEvents.length > 0) {
+      const first = pickEventDate(safeEvents[0]);
+      setSelectedDate(first);
     }
-  }, [tab, selectedDate, safeEvents]);
+  }, [tab, selectedDate, safeEvents, isLoading]);
 
   // Tickets embedded in the selected event (if provided by backend)
   const selectedEventTickets = useMemo<TicketDTO[] | undefined>(() => {
@@ -547,7 +646,9 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                         }
                       : undefined
                   }
-                  onChooseDate={(d) => setSelectedDate(d)}
+                  onChooseDate={handleDateChange}
+                  clubId={club.id}
+                  clubName={club.name}
                 />
               </div>
 
@@ -621,6 +722,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
                       <StructuredMenu
                         clubId={String((club as any).id)}
+                        clubName={club.name}
                         selectedDate={selectedDate || undefined}
                         openDays={openDays}
                         eventDates={eventDates}
@@ -661,25 +763,36 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
         </AnimatePresence>
 
         {/* Single calendar instance rendered into whichever tab is active */}
-        <GlobalCalendarPortal
-          hostId={calendarHostId}
-          eventDates={eventDates}
-          freeDates={freeDates}
-          openDays={openDays}
-          selectedDate={selectedDate}
-          onSelect={(val: unknown) => {
-            let iso: string | null = null;
-            if (val instanceof Date) {
-              const y = val.getFullYear();
-              const m = String(val.getMonth() + 1).padStart(2, "0");
-              const d = String(val.getDate()).padStart(2, "0");
-              iso = `${y}-${m}-${d}`;
-            } else if (typeof val === "string") {
-              const m = val.match(/^\d{4}-\d{2}-\d{2}/);
-              if (m) iso = m[0];
-            }
-            if (iso) setSelectedDate(iso);
-          }}
+        {calendarHostId && (
+          <GlobalCalendarPortal
+            hostId={calendarHostId}
+            eventDates={eventDates}
+            freeDates={freeDates}
+            openDays={openDays}
+            selectedDate={selectedDate}
+            onSelect={(val: unknown) => {
+              let iso: string | null = null;
+              if (val instanceof Date) {
+                const y = val.getFullYear();
+                const m = String(val.getMonth() + 1).padStart(2, "0");
+                const d = String(val.getDate()).padStart(2, "0");
+                iso = `${y}-${m}-${d}`;
+              } else if (typeof val === "string") {
+                const m = val.match(/^\d{4}-\d{2}-\d{2}/);
+                if (m) iso = m[0];
+              }
+              if (iso) setSelectedDate(iso);
+            }}
+            hasCartItems={cartItems.length > 0}
+            onDateChangeBlocked={handleDateChangeBlocked}
+          />
+        )}
+        
+        {/* Date Change Warning Modal */}
+        <CartDateChangeModal
+          isOpen={showDateChangeModal}
+          onClose={handleCancelNavigation}
+          onClearCart={handleClearCartAndClose}
         />
       </div>
     </div>

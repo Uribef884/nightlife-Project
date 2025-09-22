@@ -3,31 +3,29 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  addMenuItemToCart,
-  addMenuVariantToCart,
   getMenuItemsForClubCSR,
   getAvailableMenuForDate,
-  getMenuCartSummaryCSR,
-  clearTicketCartForMenuCSR, // clears OTHER cart (tickets) when adding menu
-  updateMenuCartQty,
-  removeMenuCartItem,
   type MenuItemDTO,
   type MenuVariantDTO,
   type AvailableMenuResponse,
 } from "@/services/menu.service";
-import { getTicketCartSummary } from "@/services/cart.service";
+import { useCartContext } from "@/contexts/CartContext";
+import { useClubProtection } from "@/hooks/useClubProtection";
+import { CartClubChangeModal } from "@/components/cart";
 import { MenuItemCard } from "./MenuItemCard";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 /** Sticky category pill nav + sections + animated variants */
 export function StructuredMenu({ 
   clubId, 
+  clubName,
   selectedDate, 
   openDays, 
   eventDates, 
   freeDates 
 }: { 
   clubId: string; 
+  clubName?: string;
   selectedDate?: string;
   openDays?: Set<string>;
   eventDates?: Set<string>;
@@ -45,14 +43,21 @@ export function StructuredMenu({
     } | null;
   } | null>(null);
 
-  // Cart summaries
-  const [menuCart, setMenuCart] = useState<{
-    items: { id: string; menuItemId: string; variantId?: string | null; quantity: number }[];
-  } | null>(null);
-  const [ticketCart, setTicketCart] = useState<{ items: any[] } | null>(null);
+  const {
+    items: cartItems,
+    addMenuItem,
+    updateItemQuantity,
+    removeItem,
+    isLoading: cartLoading,
+    error: cartError
+  } = useCartContext();
 
-  // Confirm modal: clear ticket cart before adding menu
-  const [askClearTickets, setAskClearTickets] = useState<null | { proceed: () => Promise<void> }>(null);
+  // Club protection
+  const clubProtection = useClubProtection({
+    clubId,
+    clubName: clubName || "este club",
+  });
+
 
   // Helper function to validate if a date is a valid/open day
   const isValidDate = (date: string | null | undefined): boolean => {
@@ -93,38 +98,39 @@ export function StructuredMenu({
         
         // Use the new event-aware menu service if we have a selected date
         if (selectedDate) {
-          const [menuData, m, t] = await Promise.all([
-            getAvailableMenuForDate(clubId, selectedDate),
-            getMenuCartSummaryCSR(),
-            getTicketCartSummary(),
-          ]);
-          if (!alive) return;
-          
-          // Extract menu items from categories
-          const allItems: MenuItemDTO[] = [];
-          menuData.categories.forEach(category => {
-            allItems.push(...category.items);
-          });
-          
-          setItems(allItems.filter((it) => (it as any)?.isActive !== false));
-          setEventInfo({
-            dateHasEvent: menuData.dateHasEvent,
-            event: menuData.event
-          });
-          setMenuCart(m as any);
-          setTicketCart(t as any);
+          try {
+            const menuData = await getAvailableMenuForDate(clubId, selectedDate);
+            if (!alive) return;
+            
+            // Extract menu items from categories
+            const allItems: MenuItemDTO[] = [];
+            if (menuData?.categories) {
+              menuData.categories.forEach(category => {
+                if (category?.items) {
+                  allItems.push(...category.items);
+                }
+              });
+            }
+            
+            const filteredItems = allItems.filter((it) => (it as any)?.isActive !== false);
+            setItems(filteredItems);
+            setEventInfo({
+              dateHasEvent: menuData?.dateHasEvent || false,
+              event: menuData?.event || null
+            });
+          } catch (error) {
+            // Fallback to basic menu loading
+            const data = await getMenuItemsForClubCSR(clubId);
+            if (!alive) return;
+            setItems((data ?? []).filter((it) => (it as any)?.isActive !== false));
+            setEventInfo(null);
+          }
         } else {
           // Fallback to old service when no date is selected
-          const [data, m, t] = await Promise.all([
-            getMenuItemsForClubCSR(clubId),
-            getMenuCartSummaryCSR(),
-            getTicketCartSummary(),
-          ]);
+          const data = await getMenuItemsForClubCSR(clubId);
           if (!alive) return;
           setItems((data ?? []).filter((it) => (it as any)?.isActive !== false));
           setEventInfo(null);
-          setMenuCart(m as any);
-          setTicketCart(t as any);
         }
       } finally {
         if (alive) setLoading(false);
@@ -135,29 +141,26 @@ export function StructuredMenu({
     };
   }, [clubId, selectedDate]);
 
-  async function refreshCarts() {
-    const [m, t] = await Promise.all([getMenuCartSummaryCSR(), getTicketCartSummary()]);
-    setMenuCart(m as any);
-    setTicketCart(t as any);
-  }
-
   const qtyByItemId = useMemo(() => {
     const mp = new Map<string, { qty: number; id: string }>();
-    for (const it of menuCart?.items ?? []) {
-      if (it.variantId) continue; // parent-only quantity for items without variants
-      mp.set(String(it.menuItemId), { qty: it.quantity, id: it.id });
+    for (const item of cartItems) {
+      if (item.itemType === 'menu' && item.menuItemId && !item.variantId) {
+        mp.set(item.menuItemId, { qty: item.quantity, id: item.id });
+      }
     }
     return mp;
-  }, [menuCart]);
+  }, [cartItems]);
 
   const qtyByVariantId = useMemo(() => {
     const mp = new Map<string, { qty: number; id: string }>();
-    for (const it of menuCart?.items ?? []) {
-      if (!it.variantId) continue;
-      mp.set(String(it.variantId), { qty: it.quantity, id: it.id });
+    for (const item of cartItems) {
+      if (item.itemType === 'menu' && item.variantId) {
+        mp.set(item.variantId, { qty: item.quantity, id: item.id });
+      }
     }
     return mp;
-  }, [menuCart]);
+  }, [cartItems]);
+
 
   // Build categories map and items per category
   const categories = useMemo(() => {
@@ -199,49 +202,40 @@ export function StructuredMenu({
     }
   }
 
-  // Show a confirm modal if tickets cart has items, then run `proceed` on confirm
-  async function withTicketsClearGuard(proceed: () => Promise<void>) {
-    const hasTickets = (ticketCart?.items?.length ?? 0) > 0;
-    if (hasTickets) {
-      setAskClearTickets({
-        proceed: async () => {
-          try {
-            await clearTicketCartForMenuCSR(); // clear OTHER cart (tickets)
-            setAskClearTickets(null);
-            await proceed(); // now run the original add
-          } finally {
-            await refreshCarts();
-          }
-        },
-      });
-      return;
-    }
-    await proceed();
-    await refreshCarts();
-  }
 
   // Handlers
   async function handleAddItem(menuItemId: string) {
-    await withTicketsClearGuard(async () => {
-      await addMenuItemToCart({ menuItemId, quantity: 1 });
-    });
+    if (!selectedDate) {
+      console.error('No date selected for menu item');
+      return;
+    }
+    
+    const addFunction = async () => {
+      await addMenuItem(menuItemId, undefined, selectedDate, 1);
+    };
+    
+    await clubProtection.handleAddWithProtection(addFunction);
   }
+  
   async function handleAddVariant(menuItemId: string, variant: MenuVariantDTO) {
-    await withTicketsClearGuard(async () => {
-      await addMenuVariantToCart({
-        menuItemId,
-        variantId: String((variant as any).id),
-        quantity: 1,
-      });
-    });
+    if (!selectedDate) {
+      console.error('No date selected for menu variant');
+      return;
+    }
+    
+    const addFunction = async () => {
+      await addMenuItem(menuItemId, String((variant as any).id), selectedDate, 1);
+    };
+    
+    await clubProtection.handleAddWithProtection(addFunction);
   }
+  
   async function handleChangeQty(lineId: string, nextQty: number) {
     if (nextQty <= 0) {
-      await removeMenuCartItem(lineId);
+      await removeItem(lineId);
     } else {
-      await updateMenuCartQty({ id: lineId, quantity: nextQty });
+      await updateItemQuantity(lineId, nextQty);
     }
-    await refreshCarts();
   }
 
   // 🔎 Highlight active category while scrolling (aligned to stickyTop)
@@ -447,15 +441,15 @@ export function StructuredMenu({
         </section>
       ))}
 
-      {/* Confirm clearing OTHER cart (tickets) */}
-      {askClearTickets && (
-        <ConfirmModal
-          title="Tienes entradas en el carrito"
-          body="Para agregar consumos debes vaciar primero el carrito de entradas. ¿Quieres vaciarlo y continuar?"
-          onClose={() => setAskClearTickets(null)}
-          onConfirm={askClearTickets.proceed}
-        />
-      )}
+      {/* Club Change Modal */}
+      <CartClubChangeModal
+        isOpen={clubProtection.showClubModal}
+        onClose={clubProtection.handleCancelClubChange}
+        onClearCart={clubProtection.handleClearCartAndClose}
+        currentClubName={clubProtection.currentClubName}
+        newClubName={clubName || "este club"}
+      />
+
     </div>
   );
 }

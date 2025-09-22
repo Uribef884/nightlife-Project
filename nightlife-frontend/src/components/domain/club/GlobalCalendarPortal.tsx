@@ -18,6 +18,8 @@ type Props = {
   openDays: Set<string>;
   selectedDate: string | null;
   onSelect: (iso: string) => void;
+  hasCartItems?: boolean;
+  onDateChangeBlocked?: () => void;
 };
 
 export default function GlobalCalendarPortal({
@@ -27,6 +29,8 @@ export default function GlobalCalendarPortal({
   openDays,
   selectedDate,
   onSelect,
+  hasCartItems,
+  onDateChangeBlocked,
 }: Props) {
   const [mounted, setMounted] = useState(false);
   const [targetEl, setTargetEl] = useState<HTMLElement | null>(null);
@@ -141,6 +145,8 @@ export default function GlobalCalendarPortal({
       openDays={openDays}
       selectedDate={selectedDate}
       onSelect={onSelect}
+      hasCartItems={hasCartItems}
+      onDateChangeBlocked={onDateChangeBlocked}
     />,
     targetEl
   );

@@ -9,6 +9,9 @@ import { WOMPI_CONFIG } from "../config/wompi";
 import { generateTransactionSignature } from "../utils/generateWompiSignature";
 import { AppDataSource } from "../config/data-source";
 import { UnifiedPurchaseTransaction } from "../entities/UnifiedPurchaseTransaction";
+import { secureQuery, createQueryContext } from "../utils/secureQuery";
+import { createQueryRateLimiter, strictRateLimiter } from "../middlewares/queryRateLimiter";
+import { SSEController } from "./sse.controller";
 
 // In-memory store for temporary transaction data (in production, use Redis)
 const transactionStore = new Map<string, {
@@ -31,6 +34,26 @@ const transactionStore = new Map<string, {
 
 export class UnifiedCheckoutController {
   private checkoutService = new UnifiedCheckoutService();
+
+  /**
+   * Get Wompi acceptance tokens for privacy policy and personal data processing
+   * GET /checkout/unified/acceptance-tokens
+   */
+  getAcceptanceTokens = async (req: Request, res: Response): Promise<void> => {
+    try {
+      console.log("[UNIFIED-CHECKOUT-ACCEPTANCE-TOKENS] Getting acceptance tokens...");
+      
+      const acceptanceTokens = await wompiService().getAcceptanceTokens();
+      
+      res.json(acceptanceTokens);
+    } catch (error) {
+      console.error("[UNIFIED-CHECKOUT-ACCEPTANCE-TOKENS] Error:", error);
+      res.status(500).json({
+        success: false,
+        error: "Failed to get acceptance tokens"
+      });
+    }
+  };
 
   /**
    * Initiate unified checkout with Wompi integration
@@ -180,6 +203,9 @@ export class UnifiedCheckoutController {
         customerInfo
       });
 
+      // Get cart summary for price breakdown
+      const cartSummary = await this.checkoutService.cartService.calculateCartSummary(userId || undefined, sessionId || undefined);
+
       // 🚀 Start automatic checkout flow in background
       console.log(`[UNIFIED-CHECKOUT-INITIATE] 🚀 Starting automatic checkout flow for transaction: ${result.transactionId}`);
       this.startAutomaticUnifiedCheckout(result.transactionId, req, res);
@@ -189,10 +215,16 @@ export class UnifiedCheckoutController {
         success: true,
         transactionId: result.transactionId,
         total: result.totalPaid,
+        totalPaid: result.totalPaid, // Add totalPaid for frontend compatibility
         status: result.wompiStatus,
         message: "Checkout unificado iniciado exitosamente. Procesando pago automáticamente...",
         automaticCheckout: true,
         isFreeCheckout: result.isFreeCheckout,
+        // Add cart summary for price breakdown
+        subtotal: cartSummary.total,
+        serviceFee: cartSummary.operationalCosts,
+        discounts: 0,
+        actualTotal: cartSummary.actualTotal,
         customerInfo: {
           fullName: customerInfo.fullName,
           phoneNumber: customerInfo.phoneNumber,
@@ -440,10 +472,10 @@ export class UnifiedCheckoutController {
             return;
             
           } else if (status === WOMPI_CONFIG.STATUSES.ERROR) {
-            // ❌ ERROR → Map to declined, unlock cart, inform user
+            // ❌ ERROR → Map to error, unlock cart, inform user
             console.log(`[UNIFIED-CHECKOUT-AUTO] ❌ Transaction error: ${wompiTransactionId}`);
             
-            await this.updateUnifiedTransactionStatus(transactionId, "DECLINED");
+            await this.updateUnifiedTransactionStatus(transactionId, "ERROR");
             
             // Get stored transaction data to unlock cart
             const storedData = this.getStoredTransactionData(wompiTransactionId);
@@ -548,7 +580,7 @@ export class UnifiedCheckoutController {
   /**
    * Process successful Wompi unified checkout (mirror legacy pattern)
    */
-  private async processWompiSuccessfulUnifiedCheckout({
+  public async processWompiSuccessfulUnifiedCheckout({
     userId,
     sessionId,
     email,
@@ -629,18 +661,27 @@ export class UnifiedCheckoutController {
 
       if (existingTransaction) {
         // Map statuses to valid database values
-        let mappedStatus: "APPROVED" | "DECLINED" | "PENDING" | "VOIDED";
+        let mappedStatus: "APPROVED" | "DECLINED" | "PENDING" | "VOIDED" | "ERROR";
         
-        if (status === "APPROVED" || status === "PENDING" || status === "VOIDED") {
+        if (status === "APPROVED" || status === "PENDING" || status === "VOIDED" || status === "ERROR") {
           mappedStatus = status;
+        } else if (status === "TIMEOUT") {
+          // Map TIMEOUT to ERROR since we don't have a TIMEOUT status in DB
+          mappedStatus = "ERROR";
         } else {
-          // Map TIMEOUT, ERROR, and any other status to DECLINED
+          // Map any other unknown status to DECLINED
           mappedStatus = "DECLINED";
         }
         
         existingTransaction.paymentStatus = mappedStatus;
         await transactionRepo.save(existingTransaction);
         console.log(`[UNIFIED-CHECKOUT-AUTO] Updated transaction status to ${mappedStatus} (from ${status}): ${existingTransaction.id}`);
+        
+        // Broadcast status update via SSE
+        SSEController.broadcastStatusUpdate(transactionId, mappedStatus, {
+          originalStatus: status,
+          timestamp: new Date().toISOString()
+        });
       } else {
         console.warn(`[UNIFIED-CHECKOUT-AUTO] Transaction not found for status update: ${transactionId}`);
       }

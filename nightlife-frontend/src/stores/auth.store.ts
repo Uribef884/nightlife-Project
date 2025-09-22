@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { authService, type User } from '../services/domain/auth.service';
+import { useCartStore } from './cart.store';
 
 // Types for discriminated result
 export type ChangePasswordResult =
@@ -54,6 +55,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await authService.login(email, password);
+          
+          // Clear cart on successful login
+          try {
+            await useCartStore.getState().clearCart();
+          } catch (cartError) {
+            console.warn('Failed to clear cart on login:', cartError);
+          }
+          
           set({
             user: response.user,
             isAuthenticated: true,
@@ -74,6 +83,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await authService.register(email, password);
+          
+          // Clear cart on successful registration
+          try {
+            await useCartStore.getState().clearCart();
+          } catch (cartError) {
+            console.warn('Failed to clear cart on registration:', cartError);
+          }
+          
           set({
             user: response.user,
             isAuthenticated: true,
@@ -94,6 +111,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           await authService.logout();
+          
+          // Clear cart on logout
+          try {
+            await useCartStore.getState().clearCart();
+          } catch (cartError) {
+            console.warn('Failed to clear cart on logout:', cartError);
+          }
+          
           set({
             user: null,
             isAuthenticated: false,
@@ -101,7 +126,13 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
         } catch (error) {
-          // Even if logout fails on backend, clear local state
+          // Even if logout fails on backend, clear local state and cart
+          try {
+            await useCartStore.getState().clearCart();
+          } catch (cartError) {
+            console.warn('Failed to clear cart on logout (fallback):', cartError);
+          }
+          
           set({
             user: null,
             isAuthenticated: false,
@@ -234,7 +265,16 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // Set user directly (for OAuth callbacks)
-      setUser: (user: User | null) => {
+      setUser: async (user: User | null) => {
+        // Clear cart when setting user (OAuth login)
+        if (user) {
+          try {
+            await useCartStore.getState().clearCart();
+          } catch (cartError) {
+            console.warn('Failed to clear cart on OAuth login:', cartError);
+          }
+        }
+        
         set({
           user,
           isAuthenticated: !!user,

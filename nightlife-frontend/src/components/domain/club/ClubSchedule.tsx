@@ -90,7 +90,7 @@ export function ClubSchedule({ openDays, openHours }: Props) {
                 key={d}
                 className={[
                   "grid grid-cols-[3.5rem,1fr] items-center gap-2 rounded-lg px-2 py-1",
-                  isToday ? "bg-white/[0.06] ring-1 ring-white/10" : "bg-white/[0.02]",
+                  isToday ? "bg-nl-secondary/60 ring-1 ring-nl-secondary/30" : "bg-white/[0.02]",
                 ].join(" ")}
               >
                 <div className="text-white/75 text-xs">{DAY_LABEL_ES[d]}</div>

@@ -70,11 +70,31 @@ function OrdersContent() {
     }
   };
 
-  const formatShortDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' });
+  const formatShortDate = (dateString: string) => {
+    // Handle date-only strings (YYYY-MM-DD) from database
+    if (dateString && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // This is a date-only string, parse it as local date to avoid timezone issues
+      const [year, month, day] = dateString.split('-').map(Number);
+      const localDate = new Date(year, month - 1, day);
+      return localDate.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' });
+    }
+    
+    // Handle full datetime strings
+    return new Date(dateString).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' });
+  };
 
-  const formatFullDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+  const formatFullDate = (dateString: string) => {
+    // Handle date-only strings (YYYY-MM-DD) from database
+    if (dateString && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // This is a date-only string, parse it as local date to avoid timezone issues
+      const [year, month, day] = dateString.split('-').map(Number);
+      const localDate = new Date(year, month - 1, day);
+      return localDate.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    
+    // Handle full datetime strings
+    return new Date(dateString).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+  };
 
   const getStatusText = (status: string) => {
     switch (status) {
@@ -228,7 +248,16 @@ function OrdersContent() {
             isUsed: !!tp.isUsed,
             usedAt: tp.usedAt,
             expiresAt: purchase.date
-              ? new Date(purchase.date).toISOString()
+              ? (() => {
+                  // Handle date-only strings (YYYY-MM-DD) from database
+                  if (purchase.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    const [year, month, day] = purchase.date.split('-').map(Number);
+                    // Create event end time (1 AM next day in Colombia timezone)
+                    const eventEndDate = new Date(year, month - 1, day + 1, 1, 0, 0);
+                    return eventEndDate.toISOString();
+                  }
+                  return new Date(purchase.date).toISOString();
+                })()
               : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           });
         } catch (err) {
@@ -254,7 +283,17 @@ function OrdersContent() {
               isUsed: !!tp.isUsedMenu,
               usedAt: tp.menuQRUsedAt,
               expiresAt: purchase.date
-                ? new Date(purchase.date).toISOString()
+                ? (() => {
+                    // Handle date-only strings (YYYY-MM-DD) from database
+                    if (purchase.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                      const [year, month, day] = purchase.date.split('-').map(Number);
+                      // Create event end time (1 AM next day in Colombia timezone)
+                      const eventEndDate = new Date(year, month - 1, day + 1, 1, 0, 0);
+                      return eventEndDate.toISOString();
+                    }
+                    // Handle full datetime strings
+                    return new Date(purchase.date).toISOString();
+                  })()
                 : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
             });
           } catch (err) {
@@ -290,7 +329,17 @@ function OrdersContent() {
             isUsed: purchase.menuPurchases.some((mp: any) => mp.isUsed) || false,
             usedAt: purchase.menuPurchases.find((mp: any) => mp.usedAt)?.usedAt,
             expiresAt: purchase.date
-              ? new Date(purchase.date).toISOString()
+              ? (() => {
+                  // Handle date-only strings (YYYY-MM-DD) from database
+                  if (purchase.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    const [year, month, day] = purchase.date.split('-').map(Number);
+                    // Create event end time (1 AM next day in Colombia timezone)
+                    const eventEndDate = new Date(year, month - 1, day + 1, 1, 0, 0);
+                    return eventEndDate.toISOString();
+                  }
+                  // Handle full datetime strings
+                  return new Date(purchase.date).toISOString();
+                })()
               : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           });
         } catch (err) {
@@ -374,12 +423,46 @@ function OrdersContent() {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedQR]);
 
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString('es-CO', {
+  const formatDate = (dateString: string) => {
+    // Handle date-only strings (YYYY-MM-DD) from database
+    if (dateString && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // This is a date-only string, parse it as local date to avoid timezone issues
+      const [year, month, day] = dateString.split('-').map(Number);
+      const localDate = new Date(year, month - 1, day);
+      return localDate.toLocaleDateString('es-CO', {
+        year: 'numeric', month: 'long', day: 'numeric'
+      });
+    }
+    
+    // Handle full datetime strings
+    return new Date(dateString).toLocaleDateString('es-CO', {
       year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
     });
+  };
 
-  const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date();
+  const isExpired = (expiresAt: string) => {
+    if (!expiresAt) return false;
+    
+    // Handle date-only strings (YYYY-MM-DD) from database
+    if (expiresAt.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // This is a date-only string, parse it as local date to avoid timezone issues
+      const [year, month, day] = expiresAt.split('-').map(Number);
+      const eventDate = new Date(year, month - 1, day);
+      
+      // Create event end time (1 AM next day in Colombia timezone)
+      const eventEndDate = new Date(year, month - 1, day + 1, 1, 0, 0);
+      
+      // Get current time in Colombia timezone (UTC-5)
+      const nowUTC = new Date();
+      const colombiaOffset = -5 * 60; // Colombia is UTC-5
+      const nowColombia = new Date(nowUTC.getTime() + (colombiaOffset * 60 * 1000));
+      
+      return nowColombia > eventEndDate;
+    }
+    
+    // Handle full datetime strings
+    return new Date(expiresAt) < new Date();
+  };
 
   if (authLoading || loading) {
     return (
@@ -418,12 +501,15 @@ function OrdersContent() {
       {/* Header */}
       <div className="bg-nl-bg border-b border-white/10 px-4 py-4">
         <div className="flex items-center">
-          <Link href="/dashboard" className="mr-4 p-2 -ml-2">
-            <svg className="w-5 h-5 text-white/80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <Link 
+            href="/dashboard" 
+            className="inline-flex items-center text-nl-secondary hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 transition-colors"
+          >
+            <svg className="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
+            <span className="text-sm sm:text-base">Volver al perfil</span>
           </Link>
-          <h1 className="text-lg font-semibold text-white/90">Volver al perfil</h1>
         </div>
       </div>
 
@@ -436,7 +522,7 @@ function OrdersContent() {
             </svg>
             <h3 className="text-lg font-medium text-white/90 mb-2">No tienes compras aún</h3>
             <p className="text-sm text-white/70 mb-6">Cuando hagas una compra, aparecerá aquí</p>
-            <Link href="/clubs" className="bg-nl-accent hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-medium text-sm transition-colors">
+            <Link href="/" className="bg-nl-secondary hover:bg-purple-700 text-white px-6 py-3 rounded-2xl font-medium text-sm transition-colors">
               Explorar clubs
             </Link>
           </div>
@@ -636,9 +722,6 @@ function OrdersContent() {
               </div>
             ) : qrCodes.length === 0 ? (
               <div className="text-center py-12">
-                <svg className="w-16 h-16 text-white/40 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
                 <h3 className="text-lg font-medium text白/90 mb-2">No hay códigos QR disponibles</h3>
                 <p className="text-sm text-white/70">Esta compra no tiene códigos QR asociados</p>
               </div>

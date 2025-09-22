@@ -35,23 +35,32 @@ function goToReservasFromHref(href: string) {
   if (typeof window === "undefined") return false;
   try {
     const u = new URL(href, window.location.origin);
-    if (u.pathname !== window.location.pathname) return false;
-
     const date = u.searchParams.get("date") ?? undefined;
 
-    const url = new URL(window.location.href);
+    // For date changes, emit custom event and let parent handle validation
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      url.searchParams.set("date", date);
+      window.dispatchEvent(new CustomEvent('adDateChangeRequest', { 
+        detail: { date, href } 
+      }));
+      return true;
     }
-    const next = `${url.pathname}${url.search ? `?${url.searchParams.toString()}` : ""}#reservas`;
 
-    if (next !== window.location.href) {
-      history.pushState({}, "", next);
+    // For same page non-date changes, proceed normally
+    if (u.pathname === window.location.pathname) {
+      const url = new URL(window.location.href);
+      const next = `${url.pathname}${url.search ? `?${url.searchParams.toString()}` : ""}#reservas`;
+
+      if (next !== window.location.href) {
+        history.pushState({}, "", next);
+      }
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      return true;
     }
-    window.dispatchEvent(new HashChangeEvent("hashchange"));
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    return true;
-  } catch {
+
+    // For different page non-date changes, navigate normally
+    return false;
+  } catch (error) {
     return false;
   }
 }
@@ -152,9 +161,9 @@ export function AdLightbox({
         <button
           aria-label="Cerrar"
           onClick={onClose}
-          className="absolute left-4 top-4 text-white text-3xl font-bold"
+          className="absolute right-4 top-4 w-10 h-10 bg-white rounded-full flex items-center justify-center hover:bg-gray-100 transition-colors"
         >
-          ×
+          <span className="text-black text-2xl font-bold">×</span>
         </button>
 
         {/* Poster image */}

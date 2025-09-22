@@ -74,12 +74,6 @@ const IdCardIcon = (p: React.SVGProps<SVGSVGElement>) => (
     <path d="M13.5 10h5M13.5 12h5M13.5 14h3" stroke="currentColor" strokeWidth="1.5" />
   </svg>
 );
-const DoorIcon = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...p}>
-    <rect x="6" y="3" width="10" height="18" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-    <circle cx="14" cy="12" r="1" fill="currentColor" />
-  </svg>
-);
 const MusicIcon = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...p}>
     <path d="M9 18V5l12-2v13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -214,7 +208,7 @@ export function ClubHeader({ club }: Props) {
       </div>
 
       {/* ── Información (grid so icons never shrink) ── */}
-      {(club.dressCode || ageText || today?.open || club.extraInfo) && (
+      {(club.dressCode || ageText || club.extraInfo) && (
         <div className="mt-5 rounded-xl bg-white/[0.03] p-4 ring-1 ring-white/10">
           <div className="text-white font-semibold mb-3">Información:</div>
 
@@ -239,15 +233,6 @@ export function ClubHeader({ club }: Props) {
               </div>
             )}
 
-            {today?.open && (
-              <div className="grid grid-cols-[1.5rem,1fr] gap-3 items-start">
-                <DoorIcon className="h-6 w-6 mt-0.5 text-nl-accent" />
-                <div>
-                  <div className="text-white font-medium">Puertas abiertas:</div>
-                  <div className="text-white/80">{today.open}</div>
-                </div>
-              </div>
-            )}
 
             {club.extraInfo && (
               <div className="grid grid-cols-[1.5rem,1fr] gap-3 items-start">

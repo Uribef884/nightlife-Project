@@ -14,6 +14,8 @@ import { sendPasswordResetEmail } from "../services/emailService";
 import { OAuthService, GoogleUserInfo } from "../services/oauthService";
 import { sanitizeInput } from "../utils/sanitizeInput";
 import { anonymizeUser, canUserBeDeleted } from "../utils/anonymizeUser";
+import { AuthInputSanitizer, validateAuthInputs } from "../utils/authInputSanitizer";
+import { strictRateLimiter } from "../middlewares/queryRateLimiter";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
 const RESET_SECRET = process.env.RESET_SECRET || "dev-reset-secret";
@@ -21,15 +23,22 @@ const RESET_EXPIRY = "15m";
 
 export async function register(req: Request, res: Response): Promise<void> {
   try {
-    const sanitizedEmail = sanitizeInput(req.body.email?.toLowerCase().trim());
-    const password = req.body.password;
-    
-    if (!sanitizedEmail) {
-      res.status(400).json({ error: "Formato de email inválido" });
+    // Enhanced input validation and sanitization
+    const validation = validateAuthInputs({
+      email: req.body.email?.toLowerCase().trim(),
+      password: req.body.password,
+      name: req.body.name
+    });
+
+    if (!validation.isValid) {
+      res.status(400).json({ 
+        error: "Datos de entrada inválidos",
+        details: validation.errors
+      });
       return;
     }
-    
-    const email = sanitizedEmail;
+
+    const { email, password, name } = validation.sanitized;
 
     const result = authSchemaRegister.safeParse({ email, password });
 
@@ -76,15 +85,21 @@ export async function register(req: Request, res: Response): Promise<void> {
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
-  const sanitizedEmail = sanitizeInput(req.body.email?.toLowerCase().trim());
-  const password = req.body.password;
-  
-  if (!sanitizedEmail) {
-    res.status(400).json({ error: "Formato de email inválido" });
+  // Enhanced input validation and sanitization
+  const validation = validateAuthInputs({
+    email: req.body.email?.toLowerCase().trim(),
+    password: req.body.password
+  });
+
+  if (!validation.isValid) {
+    res.status(400).json({ 
+      error: "Datos de entrada inválidos",
+      details: validation.errors
+    });
     return;
   }
-  
-  const email = sanitizedEmail;
+
+  const { email, password } = validation.sanitized;
 
   if (!email || !password) {
     res.status(401).json({ error: "Credenciales inválidas" });
@@ -118,11 +133,16 @@ export async function login(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Clear anonymous cart
+  // Clear user's existing cart and anonymous cart
   const typedReq = req as AuthenticatedRequest;
   // Get sessionId directly from cookies, not from middleware-processed req.sessionId
   const sessionId = req.cookies?.sessionId;
 
+  // Clear user's existing cart first
+  const unifiedCartRepo = AppDataSource.getRepository(UnifiedCartItem);
+  await unifiedCartRepo.delete({ userId: user.id });
+
+  // Clear anonymous cart if exists
   if (sessionId) {
     await clearAnonymousCart(sessionId);
     res.clearCookie("sessionId", {
@@ -261,16 +281,20 @@ export async function deleteOwnUser(req: Request, res: Response): Promise<void> 
 
 
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
-  console.log('🔐 [AUTH_CONTROLLER] Forgot password request received:', req.body);
+  console.log('🔐 [AUTH_CONTROLLER] Forgot password request received');
   
-  const result = forgotPasswordSchema.safeParse(req.body);
-  if (!result.success) {
-    console.log('❌ [AUTH_CONTROLLER] Validation failed:', result.error);
+  // Enhanced input validation and sanitization
+  const validation = validateAuthInputs({
+    email: req.body.email?.toLowerCase().trim()
+  });
+
+  if (!validation.isValid) {
+    console.log('❌ [AUTH_CONTROLLER] Input validation failed:', validation.errors);
     res.status(200).json({ message: "Se ha enviado el enlace de restablecimiento." });
     return;
   }
 
-  const { email } = result.data;
+  const { email } = validation.sanitized;
   console.log('📧 [AUTH_CONTROLLER] Processing forgot password for email:', email);
   
   const user = await AppDataSource.getRepository(User).findOneBy({ email });
@@ -296,13 +320,21 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
 }
 
 export async function resetPassword(req: Request, res: Response): Promise<void> {
-  const result = resetPasswordSchema.safeParse(req.body);
-  if (!result.success) {
-    res.status(400).json({ error: "Datos de entrada inválidos" });
+  // Enhanced input validation and sanitization
+  const validation = validateAuthInputs({
+    resetToken: req.body.token,
+    password: req.body.newPassword
+  });
+
+  if (!validation.isValid) {
+    res.status(400).json({ 
+      error: "Datos de entrada inválidos",
+      details: validation.errors
+    });
     return;
   }
 
-  const { token, newPassword } = result.data;
+  const { resetToken: token, password: newPassword } = validation.sanitized;
 
   try {
     const payload = jwt.verify(token, RESET_SECRET) as { id: string };
@@ -334,16 +366,25 @@ export async function changePassword(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const result = changePasswordSchema.safeParse(req.body);
-    if (!result.success) {
+    // Enhanced input validation and sanitization
+    const validation = validateAuthInputs({
+      password: req.body.oldPassword
+    });
+
+    const newPasswordValidation = validateAuthInputs({
+      password: req.body.newPassword
+    });
+
+    if (!validation.isValid || !newPasswordValidation.isValid) {
       res.status(400).json({
-        error: "Invalid input",
-        details: result.error.flatten(),
+        error: "Datos de entrada inválidos",
+        details: [...validation.errors, ...newPasswordValidation.errors]
       });
       return;
     }
 
-    const { oldPassword, newPassword } = result.data;
+    const { password: oldPassword } = validation.sanitized;
+    const { password: newPassword } = newPasswordValidation.sanitized;
 
     const repo = AppDataSource.getRepository(User);
     const user = await repo.findOneBy({ id: userId });
@@ -489,7 +530,7 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     // Handle OAuth errors from Google
     if (error) {
       console.error('❌ Google OAuth error:', error, error_description);
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      const frontendUrl = process.env.FRONTEND_BASE_URL;
       res.redirect(`${frontendUrl}/auth/login?error=oauth_${error}`);
       return;
     }
@@ -597,7 +638,7 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     }
 
     // Redirect to frontend callback page with user data
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_BASE_URL;
     const redirectUrl = `${frontendUrl}/auth/google/callback?token=${token}&user=${encodeURIComponent(JSON.stringify({
       id: user.id,
       email: user.email,
@@ -612,7 +653,7 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
 
   } catch (error) {
     console.error("❌ Error in Google OAuth callback:", error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_BASE_URL;
     res.redirect(`${frontendUrl}/auth/login?error=oauth_failed`);
   }
 }

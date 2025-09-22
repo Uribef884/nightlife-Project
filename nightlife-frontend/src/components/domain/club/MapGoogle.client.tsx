@@ -205,7 +205,12 @@ export default function MapGoogle({
           center: pos,
           zoom,
           disableDefaultUI: true,
-          gestureHandling: "greedy",
+          gestureHandling: "cooperative",
+          // Additional options to minimize aggressive event listeners
+          clickableIcons: false,
+          keyboardShortcuts: false,
+          scrollwheel: true,
+          disableDoubleClickZoom: true,
         });
 
         new g.maps.Marker({ position: pos, map, title: center.label, icon });

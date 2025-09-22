@@ -51,18 +51,18 @@ export const getEventById = async (req: Request, res: Response) => {
 
     // Apply dynamic pricing to event tickets if they exist
     if (event.tickets && event.tickets.length > 0) {
-      const { computeDynamicPrice } = await import("../utils/dynamicPricing");
+      const { computeDynamicEventPrice } = await import("../utils/dynamicPricing");
       const ticketsWithDynamic = await Promise.all(event.tickets.map(async ticket => {
         let dynamicPrice = ticket.price;
         
         if (ticket.dynamicPricingEnabled && event.club) {
-          dynamicPrice = computeDynamicPrice({
-            basePrice: Number(ticket.price),
-            clubOpenDays: event.club.openDays,
-            openHours: event.club.openHours,
-            availableDate: event.availableDate,
-            useDateBasedLogic: true, // Events always use date-based logic
-          });
+          // Use dedicated event function instead of deprecated computeDynamicPrice
+          dynamicPrice = computeDynamicEventPrice(
+            Number(ticket.price),
+            event.availableDate,
+            event.openHours,
+            { isFree: Number(ticket.price) === 0 }
+          );
         }
         
         return {

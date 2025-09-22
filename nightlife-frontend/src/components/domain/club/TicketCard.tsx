@@ -136,6 +136,21 @@ export default function TicketCard({
   const available = getAvailable(ticket);
   const maxPerUser = getMaxPerUser(ticket);
   const soldOut = available !== null && available <= 0;
+  
+  // Check if ticket is unavailable due to grace period being over
+  // For event tickets, check if event time + grace period (1 hour) < current time
+  let isUnavailableDueToGracePeriod = false;
+  
+  if (ticket?.category === "event" && ticket?.availableDate) {
+    const eventDate = new Date(ticket.availableDate);
+    const gracePeriodEnd = new Date(eventDate.getTime() + 60 * 60 * 1000); // +1 hour
+    const now = new Date();
+    
+    isUnavailableDueToGracePeriod = now > gracePeriodEnd;
+    
+  }
+  
+  const isUnavailable = soldOut || isUnavailableDueToGracePeriod;
 
   const maxAllowed = useMemo(() => {
     const fromAvail = available == null ? Infinity : Math.max(0, available);
@@ -309,15 +324,15 @@ export default function TicketCard({
           <button
             type="button"
             onClick={() => onAdd()}
-            disabled={soldOut}
+            disabled={isUnavailable}
             className={[
               "w-full rounded-full py-2 text-sm font-semibold",
-              soldOut
+              isUnavailable
                 ? "bg-white/10 text-white/60 cursor-not-allowed"
                 : "bg-green-600 hover:bg-green-500 text-white",
             ].join(" ")}
           >
-            {soldOut ? "AGOTADO" : "Agregar al carrito"}
+            {isUnavailable ? (soldOut ? "AGOTADO" : "No disponible") : "Agregar al carrito"}
           </button>
         )}
       </div>

@@ -3,6 +3,9 @@ import { unifiedCheckoutController } from "../controllers/unifiedCheckout.contro
 
 const router = Router();
 
+// Get Wompi acceptance tokens
+router.get("/acceptance-tokens", unifiedCheckoutController.getAcceptanceTokens.bind(unifiedCheckoutController));
+
 // Initiate unified checkout
 router.post("/initiate", unifiedCheckoutController.initiateCheckout.bind(unifiedCheckoutController));
 

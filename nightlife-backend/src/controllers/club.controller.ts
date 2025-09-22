@@ -8,6 +8,8 @@ import { MenuPurchase } from "../entities/MenuPurchase";
 import { validateImageUrlWithResponse } from "../utils/validateImageUrl";
 import { sanitizeInput, sanitizeObject } from "../utils/sanitizeInput";
 import { cleanupClubS3Files } from "../utils/s3Cleanup";
+import { AuthInputSanitizer } from "../utils/authInputSanitizer";
+import { secureQuery, createQueryContext } from "../utils/secureQuery";
 
 // CREATE CLUB
 export async function createClub(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -608,56 +610,99 @@ function coerceToStringArray(input: any): string[] {
 
 export async function getFilteredClubs(req: Request, res: Response): Promise<void> {
   try {
-    const repo = AppDataSource.getRepository(Club);
-    const queryBuilder = repo.createQueryBuilder("club");
-
-    // Filter out soft-deleted clubs
-    queryBuilder.andWhere("club.isActive = :isActive", { isActive: true });
-    queryBuilder.andWhere("club.isDeleted = :isDeleted", { isDeleted: false });
-
+    // Enhanced input validation and sanitization for search
     const { query, city, musicType, openDays } = req.query;
-
-      // Sanitize and apply full-text query
-    if (query && typeof query === "string" && query.length < 100) {
-      const trimmed = query.trim().toLowerCase();
-
-      queryBuilder.andWhere(
-        `(LOWER(club.name) ILIKE :q
-          OR LOWER(club.description) ILIKE :q
-          OR LOWER(club.address) ILIKE :q
-          OR EXISTS (
-            SELECT 1 FROM unnest(club.musicType) AS mt
-            WHERE LOWER(mt) ILIKE :q
-          )
-        )`,
-        { q: `%${trimmed}%` }
-      );
+    
+    // Sanitize search query
+    let sanitizedQuery: string | undefined;
+    if (query && typeof query === "string") {
+      const queryValidation = AuthInputSanitizer.sanitizeSearchQuery(query);
+      if (!queryValidation.isValid) {
+        res.status(400).json({ 
+          error: "Invalid search query",
+          details: queryValidation.error
+        });
+        return;
+      }
+      sanitizedQuery = queryValidation.sanitizedValue;
     }
 
-    // Sanitize and filter city
-    if (typeof city === "string" && city.trim().length > 0) {
-      queryBuilder.andWhere("club.city = :city", { city: city.trim() });
+    // Sanitize city parameter
+    let sanitizedCity: string | undefined;
+    if (city && typeof city === "string") {
+      const cityValidation = AuthInputSanitizer.sanitizeSearchQuery(city);
+      if (!cityValidation.isValid) {
+        res.status(400).json({ 
+          error: "Invalid city parameter",
+          details: cityValidation.error
+        });
+        return;
+      }
+      sanitizedCity = cityValidation.sanitizedValue;
     }
+
+    // Use secure query with monitoring
+    const repo = secureQuery.getRepository(Club);
+    const context = createQueryContext('search_clubs', (req as any).user?.id, (req as any).sessionId);
+
+    // Build where conditions properly for TypeORM
+    const whereConditions: any = {
+      isActive: true,
+      isDeleted: false
+    };
+
+    if (sanitizedCity) {
+      whereConditions.city = sanitizedCity;
+    }
+
+    const clubs = await secureQuery.find(repo, {
+      where: whereConditions
+    }, context);
+
+    // Apply additional filters
+    let filteredClubs = clubs;
 
     // Music type filter
-    const musicArray = coerceToStringArray(musicType);
-    const validMusic = musicArray.filter(type => ALLOWED_MUSIC_TYPES.includes(type));
-    if (validMusic.length > 0) {
-      queryBuilder.andWhere("club.musicType && :musicType", { musicType: validMusic });
+    if (musicType) {
+      const musicArray = Array.isArray(musicType) ? musicType : [musicType];
+      const validMusic = musicArray
+        .filter(type => typeof type === 'string' && ALLOWED_MUSIC_TYPES.includes(type))
+        .map(type => type as string);
+      if (validMusic.length > 0) {
+        filteredClubs = filteredClubs.filter(club => 
+          validMusic.some(type => club.musicType.includes(type))
+        );
+      }
     }
 
     // Open days filter
-    const daysArray = coerceToStringArray(openDays);
-    const validDays = daysArray.filter(day => ALLOWED_DAYS.includes(day));
-    if (validDays.length > 0) {
-      queryBuilder.andWhere("club.openDays && :openDays", { openDays: validDays });
+    if (openDays) {
+      const daysArray = Array.isArray(openDays) ? openDays : [openDays];
+      const validDays = daysArray
+        .filter(day => typeof day === 'string' && ALLOWED_DAYS.includes(day))
+        .map(day => day as string);
+      if (validDays.length > 0) {
+        filteredClubs = filteredClubs.filter(club => 
+          validDays.some(day => club.openDays.includes(day))
+        );
+      }
     }
 
-    queryBuilder.orderBy("club.priority", "ASC");
+    // Apply text search filtering if query provided
+    if (sanitizedQuery) {
+      const trimmed = sanitizedQuery.toLowerCase();
+      filteredClubs = filteredClubs.filter(club => 
+        club.name.toLowerCase().includes(trimmed) ||
+        (club.description && club.description.toLowerCase().includes(trimmed)) ||
+        club.address.toLowerCase().includes(trimmed) ||
+        club.musicType.some(type => type.toLowerCase().includes(trimmed))
+      );
+    }
 
-    const clubs = await queryBuilder.getMany();
+    // Sort by priority
+    filteredClubs.sort((a, b) => (a.priority || 0) - (b.priority || 0));
 
-    const publicClubs = clubs.map(club => ({
+    const publicClubs = filteredClubs.map(club => ({
       id: club.id,
       name: club.name,
       description: club.description,

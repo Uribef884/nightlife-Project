@@ -235,7 +235,7 @@ export async function sendUnifiedTicketEmail(payload: UnifiedTicketEmailPayload)
 
 // 4) Password reset (same domain; branded template)
 export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = process.env.FRONTEND_BASE_URL;
   const resetUrl = `${frontendUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
 
   const html = generatePasswordResetEmailHTML({ resetUrl });

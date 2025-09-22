@@ -166,25 +166,36 @@ export async function getAvailableMenuForDate(
 }
 
 /** MENU CART — Add (no variant) */
-export async function addMenuItemToCart(input: { menuItemId: string; quantity: number }): Promise<void> {
+export async function addMenuItemToCart(input: { menuItemId: string; quantity: number; date: string }): Promise<void> {
   const url = joinUrl(API_BASE_CSR, `/unified-cart/add`);
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      itemType: 'menu',
+      menuItemId: input.menuItemId,
+      quantity: input.quantity,
+      date: input.date
+    }),
   });
   if (!res.ok) throw new Error("No se pudo agregar al carrito.");
 }
 
 /** MENU CART — Add (with variant) */
-export async function addMenuVariantToCart(input: { menuItemId: string; variantId: string; quantity: number }): Promise<void> {
+export async function addMenuVariantToCart(input: { menuItemId: string; variantId: string; quantity: number; date: string }): Promise<void> {
   const url = joinUrl(API_BASE_CSR, `/unified-cart/add`);
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      itemType: 'menu',
+      menuItemId: input.menuItemId,
+      variantId: input.variantId,
+      quantity: input.quantity,
+      date: input.date
+    }),
   });
   if (!res.ok) throw new Error("No se pudo agregar la variante al carrito.");
 }

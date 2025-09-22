@@ -20,7 +20,26 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={quicksand.variable}>
+    <html lang="es" className={quicksand.variable} data-scroll-behavior="smooth">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Suppress passive event listener warnings from Google Maps
+              // These warnings are expected from third-party libraries and can't be controlled
+              const originalError = console.error;
+              console.error = function(...args) {
+                const message = args[0];
+                if (typeof message === 'string' && 
+                    message.includes('Added non-passive event listener to a scroll-blocking')) {
+                  return; // Suppress this specific warning
+                }
+                originalError.apply(console, args);
+              };
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-screen bg-slate-900 text-slate-100 antialiased font-sans">
         <Providers>
           <div className="flex min-h-screen flex-col">

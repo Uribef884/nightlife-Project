@@ -12,8 +12,21 @@ export type AdLike = {
   link?: string | null;
 };
 
-type TicketDTO = { id: string; clubId: string; availableDate?: string | null };
-type EventDTO  = { id: string; clubId: string; availableDate?: string | null; date?: string | null };
+type TicketDTO = { 
+  id: string; 
+  clubId: string; 
+  availableDate?: string | null;
+  isActive?: boolean;
+  isDeleted?: boolean;
+};
+type EventDTO = { 
+  id: string; 
+  clubId: string; 
+  availableDate?: string | null; 
+  date?: string | null;
+  isActive?: boolean;
+  isDeleted?: boolean;
+};
 
 function apiBase(): string {
   return typeof window === "undefined" ? API_BASE_SSR : API_BASE_CSR;
@@ -79,7 +92,7 @@ function parseTargetFromLink(link?: string | null):
 
   // query form: ?ticketId=.. or ?eventId=..
   try {
-    const u = new URL(link, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    const u = new URL(link, typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_FRONTEND_URL);
     const qp = u.searchParams;
     const t = qp.get("ticketId") || qp.get("ticket") || qp.get("tid");
     if (t && isIdLike(t)) return { type: "ticket", id: t };

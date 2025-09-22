@@ -22,8 +22,7 @@ export type ApiOptions = {
 
 // ---------- NEW: shared base URL helper ----------
 export const API_BASE =
-  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) ||
-  "http://localhost:4000";
+  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL);
 
 export const apiUrl = (path: string) => {
   if (path.startsWith("/")) return `${API_BASE}${path}`;

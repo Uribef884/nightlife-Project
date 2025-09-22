@@ -226,7 +226,7 @@ export const lockAndValidateCart = async (
   if (!lockCart(userId, sessionId, transactionId, cartType)) {
     return { 
       success: false, 
-      error: "Cart is currently being processed by another transaction. Please wait or try again." 
+      error: "Carrito actualmente siendo procesado por otra transacción. Por favor, espere o intente nuevamente." 
     };
   }
   
@@ -237,7 +237,7 @@ export const lockAndValidateCart = async (
     const where = userId !== null ? { userId } : sessionId !== null && sessionId !== undefined ? { sessionId } : undefined;
     if (!where) {
       unlockCart(userId, sessionId);
-      return { success: false, error: "Missing session or user" };
+      return { success: false, error: "Falta sesión o usuario" };
     }
     
     const cartItems = await cartRepo.find({
@@ -247,7 +247,7 @@ export const lockAndValidateCart = async (
     
     if (!cartItems.length) {
       unlockCart(userId, sessionId);
-      return { success: false, error: "Cart is empty" };
+      return { success: false, error: "Carrito vacío" };
     }
     
     // Check cart expiration
@@ -255,8 +255,21 @@ export const lockAndValidateCart = async (
     const age = Math.floor((Date.now() - new Date(oldest.createdAt).getTime()) / (1000 * 60));
     
     if (age > 30) {
+      // Clear expired cart items
+      try {
+        const cartRepo = AppDataSource.getRepository(UnifiedCartItem);
+        const where = userId !== null ? { userId } : sessionId !== null && sessionId !== undefined ? { sessionId } : undefined;
+        
+        if (where) {
+          await cartRepo.delete(where);
+          console.log(`[CART-LOCK] 🗑️ Cleared expired cart for ${userId ? `user ${userId}` : `session ${sessionId}`}`);
+        }
+      } catch (clearError) {
+        console.error(`[CART-LOCK] ❌ Error clearing expired cart:`, clearError);
+      }
+      
       unlockCart(userId, sessionId);
-      return { success: false, error: "Cart expired. Please start over." };
+      return { success: false, error: "Carrito expirado. Por favor, inicie nuevamente." };
     }
     
     return { success: true, cartItems };
@@ -265,7 +278,7 @@ export const lockAndValidateCart = async (
     // If validation fails, unlock the cart
     unlockCart(userId, sessionId);
     console.error(`[CART-LOCK] Error validating cart:`, error);
-    return { success: false, error: "Failed to validate cart contents" };
+    return { success: false, error: "Error al validar los contenidos del carrito" };
   }
 };
 

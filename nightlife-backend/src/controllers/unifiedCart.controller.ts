@@ -2,6 +2,8 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../types/express";
 import { UnifiedCartService } from "../services/unifiedCart.service";
 import { isCartLockedSmart } from "../utils/cartLock";
+import { AppDataSource } from "../config/data-source";
+import { UnifiedCartItem } from "../entities/UnifiedCartItem";
 
 export class UnifiedCartController {
   private cartService = new UnifiedCartService();
@@ -145,6 +147,22 @@ export class UnifiedCartController {
       const userId = req.user?.id;
       const sessionId = !userId && req.sessionId ? req.sessionId : undefined;
 
+      // First check if cart has any items to avoid unnecessary dynamic pricing calculations
+      const cartRepo = AppDataSource.getRepository(UnifiedCartItem);
+      const where = userId !== null ? { userId } : sessionId !== null && sessionId !== undefined ? { sessionId } : undefined;
+      
+      if (!where) {
+        res.status(200).json([]);
+        return;
+      }
+
+      const itemCount = await cartRepo.count({ where });
+      if (itemCount === 0) {
+        res.status(200).json([]);
+        return;
+      }
+
+      // Only run dynamic pricing if there are items
       const cartItems = await this.cartService.getCartItemsWithDynamicPricing(userId, sessionId);
       res.status(200).json(cartItems);
     } catch (err) {
@@ -162,6 +180,40 @@ export class UnifiedCartController {
       const userId = req.user?.id;
       const sessionId = !userId && req.sessionId ? req.sessionId : undefined;
 
+      // First check if cart has any items to avoid unnecessary dynamic pricing calculations
+      const cartRepo = AppDataSource.getRepository(UnifiedCartItem);
+      const where = userId !== null ? { userId } : sessionId !== null && sessionId !== undefined ? { sessionId } : undefined;
+      
+      if (!where) {
+        res.status(200).json({
+          items: [],
+          ticketSubtotal: 0,
+          menuSubtotal: 0,
+          totalSubtotal: 0,
+          itemCount: 0,
+          serviceFee: 0,
+          discounts: 0,
+          total: 0
+        });
+        return;
+      }
+
+      const itemCount = await cartRepo.count({ where });
+      if (itemCount === 0) {
+        res.status(200).json({
+          items: [],
+          ticketSubtotal: 0,
+          menuSubtotal: 0,
+          totalSubtotal: 0,
+          itemCount: 0,
+          serviceFee: 0,
+          discounts: 0,
+          total: 0
+        });
+        return;
+      }
+
+      // Only run dynamic pricing if there are items
       const summary = await this.cartService.calculateCartSummary(userId, sessionId);
       res.status(200).json(summary);
     } catch (err) {

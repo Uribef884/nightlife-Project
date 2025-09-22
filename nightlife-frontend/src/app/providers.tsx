@@ -7,6 +7,7 @@
 import { ReactNode, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "../contexts/AuthContext";
+import { CartProvider } from "../contexts/CartContext";
 
 export function Providers({ children }: { children: ReactNode }) {
   // create one QueryClient per app on the client
@@ -15,7 +16,9 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        {children}
+        <CartProvider>
+          {children}
+        </CartProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

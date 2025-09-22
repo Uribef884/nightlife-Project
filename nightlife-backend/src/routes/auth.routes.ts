@@ -18,6 +18,7 @@ import { requireAuth } from "../middlewares/requireAuth";
 import { honeypotMiddleware } from "../middlewares/honeypotMiddleware";
 import { validateAuthInput } from "../middlewares/validateAuthInput";
 import { rateLimiter, loginLimiter } from "../middlewares/rateLimiter";
+import { strictRateLimiter } from "../middlewares/queryRateLimiter";
 
 const router = Router();
 
@@ -25,18 +26,18 @@ const router = Router();
 router.post("/register", rateLimiter, honeypotMiddleware, validateAuthInput(), register);
 router.post("/login", loginLimiter, honeypotMiddleware, validateAuthInput(), login);
 
-// ✅ Forgot/reset password
-router.post("/forgot-password", rateLimiter, honeypotMiddleware, forgotPassword);
-router.post("/reset-password", resetPassword);
+// ✅ Forgot/reset password - with strict rate limiting for security
+router.post("/forgot-password", strictRateLimiter, honeypotMiddleware, forgotPassword);
+router.post("/reset-password", strictRateLimiter, honeypotMiddleware, resetPassword);
 
 // ✅ Google OAuth routes
 router.get("/google", googleAuth);
 router.get("/google/callback", googleCallback);
 router.post("/google/token", rateLimiter, googleTokenAuth);
 
-// Authenticated user routes
+// Authenticated user routes - with rate limiting for security
 router.post("/logout", requireAuth, logout);
-router.post("/change-password", requireAuth, changePassword);
+router.post("/change-password", requireAuth, strictRateLimiter, changePassword);
 router.delete("/me", requireAuth, deleteOwnUser);
 router.get("/me", requireAuth, getCurrentUser); // New route to test something in mock frontend
 router.get("/me/deletion-status", requireAuth, checkUserDeletionStatus);

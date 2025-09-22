@@ -123,8 +123,8 @@ export function generatePasswordResetEmailHTML({
                                          <div style="margin-bottom:16px;">
                        <h4 style="margin:0 0 8px 0; font-size:14px; color:#d7c8f5; font-family:Arial,Helvetica,sans-serif;">Enlaces Importantes</h4>
                        <ul style="margin:0 0 0 18px; color:#b5bdd1; font-size:13px; font-family:Arial,Helvetica,sans-serif;">
-                         <li><a href="${process.env.FRONTEND_BASE_URL || 'http://localhost:3000'}/terms" style="color:#6B3FA0;text-decoration:none;">Términos y Servicio</a></li>
-                         <li><a href="${process.env.FRONTEND_BASE_URL || 'http://localhost:3000'}/privacy" style="color:#6B3FA0;text-decoration:none;">Política de Privacidad</a></li>
+                         <li><a href="${process.env.FRONTEND_BASE_URL}/terms" style="color:#6B3FA0;text-decoration:none;">Términos y Servicio</a></li>
+                         <li><a href="${process.env.FRONTEND_BASE_URL}/privacy" style="color:#6B3FA0;text-decoration:none;">Política de Privacidad</a></li>
                        </ul>
                      </div>
                     

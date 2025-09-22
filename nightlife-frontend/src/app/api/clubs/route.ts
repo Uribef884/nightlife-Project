@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { rateLimit } from "@/middlewares/rateLimit";
 
 /** Config */
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:4000";
+const BACKEND_URL = process.env.BACKEND_URL;
 const TIMEOUT_MS = 8000;
 
 /** Helpers */

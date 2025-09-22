@@ -1,588 +1,644 @@
-import { getDay, differenceInMinutes, isValid } from "date-fns";
-import { DYNAMIC_PRICING, getEventPricingMultiplier, getEventPricingReason } from "../config/fees";
+import {
+  DYNAMIC_PRICING,
+  getEventTicketPricingMultiplier,
+  getEventMenuPricingMultiplier,
+  getEventTicketPricingReason,
+  getMenuEventPricingReason, // explicit reasons for event menu
+  getCoversPricingReason,
+  getMenuNormalPricingReason,
+  getFreeTicketReason,
+  getTicketDisabledReason,
+  getMenuParentHasVariantsReason,
+  getMenuVariantDisabledReason
+} from "../config/fees";
 
-const dayMap: Record<string, number> = {
-  Sunday: 0, Monday: 1, Tuesday: 2,
-  Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6,
-};
+/**
+ * ──────────────────────────────────────────────────────────────────────────────
+ *  TIMEZONE UTILITIES  —  keep math in UTC, interpret schedules in Bogotá TZ
+ * ──────────────────────────────────────────────────────────────────────────────
+ */
+const BOGOTA_TZ = "America/Bogota";
 
-const PRICING_RULES = {
-  CLOSED_DAY: DYNAMIC_PRICING.CLOSED_DAY,
-  EARLY: DYNAMIC_PRICING.EARLY,
-  INVALID: 1,              // No discount if data is invalid
-  EVENT_48_PLUS: DYNAMIC_PRICING.EVENT.HOURS_48_PLUS,
-  EVENT_24_48: DYNAMIC_PRICING.EVENT.HOURS_24_48,
-  EVENT_LESS_24: DYNAMIC_PRICING.EVENT.HOURS_LESS_24,
-};
+/** Format a UTC instant as Bogotá wall-clock for logs (no double shift). */
+function formatBogota(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BOGOTA_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).format(d);
+}
 
+/** Convert a Bogotá wall-clock (y,m,d, hh:mm) to the true UTC instant. */
+function bogotaClockToUTC(
+  year: number,
+  month1to12: number,
+  day: number,
+  hour0to23: number,
+  minute0to59: number
+): Date {
+  // Bogotá is UTC-5 → UTC = Bogotá + 5h
+  return new Date(Date.UTC(year, month1to12 - 1, day, hour0to23 + 5, minute0to59, 0, 0));
+}
+
+/** Read the calendar date (Y/M/D) of a UTC instant as seen in Bogotá. */
+function getBogotaYMD(d: Date): { y: number; m: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BOGOTA_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(d);
+
+  const y = Number(parts.find(p => p.type === "year")!.value);
+  const m = Number(parts.find(p => p.type === "month")!.value);
+  const day = Number(parts.find(p => p.type === "day")!.value);
+  return { y, m, day };
+}
+
+/** Build the Bogotá open/close window (as UTC instants) for a given reference date. */
+function buildBogotaOpenCloseUTC(
+  referenceDate: Date,
+  hours: { open: string; close: string }
+): { openUTC: Date; closeUTC: Date } {
+  const { y, m, day } = getBogotaYMD(referenceDate);
+  const [oh, om] = hours.open.trim().split(":").map(Number);
+  const [ch, cm] = hours.close.trim().split(":").map(Number);
+
+  const openUTC = bogotaClockToUTC(y, m, day, oh, om);
+  let closeUTC = bogotaClockToUTC(y, m, day, ch, cm);
+
+  // Cross-midnight → close is next Bogotá day
+  if (closeUTC.getTime() <= openUTC.getTime()) {
+    closeUTC = new Date(closeUTC.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return { openUTC, closeUTC };
+}
+
+/**
+ * If a "date-only" value arrives as 00:00:00Z (e.g., '2025-09-18T00:00:00.000Z'),
+ * that is *not* the intended instant locally. Normalize it to the intended Bogotá
+ * calendar day by anchoring at Bogotá noon (stable reference).
+ */
+function normalizeToBogotaDay(ref: Date): Date {
+  const [ys, ms, ds] = ref.toISOString().slice(0, 10).split("-");
+  const y = Number(ys), m = Number(ms), d = Number(ds);
+  return bogotaClockToUTC(y, m, d, 12, 0); // 12:00 Bogotá
+}
+
+/** Derive an event start UTC instant from eventDate + Bogotá open time (handles date-only). */
+function buildEventStartUTC(eventDate: Date, eventOpenHours?: { open: string; close: string }): Date {
+  if (!eventOpenHours?.open) return new Date(eventDate); // assume it's already the true instant
+  const [oh, om] = eventOpenHours.open.split(":").map(Number);
+
+  // If eventDate is a date-only midnight Z, interpret its Y-M-D as the intended Bogotá date
+  const isMidnightZ =
+    eventDate.getUTCHours() === 0 &&
+    eventDate.getUTCMinutes() === 0 &&
+    eventDate.getUTCSeconds() === 0 &&
+    eventDate.getUTCMilliseconds() === 0;
+
+  if (isMidnightZ) {
+    const [ys, ms, ds] = eventDate.toISOString().slice(0, 10).split("-");
+    return bogotaClockToUTC(Number(ys), Number(ms), Number(ds), oh, om);
+  }
+
+  // Otherwise, keep the Bogotá calendar day derived from the actual instant
+  const { y, m, day } = getBogotaYMD(eventDate);
+  return bogotaClockToUTC(y, m, day, oh, om);
+}
+
+/** Consistent "now" bundle for logs (do not use strings for math). */
+function nowForLogs() {
+  const nowUTC = new Date();
+  return {
+    now_utc: nowUTC.toISOString(),
+    now_bogota: formatBogota(nowUTC),
+    tz: BOGOTA_TZ
+  };
+}
+
+/** Public helper kept for compatibility (true UTC now). */
+export function getCurrentColombiaTime(): Date {
+  return new Date();
+}
+
+/** 
+ * PRICE GUARD — prevents negatives and prevents discounts from exceeding base.
+ * NOTE: For surcharges (event tickets <24h / grace), this still caps to base
+ * only where business rules require it. We only call this where discounts apply.
+ */
 function clampPrice(price: number, basePrice: number): number {
-  // Ensure price is not negative and not more than basePrice
   if (price < 0) return 0;
   if (price > basePrice) return basePrice;
   return price;
 }
 
-function parseOpenHour(openHour: string): { open: Date, close: Date } | null {
-  try {
-    const [openStr, closeStr] = openHour.split('-');
-    const [openHourNum, openMinuteNum] = openStr.trim().split(':').map(Number);
-    const [closeHourNum, closeMinuteNum] = closeStr.trim().split(':').map(Number);
-    const now = new Date();
-    const open = new Date(now.getFullYear(), now.getMonth(), now.getDate(), openHourNum, openMinuteNum);
-    let close = new Date(now.getFullYear(), now.getMonth(), now.getDate(), closeHourNum, closeMinuteNum);
-    if (close <= open) {
-      // Crosses midnight, so close is next day
-      close.setDate(close.getDate() + 1);
-    }
-    return { open, close };
-  } catch {
-    return null;
-  }
-}
+/**
+ * Is the club open *now* for the intended Bogotá calendar day of `referenceDate`?
+ * Returns window UTC instants so we can compute minutes-until-open correctly.
+ */
+function isDateOpen(
+  referenceDate: Date,
+  openHoursArr: { day: string; open: string; close: string }[],
+  clubOpenDays: string[]
+): { isOpen: boolean; openTime?: Date; closeTime?: Date } {
+  const logs = nowForLogs();
+  const nowUTC = new Date();
 
-function getNextOpenClose(now: Date, openHoursArr: { day: string, open: string, close: string }[], clubOpenDays: string[]): { open: Date, close: Date } | null {
-  // Returns the next open and close Date objects after 'now', or null if not found
-  const dayIndexes = clubOpenDays.map(day => dayMap[day]);
-  
-  for (let offset = 0; offset < 8; offset++) { // look up to a week ahead
-    const checkDate = new Date(now);
-    checkDate.setDate(now.getDate() + offset);
-    const checkDay = checkDate.getDay();
-    
-    if (!dayIndexes.includes(checkDay)) {
-      continue;
-    }
-    
-    const dayName = Object.keys(dayMap).find(key => dayMap[key] === checkDay);
-    const hours = openHoursArr.find(h => h.day === dayName);
-    if (!hours) {
-      continue;
-    }
-    
-    const [openHourNum, openMinuteNum] = hours.open.trim().split(":").map(Number);
-    const [closeHourNum, closeMinuteNum] = hours.close.trim().split(":").map(Number);
-    
-    const open = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate(), openHourNum, openMinuteNum);
-    let close = new Date(checkDate.getFullYear(), checkDate.getMonth(), checkDate.getDate(), closeHourNum, closeMinuteNum);
-    
-    if (close <= open) {
-      close.setDate(close.getDate() + 1); // cross-midnight
-    }
-    
-    if (open > now) {
-      return { open, close };
-    }
-    if (now >= open && now < close) {
-      return { open, close };
-    }
-  }
-  
-  return null;
-}
+  // Normalize to intended Bogotá day (fixes date-only inputs)
+  const refBogotaDay = normalizeToBogotaDay(referenceDate);
 
-function isDateOpen(referenceDate: Date, openHoursArr: { day: string, open: string, close: string }[], clubOpenDays: string[]): { isOpen: boolean; openTime?: Date; closeTime?: Date } {
-  const dayIndex = referenceDate.getDay();
-  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const dayName = dayNames[dayIndex];
-  
-  // Check if this day is an open day
+  // Weekday as seen in Bogotá for the intended day
+  const dayName = new Intl.DateTimeFormat("en-US", { timeZone: BOGOTA_TZ, weekday: "long" }).format(refBogotaDay);
+
   if (!clubOpenDays.includes(dayName)) {
+    console.log(`[IS-DATE-OPEN] Closed weekday for selected date`, {
+      ...logs,
+      selected_bogota_day: dayName,
+      clubOpenDays
+    });
     return { isOpen: false };
   }
-  
-  // Find the open hours for this day
+
   const hours = openHoursArr.find(h => h.day === dayName);
   if (!hours) {
+    console.log(`[IS-DATE-OPEN] No hours configured for weekday`, {
+      ...logs,
+      selected_bogota_day: dayName
+    });
     return { isOpen: false };
   }
-  
-  const [openHour, openMinute] = hours.open.trim().split(":").map(Number);
-  const [closeHour, closeMinute] = hours.close.trim().split(":").map(Number);
-  
-  const openTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), openHour, openMinute);
-  let closeTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), closeHour, closeMinute);
-  
-  // Handle cross-midnight
-  if (closeTime <= openTime) {
-    closeTime.setDate(closeTime.getDate() + 1);
-  }
-  
-  const isOpen = referenceDate >= openTime && referenceDate < closeTime;
-  
-  return { isOpen, openTime, closeTime };
+
+  const { openUTC, closeUTC } = buildBogotaOpenCloseUTC(refBogotaDay, hours);
+
+  const isOpen = nowUTC.getTime() >= openUTC.getTime() && nowUTC.getTime() < closeUTC.getTime();
+
+  console.log(`[IS-DATE-OPEN] Window & now`, {
+    ...logs,
+    selected_bogota_day: dayName,
+    open_utc: openUTC.toISOString(),
+    open_bogota: formatBogota(openUTC),
+    close_utc: closeUTC.toISOString(),
+    close_bogota: formatBogota(closeUTC),
+    isOpen
+  });
+
+  return { isOpen, openTime: openUTC, closeTime: closeUTC };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC API
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface DynamicPriceInput {
   basePrice: number;
   clubOpenDays: string[];
-  openHours: string | { day: string, open: string, close: string }[];
+  openHours: string | { day: string; open: string; close: string }[];
   availableDate?: Date;
   useDateBasedLogic?: boolean;
 }
 
 /**
- * Generic dynamic pricing function:
- * - Applies time-to-open discount for general covers and menu
- * - Applies date-based logic for event tickets if useDateBasedLogic = true
+ * Generic dynamic pricing:
+ * - Covers/Menu (non-event): time-to-open discounts
+ * - Event style (useDateBasedLogic=true): time-to-event windows (reuses covers tiers)
+ * 
+ * @deprecated For events, use dedicated event functions instead:
+ * - computeDynamicEventPrice() for event tickets
+ * - computeDynamicMenuEventPrice() for event menu items
+ * - getEventTicketDynamicPricingReason() for event ticket reasons
+ * - getMenuEventDynamicPricingReason() for event menu reasons
  */
 export function computeDynamicPrice(input: DynamicPriceInput): number {
-  const {
-    basePrice,
-    clubOpenDays,
-    openHours,
-    availableDate,
-    useDateBasedLogic = false
-  } = input;
+  const { basePrice, clubOpenDays, openHours, availableDate, useDateBasedLogic = false } = input;
 
+  if (!basePrice || basePrice <= 0 || isNaN(basePrice)) return 0;
 
+  const nowUTC = new Date();
 
-  if (!basePrice || basePrice <= 0 || isNaN(basePrice)) {
-    return 0;
-  }
-  if (basePrice === 0) {
-    return 0;
-  }
-
-  const now = new Date();
-
-  // 🎟️ EVENT TICKET LOGIC - Use same time-based rules as regular tickets
+  // Event-style window when requested
   if (useDateBasedLogic && availableDate) {
-    // Ensure availableDate is a Date object
-    const eventDate = availableDate instanceof Date ? availableDate : new Date(availableDate);
-    if (isNaN(eventDate.getTime())) {
-      console.error('[DP] Invalid availableDate:', availableDate);
-      return basePrice;
-    }
-    
-    // For event tickets, treat the event date as the "next open time"
-    const minutesUntilEvent = Math.round((eventDate.getTime() - now.getTime()) / 60000);
-    
-    if (minutesUntilEvent > 180) {
-      // More than 3 hours before event: 30% off
-      const discountedPrice = clampPrice(Math.round(basePrice * PRICING_RULES.CLOSED_DAY * 100) / 100, basePrice);
-      return discountedPrice;
-    } else if (minutesUntilEvent > 120) {
-      // 2-3 hours before event: 10% off
-      const discountedPrice = clampPrice(Math.round(basePrice * PRICING_RULES.EARLY * 100) / 100, basePrice);
-      return discountedPrice;
+    console.warn('[DEPRECATED] computeDynamicPrice with useDateBasedLogic=true is deprecated for events. Use dedicated event functions instead: computeDynamicEventPrice(), computeDynamicMenuEventPrice(), etc.');
+    const eventStartUTC = buildEventStartUTC(availableDate instanceof Date ? availableDate : new Date(availableDate));
+    const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+
+    if (hoursUntilEvent > 3) {
+      return clampPrice(Math.round(basePrice * DYNAMIC_PRICING.COVERS.HOURS_3_PLUS * 100) / 100, basePrice);
+    } else if (hoursUntilEvent > 2) {
+      return clampPrice(Math.round(basePrice * DYNAMIC_PRICING.COVERS.HOURS_2_3 * 100) / 100, basePrice);
     } else {
-      // 2 hours or less before event or during event: full price
       return basePrice;
     }
   }
 
-  // 📆 General Day/Time-Based Logic (covers, menu)
-  // For general tickets, use the selected date if provided, otherwise use current time
-  const referenceDate = availableDate ? (availableDate instanceof Date ? availableDate : new Date(availableDate)) : new Date();
-  
-  let openHoursArr = Array.isArray(openHours) ? openHours : [];
+  // Covers/Menu general (non-event)
   if (!Array.isArray(openHours) && typeof openHours === "string") {
-    // fallback: treat as always open
+    // Treat as always open → base
     return basePrice;
   }
-  
 
-  
-  // Check if the selected date is open
-  const dateStatus = isDateOpen(referenceDate, openHoursArr, clubOpenDays);
-  
+  const referenceDate = availableDate
+    ? (availableDate instanceof Date ? availableDate : new Date(availableDate))
+    : new Date();
 
-  
-  if (dateStatus.isOpen) {
-    // Club is open on the selected date - no discount
-    return basePrice;
-  }
-  
-  // Club is closed on the selected date - check if it's the same day or different day
+  const dateStatus = isDateOpen(referenceDate, openHours as any, clubOpenDays);
+
+  if (dateStatus.isOpen) return basePrice;
+
   if (dateStatus.openTime) {
-    // Use CURRENT TIME to calculate minutes until the club opens on the selected date
-    const now = new Date();
-    const minutesUntilOpen = Math.round((dateStatus.openTime.getTime() - now.getTime()) / 60000);
-    
+    const minutesUntilOpen = Math.round((dateStatus.openTime.getTime() - nowUTC.getTime()) / 60000);
+
     if (minutesUntilOpen > 180) {
-      // More than 3 hours before open on the same day: 30% off
-      const multiplier = PRICING_RULES.CLOSED_DAY;
-      const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
-      return discountedPrice;
+      return clampPrice(Math.round(basePrice * DYNAMIC_PRICING.COVERS.HOURS_3_PLUS * 100) / 100, basePrice);
     } else if (minutesUntilOpen > 120) {
-      // 2-3 hours before open on the same day: 10% off
-      const multiplier = PRICING_RULES.EARLY;
-      const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
-      return discountedPrice;
+      return clampPrice(Math.round(basePrice * DYNAMIC_PRICING.COVERS.HOURS_2_3 * 100) / 100, basePrice);
     } else {
-      // 2 hours or less before open or during open hours: full price
       return basePrice;
     }
   }
-  
-  // Different day and closed: 30% off
-  const multiplier = PRICING_RULES.CLOSED_DAY;
-  const discountedPrice = clampPrice(Math.round(basePrice * multiplier * 100) / 100, basePrice);
-  return discountedPrice;
+
+  // Closed day → next open is different day → 30% off
+  return clampPrice(Math.round(basePrice * DYNAMIC_PRICING.COVERS.HOURS_3_PLUS * 100) / 100, basePrice);
 }
 
 /**
- * Dynamic pricing for menu items on normal (non-event) days
- * - Club Closed Days: 30% discount
- * - Club Open Days, 3+ hours before opening: 30% discount  
- * - Club Open Days, < 3 hours before opening: 10% discount
- * - During Club Open Hours: Base price (no discount)
+ * Menu items on normal (non-event) days (variants policy enforced)
+ * Rules:
+ * - Closed day → 30% off
+ * - 3+ hours before open → 30% off
+ * - <3 hours before open → 10% off
+ * - During open hours → base
+ * - Policy:
+ *    - Parent (has variants) → no DP
+ *    - Variant with dynamicEnabled=false → no DP
  */
 export function computeDynamicMenuNormalPrice(input: {
   basePrice: number;
   clubOpenDays: string[];
-  openHours: { day: string, open: string, close: string }[];
+  openHours: { day: string; open: string; close: string }[];
   selectedDate?: Date;
+  isVariant?: boolean;           // optional
+  parentHasVariants?: boolean;   // optional
+  dynamicEnabled?: boolean;      // optional
 }): number {
-  const { basePrice, clubOpenDays, openHours, selectedDate } = input;
+  const { basePrice, clubOpenDays, openHours, selectedDate, isVariant, parentHasVariants, dynamicEnabled } = input;
 
-  if (!basePrice || basePrice <= 0) {
-    return 0;
+  if (!basePrice || basePrice <= 0) return 0;
+
+  // Policy gates
+  if (parentHasVariants && !isVariant) {
+    // Parent item with variants cannot have DP
+    return basePrice;
+  }
+  if (isVariant && dynamicEnabled === false) {
+    // Variant can disable DP independently
+    return basePrice;
   }
 
-  // Use the selected date if provided, otherwise use current time
-  let referenceDate: Date;
-  if (selectedDate) {
-    if (selectedDate instanceof Date) {
-      referenceDate = selectedDate;
-    } else {
-      // Parse date string and force to noon to avoid timezone issues
-      const dateStr = String(selectedDate);
-      if (dateStr.includes('T')) {
-        referenceDate = new Date(dateStr);
-      } else {
-        // If it's just a date string like "2025-09-14", append noon time
-        referenceDate = new Date(dateStr + 'T12:00:00');
-      }
-    }
-  } else {
-    referenceDate = new Date();
+  const rawRef =
+    selectedDate instanceof Date
+      ? selectedDate
+      : selectedDate
+      ? new Date(String(selectedDate).includes("T") ? String(selectedDate) : String(selectedDate) + "T12:00:00Z")
+      : new Date();
+
+  const referenceDate = normalizeToBogotaDay(rawRef);
+
+  const dayName = new Intl.DateTimeFormat("en-US", { timeZone: BOGOTA_TZ, weekday: "long" }).format(referenceDate);
+
+  if (!clubOpenDays.includes(dayName)) {
+    // Closed weekday → 30% off
+    return Math.round(basePrice * DYNAMIC_PRICING.MENU.CLOSED_DAY * 100) / 100;
   }
-  
-  // Check if the selected date is an open day
-  const dayIndex = referenceDate.getDay();
-  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const dayName = dayNames[dayIndex];
-  
-  const isOpenDay = clubOpenDays.includes(dayName);
-  
-  
-  if (!isOpenDay) {
-    // Club Closed Days: 30% discount
-    const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
-    return finalPrice;
-  }
-  
-  // Club is open on this day - check hours
+
   const hours = openHours.find(h => h.day === dayName);
   if (!hours) {
-    // No hours defined for this day, treat as closed
-    const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
-    return finalPrice;
+    // No hours configured → treat as closed
+    return Math.round(basePrice * DYNAMIC_PRICING.MENU.CLOSED_DAY * 100) / 100;
   }
-  
-  // Parse opening hours
-  const [openHour, openMinute] = hours.open.split(':').map(Number);
-  const [closeHour, closeMinute] = hours.close.split(':').map(Number);
-  
-  // Create opening time for the selected date
-  const openTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), openHour, openMinute);
-  let closeTime = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate(), closeHour, closeMinute);
-  
-  // Handle cross-midnight
-  if (closeTime <= openTime) {
-    closeTime.setDate(closeTime.getDate() + 1);
-  }
-  
-  const now = new Date();
-  const minutesUntilOpen = Math.round((openTime.getTime() - now.getTime()) / 60000);
-  const isCurrentlyOpen = now >= openTime && now < closeTime;
-  
-  
+
+  const { openUTC, closeUTC } = buildBogotaOpenCloseUTC(referenceDate, hours);
+  const nowUTC = new Date();
+
+  const isCurrentlyOpen = nowUTC.getTime() >= openUTC.getTime() && nowUTC.getTime() < closeUTC.getTime();
+  const minutesUntilOpen = Math.round((openUTC.getTime() - nowUTC.getTime()) / 60000);
+
   if (isCurrentlyOpen) {
-    // During Club Open Hours: Base price (no discount)
     return basePrice;
   } else if (minutesUntilOpen > 180) {
-    // Club Open Days, 3+ hours before opening: 30% discount
-    const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
-    return finalPrice;
+    return Math.round(basePrice * DYNAMIC_PRICING.MENU.HOURS_3_PLUS * 100) / 100;
   } else if (minutesUntilOpen > 0) {
-    // Club Open Days, < 3 hours before opening: 10% discount
-    const finalPrice = Math.round(basePrice * 0.9 * 100) / 100;
-    return finalPrice;
+    return Math.round(basePrice * DYNAMIC_PRICING.MENU.HOURS_LESS_3 * 100) / 100;
   } else {
-    // Club is closed for the day (after hours)
-    const finalPrice = Math.round(basePrice * 0.7 * 100) / 100;
-    return finalPrice;
+    // After hours → closed rule for menu
+    return Math.round(basePrice * DYNAMIC_PRICING.MENU.CLOSED_DAY * 100) / 100;
   }
 }
 
 /**
- * Dynamic pricing for general covers (non-event tickets)
+ * Covers (non-event)
+ * Rules:
+ * - 3+ hours before open → 30% off
+ * - 2–3 hours before open → 10% off
+ * - <2 hours before open → base
+ * - During open hours → base
  */
-export function computeDynamicCoverPrice(input: Omit<DynamicPriceInput, 'useDateBasedLogic'>): number {
-  return computeDynamicPrice({ ...input, useDateBasedLogic: false });
-}
+export function computeDynamicCoverPrice(input: Omit<DynamicPriceInput, "useDateBasedLogic">): number {
+  const { basePrice, clubOpenDays, openHours, availableDate } = input;
 
-/**
- * Get dynamic pricing reason for normal tickets (covers, menu)
- */
-export function getNormalTicketDynamicPricingReason(input: DynamicPriceInput): string | undefined {
-  const {
-    clubOpenDays,
-    openHours,
-    availableDate,
-  } = input;
+  if (!basePrice || basePrice <= 0 || isNaN(basePrice)) return 0;
 
+  const rawRef = availableDate ? (availableDate instanceof Date ? availableDate : new Date(availableDate)) : new Date();
+  const referenceDate = normalizeToBogotaDay(rawRef);
 
-
-  // Use the selected date if provided, otherwise use current time
-  const referenceDate = availableDate ? (availableDate instanceof Date ? availableDate : new Date(availableDate)) : new Date();
-  let openHoursArr = Array.isArray(openHours) ? openHours : [];
-  
   if (!Array.isArray(openHours) && typeof openHours === "string") {
-    return undefined; // No dynamic pricing
+    // Treat as always open
+    return basePrice;
   }
-  
-  // Check if the selected date is open
-  const dateStatus = isDateOpen(referenceDate, openHoursArr, clubOpenDays);
-  
 
-  
-  if (dateStatus.isOpen) {
-    // Club is open on the selected date - no discount
-    return undefined;
-  }
-  
-  // Club is closed on the selected date - check if it's the same day or different day
+  const dateStatus = isDateOpen(referenceDate, openHours as any, clubOpenDays);
+  const nowUTC = new Date();
+
+  if (dateStatus.isOpen) return basePrice;
+
   if (dateStatus.openTime) {
-    // Use CURRENT TIME to calculate minutes until the club opens on the selected date
-    const now = new Date();
-    const minutesUntilOpen = Math.round((dateStatus.openTime.getTime() - now.getTime()) / 60000);
-    
+    const minutesUntilOpen = Math.round((dateStatus.openTime.getTime() - nowUTC.getTime()) / 60000);
+
     if (minutesUntilOpen > 180) {
-      // More than 3 hours before open on the same day: 30% off
-      return "closed_day";
+      return clampPrice(Math.round(basePrice * DYNAMIC_PRICING.COVERS.HOURS_3_PLUS * 100) / 100, basePrice);
     } else if (minutesUntilOpen > 120) {
-      // 2-3 hours before open on the same day: 10% off
-      return "early";
+      return clampPrice(Math.round(basePrice * DYNAMIC_PRICING.COVERS.HOURS_2_3 * 100) / 100, basePrice);
     } else {
-      // 2 hours or less before open or during open hours: full price
-      return "open";
+      return basePrice;
     }
   }
-  
-  // Different day and closed: 30% off
-  return "closed_day";
+
+  // Closed & next open is on another day → 30% off
+  return clampPrice(Math.round(basePrice * DYNAMIC_PRICING.COVERS.HOURS_3_PLUS * 100) / 100, basePrice);
+}
+
+/** Reason for covers/menu (non-event) based on Bogotá-aware windows. */
+export function getNormalTicketDynamicPricingReason(input: DynamicPriceInput): string | undefined {
+  const { clubOpenDays, openHours, availableDate } = input;
+
+  if (!Array.isArray(openHours) && typeof openHours === "string") {
+    return undefined; // Treated as always open → no DP reason
+  }
+
+  const rawRef = availableDate ? (availableDate instanceof Date ? availableDate : new Date(availableDate)) : new Date();
+  const referenceDate = normalizeToBogotaDay(rawRef);
+
+  const dateStatus = isDateOpen(referenceDate, openHours as any, clubOpenDays);
+
+  if (dateStatus.isOpen) {
+    return getCoversPricingReason(0, true, false);
+  }
+
+  if (dateStatus.openTime) {
+    const nowUTC = new Date();
+    const minutesUntilOpen = Math.round((dateStatus.openTime.getTime() - nowUTC.getTime()) / 60000);
+    return getCoversPricingReason(minutesUntilOpen, false, false);
+  }
+
+  // Closed on a different day
+  return getCoversPricingReason(0, false, true);
 }
 
 /**
- * Get dynamic pricing reason for event tickets
+ * Get dynamic pricing reason for menu (normal days), with variant policy
  */
-export function getEventTicketDynamicPricingReason(eventDate: Date, eventOpenHours?: { open: string, close: string }): string | undefined {
-  if (!(eventDate instanceof Date) || isNaN(eventDate.getTime())) {
-    return undefined;
+export function getMenuDynamicPricingReason(input: {
+  basePrice: number;
+  clubOpenDays: string[];
+  openHours: { day: string; open: string; close: string }[];
+  selectedDate?: Date;
+  isVariant?: boolean;           // optional
+  parentHasVariants?: boolean;   // optional
+  dynamicEnabled?: boolean;      // optional
+}): string | undefined {
+  const { basePrice, clubOpenDays, openHours, selectedDate, isVariant, parentHasVariants, dynamicEnabled } = input;
+  if (!basePrice || basePrice <= 0) return undefined;
+
+  // Policy reasons first
+  if (parentHasVariants && !isVariant) {
+    return getMenuParentHasVariantsReason();
   }
-  
-  // Combine event date with event open time to get the actual event start time
-  let eventStartTime = new Date(eventDate);
-  
-  if (eventOpenHours && eventOpenHours.open) {
-    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
-    
-    // Handle the case where eventDate is a date string from database (like "2025-07-29")
-    if (eventDate.toISOString().includes('T00:00:00')) {
-      // This is a date-only string from database, create proper event time
-      const dateStr = eventDate.toISOString().split('T')[0];
-      const [year, month, day] = dateStr.split('-').map(Number);
-      
-      // Create event start time in local timezone (Colombian time)
-      eventStartTime = new Date(year, month - 1, day, openHour, openMinute, 0, 0);
-    } else {
-      // This is already a proper datetime, just set the hours
-      eventStartTime = new Date(eventDate);
-      eventStartTime.setHours(openHour, openMinute, 0, 0);
-    }
+  if (isVariant && dynamicEnabled === false) {
+    return getMenuVariantDisabledReason();
   }
-  
-  const now = new Date();
-  const hoursUntilEvent = Math.floor(
-    (eventStartTime.getTime() - now.getTime()) / (1000 * 60 * 60)
-  );
-  
-  if (isNaN(hoursUntilEvent)) {
-    return undefined;
+
+  const referenceDate =
+    selectedDate instanceof Date
+      ? selectedDate
+      : selectedDate
+      ? new Date(String(selectedDate).includes("T") ? String(selectedDate) : String(selectedDate) + "T12:00:00Z")
+      : new Date();
+
+  const dayName = new Intl.DateTimeFormat("en-US", { timeZone: BOGOTA_TZ, weekday: "long" }).format(referenceDate);
+
+  if (!clubOpenDays.includes(dayName)) {
+    return getMenuNormalPricingReason(0, false, true, false);
   }
-  
-  if (hoursUntilEvent >= 48) {
-    // 48+ hours away: 30% discount
-    return "event_advance";
+
+  const hours = openHours.find(h => h.day === dayName);
+  if (!hours) return getMenuNormalPricingReason(0, false, true, false);
+
+  const { openUTC, closeUTC } = buildBogotaOpenCloseUTC(referenceDate, hours);
+  const nowUTC = new Date();
+
+  if (nowUTC.getTime() >= openUTC.getTime() && nowUTC.getTime() < closeUTC.getTime()) {
+    return getMenuNormalPricingReason(0, true, false, false);
   }
-  if (hoursUntilEvent >= 24) {
-    // 24-48 hours away: base price
-    return undefined; // No discount
+
+  if (nowUTC.getTime() < openUTC.getTime()) {
+    const minutesUntilOpen = Math.round((openUTC.getTime() - nowUTC.getTime()) / 60000);
+    return getMenuNormalPricingReason(minutesUntilOpen, false, false, false);
   }
-  if (hoursUntilEvent >= 0) {
-    // Less than 24 hours: 20% surplus
-    return "event_last_minute";
-  }
-  
-  // Event has started - check grace period
-  const hoursSinceEventStarted = Math.abs(hoursUntilEvent);
-  if (hoursSinceEventStarted <= 1) {
-    // Within 1 hour grace period: 30% surplus
-    return "event_grace_period";
-  }
-  
-  // Event has passed grace period: blocked
-  return "event_expired";
+
+  // After-hours today
+  return getMenuNormalPricingReason(0, false, false, true);
 }
 
 /**
- * Dynamic pricing for menu items on event dates
- * - Menu items can get discounts but NEVER surcharges (floor at base price)
- * - Uses event time windows but caps at base price
+ * Menu items on event days
+ * Rules:
+ * - 48+ hours → 30% off
+ * - 24–48 hours → base
+ * - <24 hours → base (no surcharge for menu)
+ * - During event open hours → base (explicit reason)
+ * Policy:
+ *   - Parent (has variants) → no DP
+ *   - Variant with dynamicEnabled=false → no DP
  */
-export function computeDynamicMenuEventPrice(basePrice: number, eventDate: Date, eventOpenHours?: { open: string, close: string }): number {
+export function computeDynamicMenuEventPrice(
+  basePrice: number,
+  eventDate: Date,
+  eventOpenHours?: { open: string; close: string },
+  options?: { isVariant?: boolean; parentHasVariants?: boolean; dynamicEnabled?: boolean } // optional
+): number {
+  const { isVariant, parentHasVariants, dynamicEnabled } = options || {};
+
   if (!basePrice || basePrice <= 0 || isNaN(basePrice) || !(eventDate instanceof Date) || isNaN(eventDate.getTime())) {
     return 0;
   }
-  if (basePrice === 0) {
-    return 0;
+
+  // Policy gates
+  if (parentHasVariants && !isVariant) return basePrice;
+  if (isVariant && dynamicEnabled === false) return basePrice;
+
+  const nowUTC = new Date();
+  const eventStartUTC = buildEventStartUTC(eventDate, eventOpenHours);
+
+  // If we know the open/close window for the event, treat in-window as base (explicit)
+  let isOpenDuringEvent = false;
+  let hasEventEnded = false;
+  if (eventOpenHours?.open && eventOpenHours?.close) {
+    const { openUTC, closeUTC } = buildBogotaOpenCloseUTC(eventStartUTC, eventOpenHours);
+    isOpenDuringEvent = nowUTC >= openUTC && nowUTC < closeUTC;
+    hasEventEnded = nowUTC >= closeUTC;
+    if (isOpenDuringEvent) return basePrice; // explicit base during event
   }
-  
-  // Combine event date with event open time to get the actual event start time
-  let eventStartTime = new Date(eventDate);
-  
-  if (eventOpenHours && eventOpenHours.open) {
-    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
-    
-    // Handle the case where eventDate is a date string from database (like "2025-07-29")
-    if (eventDate.toISOString().includes('T00:00:00')) {
-      // This is a date-only string from database, create proper event time
-      const dateStr = eventDate.toISOString().split('T')[0];
-      const [year, month, day] = dateStr.split('-').map(Number);
-      
-      // Create event start time in local timezone (Colombian time)
-      eventStartTime = new Date(year, month - 1, day, openHour, openMinute, 0, 0);
-    } else {
-      // This is already a proper datetime, just set the hours
-      eventStartTime = new Date(eventDate);
-      eventStartTime.setHours(openHour, openMinute, 0, 0);
-    }
-  }
-  
-  const now = new Date();
-  const hoursUntilEvent = Math.floor(
-    (eventStartTime.getTime() - now.getTime()) / (1000 * 60 * 60)
-  );
-  
-  console.log(`[MENU-DP-EVENT] Event pricing calculation:`, {
-    eventStartTime: eventStartTime.toISOString(),
-    currentTime: now.toISOString(),
-    hoursUntilEvent,
-    basePrice,
-    eventOpenHours
-  });
-  
-  if (isNaN(hoursUntilEvent)) {
-    console.log(`[MENU-DP-EVENT] Invalid hours calculation, returning base price`);
-    return basePrice;
-  }
-  
+
+  const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+
   let multiplier: number;
-  
   if (hoursUntilEvent >= 48) {
-    // 48+ hours away: 30% discount
-    multiplier = DYNAMIC_PRICING.EVENT.HOURS_48_PLUS; // 0.7
-    console.log(`[MENU-DP-EVENT] Using 48+ hours rule: ${multiplier} (${hoursUntilEvent}h away)`);
+    multiplier = DYNAMIC_PRICING.EVENT_MENU.HOURS_48_PLUS;
   } else if (hoursUntilEvent >= 24) {
-    // 24-48 hours away: base price
-    multiplier = DYNAMIC_PRICING.EVENT.HOURS_24_48; // 1.0
-    console.log(`[MENU-DP-EVENT] Using 24-48 hours rule: ${multiplier} (${hoursUntilEvent}h away)`);
+    multiplier = DYNAMIC_PRICING.EVENT_MENU.HOURS_24_48;
   } else {
-    // <24 hours: base price (NEVER apply surcharges to menu items)
-    multiplier = DYNAMIC_PRICING.EVENT.HOURS_24_48; // 1.0 (base price, not surcharge)
-    console.log(`[MENU-DP-EVENT] Using <24 hours rule: ${multiplier} (${hoursUntilEvent}h away)`);
+    multiplier = DYNAMIC_PRICING.EVENT_MENU.HOURS_LESS_24; // base
   }
-  
-  // Calculate price and clamp to never exceed base price
-  const calculatedPrice = Math.round(basePrice * multiplier * 100) / 100;
-  const finalPrice = Math.min(calculatedPrice, basePrice); // Floor at base price
-  console.log(`[MENU-DP-EVENT] Final calculation: ${basePrice} * ${multiplier} = ${calculatedPrice} → ${finalPrice}`);
+
+  const calculated = Math.round(basePrice * multiplier * 100) / 100;
+  const finalPrice = Math.min(calculated, basePrice); // never exceed base for menu
   return finalPrice;
 }
 
+/** Reason for menu items on event days (explicit Option A reasons). */
+export function getMenuEventDynamicPricingReason(
+  eventDate: Date,
+  eventOpenHours?: { open: string; close: string },
+  options?: { isVariant?: boolean; parentHasVariants?: boolean; dynamicEnabled?: boolean } // optional
+): string | undefined {
+  if (!(eventDate instanceof Date) || isNaN(eventDate.getTime())) return undefined;
+
+  const { isVariant, parentHasVariants, dynamicEnabled } = options || {};
+  // Policy reasons first
+  if (parentHasVariants && !isVariant) return getMenuParentHasVariantsReason();
+  if (isVariant && dynamicEnabled === false) return getMenuVariantDisabledReason();
+
+  const nowUTC = new Date();
+  const eventStartUTC = buildEventStartUTC(eventDate, eventOpenHours);
+
+  let isOpenDuringEvent = false;
+  let hasEventEnded = false;
+  if (eventOpenHours?.open && eventOpenHours?.close) {
+    const { openUTC, closeUTC } = buildBogotaOpenCloseUTC(eventStartUTC, eventOpenHours);
+    isOpenDuringEvent = nowUTC >= openUTC && nowUTC < closeUTC;
+    hasEventEnded = nowUTC >= closeUTC;
+  }
+
+  const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+  return getMenuEventPricingReason(hoursUntilEvent, isOpenDuringEvent, hasEventEnded);
+}
+
 /**
- * Dynamic pricing for event tickets (based on hours until event)
+ * Event tickets
+ * Rules:
+ * - 48+ hours → 30% off
+ * - 24–48 hours → base
+ * - <24 hours → +20%
+ * - Grace (<=1h after start) → +30% (always active, even if DP disabled)
+ * - After grace → blocked (-1)
+ * Policy:
+ * - Free tickets cannot have DP (price 0 if sale allowed; still blocked after grace)
+ * - DP disabled: base before event, +30% grace, blocked after grace
  */
-export function computeDynamicEventPrice(basePrice: number, eventDate: Date, eventOpenHours?: { open: string, close: string }): number {
-  if (!basePrice || basePrice <= 0 || isNaN(basePrice) || !(eventDate instanceof Date) || isNaN(eventDate.getTime())) {
+export function computeDynamicEventPrice(
+  basePrice: number,
+  eventDate: Date,
+  eventOpenHours?: { open: string; close: string },
+  options?: { dynamicEnabled?: boolean; isFree?: boolean } // optional
+): number {
+  const { dynamicEnabled, isFree } = options || {};
+
+  if (isNaN(basePrice) || !(eventDate instanceof Date) || isNaN(eventDate.getTime())) {
     return 0;
   }
-  if (basePrice === 0) {
-    return 0;
+
+  const nowUTC = new Date();
+  const eventStartUTC = buildEventStartUTC(eventDate, eventOpenHours);
+  const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+
+  // Free tickets: no DP (but expiry still enforced)
+  if (isFree) {
+    if (hoursUntilEvent < -1) return -1; // expired after grace
+    return 0; // price = 0, regardless of window
   }
-  
-  // Combine event date with event open time to get the actual event start time
-  let eventStartTime = new Date(eventDate);
-  
-  if (eventOpenHours && eventOpenHours.open) {
-    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
-    
-    // Handle the case where eventDate is a date string from database (like "2025-07-29")
-    // We need to create the event start time properly
-    if (eventDate.toISOString().includes('T00:00:00')) {
-      // This is a date-only string from database, create proper event time
-      const dateStr = eventDate.toISOString().split('T')[0];
-      const [year, month, day] = dateStr.split('-').map(Number);
-      
-      // Create event start time in local timezone (Colombian time)
-      eventStartTime = new Date(year, month - 1, day, openHour, openMinute, 0, 0);
-    } else {
-      // This is already a proper datetime, just set the hours
-      eventStartTime = new Date(eventDate);
-      eventStartTime.setHours(openHour, openMinute, 0, 0);
+
+  // DP disabled: base before event, +30% grace, then blocked
+  if (dynamicEnabled === false) {
+    if (hoursUntilEvent >= 0) return basePrice; // base pre-event
+    if (hoursUntilEvent >= -1) {
+      const m = DYNAMIC_PRICING.EVENT_TICKETS.GRACE_PERIOD; // +30%
+      return Math.round(basePrice * m * 100) / 100;
     }
+    return -1; // expired after grace
   }
-  
-  const now = new Date();
-  
-  const hoursUntilEvent = Math.floor(
-    (eventStartTime.getTime() - now.getTime()) / (1000 * 60 * 60)
-  );
-  
-  if (isNaN(hoursUntilEvent)) {
-    return basePrice;
-  }
-  
+
+  // Normal DP
   if (hoursUntilEvent >= 48) {
-    // 48+ hours away: 30% discount
-    const multiplier = getEventPricingMultiplier(hoursUntilEvent);
-    const discountedPrice = Math.round(basePrice * multiplier * 100) / 100;
-    return discountedPrice;
+    const m = getEventTicketPricingMultiplier(hoursUntilEvent);
+    return Math.round(basePrice * m * 100) / 100;
   }
   if (hoursUntilEvent >= 24) {
-    // 24-48 hours away: base price
-    const multiplier = getEventPricingMultiplier(hoursUntilEvent);
-    const basePriceResult = Math.round(basePrice * multiplier * 100) / 100;
-    return basePriceResult;
+    const m = getEventTicketPricingMultiplier(hoursUntilEvent);
+    return Math.round(basePrice * m * 100) / 100;
   }
   if (hoursUntilEvent >= 0) {
-    // Less than 24 hours: 20% surplus
-    const multiplier = getEventPricingMultiplier(hoursUntilEvent);
-    const surplusPrice = Math.round(basePrice * multiplier * 100) / 100;
-    return surplusPrice;
+    const m = getEventTicketPricingMultiplier(hoursUntilEvent);
+    return Math.round(basePrice * m * 100) / 100;
   }
-  
-  // Event has started - check grace period
-  const hoursSinceEventStarted = Math.abs(hoursUntilEvent);
-  if (hoursSinceEventStarted <= 1) {
-    // Within 1 hour grace period: 30% surplus
-    const gracePeriodPrice = Math.round(basePrice * 1.3 * 100) / 100;
-    return gracePeriodPrice;
+
+  // Event started → grace or block
+  const hoursSinceStart = Math.abs(hoursUntilEvent);
+  if (hoursSinceStart <= 1) {
+    const m = getEventTicketPricingMultiplier(hoursUntilEvent);
+    return Math.round(basePrice * m * 100) / 100;
   }
-  
-  // Event has passed grace period: block purchase
-  return -1; // Special value to indicate blocked purchase
+
+  return -1; // After grace → blocked
+}
+
+/** Event ticket reason (with free + DP-disabled handling). */
+export function getEventTicketDynamicPricingReason(
+  eventDate: Date,
+  eventOpenHours?: { open: string; close: string },
+  options?: { dynamicEnabled?: boolean; isFree?: boolean } // optional
+): string | undefined {
+  if (!(eventDate instanceof Date) || isNaN(eventDate.getTime())) return undefined;
+
+  const { dynamicEnabled, isFree } = options || {};
+  const nowUTC = new Date();
+  const eventStartUTC = buildEventStartUTC(eventDate, eventOpenHours);
+  const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+
+  if (isFree) {
+    if (hoursUntilEvent < -1) return "event_expired";
+    return getFreeTicketReason();
+  }
+
+  if (dynamicEnabled === false) {
+    if (hoursUntilEvent >= 0) return getTicketDisabledReason(); // base while DP disabled
+    if (hoursUntilEvent >= -1) return "event_grace_period";     // grace still applies
+    return "event_expired";
+  }
+
+  return getEventTicketPricingReason(hoursUntilEvent);
 }

@@ -5,12 +5,13 @@ import { TicketPurchase } from '../entities/TicketPurchase';
 import { MenuPurchase } from '../entities/MenuPurchase';
 import { UnifiedCartService } from './unifiedCart.service';
 import { calculateFeeAllocation, validateFeeAllocation } from '../utils/feeAllocation';
+import { getTicketCommissionRate, getMenuCommissionRate } from '../config/fees';
 import { generateEncryptedQR } from '../utils/generateEncryptedQR';
 import { sendTicketEmail } from '../services/emailService';
 import { sendMenuEmail } from '../services/emailService';
 import { sendUnifiedTicketEmail } from '../services/emailService';
 import { sendTransactionInvoiceEmail } from '../services/emailService';
-import { computeDynamicPrice, computeDynamicEventPrice } from '../utils/dynamicPricing';
+import { computeDynamicPrice, computeDynamicEventPrice, getNormalTicketDynamicPricingReason, getEventTicketDynamicPricingReason, getMenuDynamicPricingReason, getMenuEventDynamicPricingReason } from '../utils/dynamicPricing';
 import { wompiService } from './wompi.service';
 import { WOMPI_CONFIG } from '../config/wompi';
 import { generateTransactionSignature } from '../utils/generateWompiSignature';
@@ -63,7 +64,7 @@ export interface CheckoutInitiateWithWompiResult {
 }
 
 export class UnifiedCheckoutService {
-  private cartService = new UnifiedCartService();
+  public cartService = new UnifiedCartService();
   private cartRepo = AppDataSource.getRepository(UnifiedCartItem);
   private transactionRepo = AppDataSource.getRepository(UnifiedPurchaseTransaction);
   private ticketPurchaseRepo = AppDataSource.getRepository(TicketPurchase);
@@ -189,6 +190,7 @@ export class UnifiedCheckoutService {
       // Create unified transaction record first
       const transaction = this.transactionRepo.create({
         userId: userId || undefined,
+        sessionId: sessionId || undefined,
         clubId,
         buyerEmail: email,
         date: transactionDate || undefined,
@@ -255,7 +257,7 @@ export class UnifiedCheckoutService {
         transactionPayload.payment_method = {
           type: "BANCOLOMBIA_TRANSFER",
           user_type: "PERSON",
-          payment_description: paymentData.payment_description || `Unified purchase - Order ${transactionPayload.reference}`,
+          payment_description: paymentData.payment_description || `Compra Nightlife - ${transactionPayload.reference}`,
           ecommerce_url: paymentData.ecommerce_url,
         };
       }
@@ -353,6 +355,7 @@ export class UnifiedCheckoutService {
     // Create unified transaction
     const transaction = this.transactionRepo.create({
       userId: userId || undefined,
+      sessionId: sessionId || undefined,
       clubId,
       buyerEmail: email,
       date: transactionDate || undefined,
@@ -509,6 +512,7 @@ export class UnifiedCheckoutService {
     // Create unified transaction for free checkout
     const transaction = this.transactionRepo.create({
       userId: userId || undefined,
+      sessionId: sessionId || undefined,
       clubId,
       buyerEmail: email,
       date: transactionDate || undefined,
@@ -703,6 +707,29 @@ export class UnifiedCheckoutService {
           continue;
         }
 
+        // Calculate dynamic pricing reason for tickets
+        let dynamicPricingReason: string | undefined = undefined;
+        if (cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== Number(ticket.price)) {
+          if (ticket.category === "event" && ticket.availableDate) {
+            let eventDate: Date;
+            if (typeof ticket.availableDate === "string") {
+              const [year, month, day] = ticket.availableDate.split("-").map(Number);
+              eventDate = new Date(year, month - 1, day);
+            } else {
+              eventDate = new Date(ticket.availableDate);
+            }
+            dynamicPricingReason = getEventTicketDynamicPricingReason(eventDate, ticket.event?.openHours);
+          } else {
+            dynamicPricingReason = getNormalTicketDynamicPricingReason({
+              basePrice: Number(ticket.price),
+              clubOpenDays: ticket.club.openDays,
+              openHours: ticket.club.openHours,
+              availableDate: cartItem.date ? new Date(cartItem.date) : undefined,
+              useDateBasedLogic: false,
+            });
+          }
+        }
+
         // Create individual ticket purchases (one per quantity unit)
         for (let i = 0; i < cartItem.quantity; i++) {
           globalTicketCounter++;
@@ -713,7 +740,8 @@ export class UnifiedCheckoutService {
             basePrice: Number(ticket.price),
             dynamicPrice: cartItem.dynamicPrice,
             finalPrice: Number(cartItem.dynamicPrice || ticket.price),
-            dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== Number(ticket.price)
+            dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== Number(ticket.price),
+            dynamicPricingReason: dynamicPricingReason
           });
 
           console.log(`[TICKET-PURCHASE] Creating ticket purchase with transaction ID: ${transaction.id}`);
@@ -722,6 +750,12 @@ export class UnifiedCheckoutService {
             hasId: !!transaction.id,
             isManaged: transactionalEntityManager.hasId(transaction)
           });
+
+          // Calculate correct platform fee based on ticket type using centralized config
+          const isEventTicket = ticket.category === 'event';
+          const platformFeeRate = getTicketCommissionRate(isEventTicket);
+          const ticketPrice = Number(cartItem.dynamicPrice || ticket.price);
+          const platformFee = ticketPrice * platformFeeRate;
 
           const ticketPurchase = transactionalEntityManager.create('TicketPurchase', {
             transaction: transaction,
@@ -733,11 +767,12 @@ export class UnifiedCheckoutService {
             userId: userId || null,
             sessionId: sessionId || null,
             originalBasePrice: Number(ticket.price),
-            priceAtCheckout: Number(cartItem.dynamicPrice || ticket.price),
+            priceAtCheckout: ticketPrice,
             dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== Number(ticket.price),
-            clubReceives: Number(cartItem.dynamicPrice || ticket.price),
-            platformFee: Number(cartItem.dynamicPrice || ticket.price) * 0.05, // TODO: Use actual fee calculation
-            platformFeeApplied: 0.05,
+            dynamicPricingReason: dynamicPricingReason,
+            clubReceives: ticketPrice,
+            platformFee: platformFee,
+            platformFeeApplied: platformFeeRate,
             isUsed: false
           });
 
@@ -889,6 +924,33 @@ export class UnifiedCheckoutService {
           ? Number(variant.price)
           : Number(menuItem.price || 0);
 
+        // Calculate dynamic pricing reason for menu items
+        let dynamicPricingReason: string | undefined = undefined;
+        if (cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== basePrice) {
+          // Check if there's an event on the selected date
+          const event = await this.getEventForDate(cartItem.date ? new Date(cartItem.date) : undefined, transaction.clubId);
+          
+          if (event && cartItem.date) {
+            // For event dates, use event-based pricing reason
+            let eventDate: Date;
+            if (typeof event.availableDate === "string") {
+              const [year, month, day] = event.availableDate.split("-").map(Number);
+              eventDate = new Date(year, month - 1, day);
+            } else {
+              eventDate = new Date(event.availableDate);
+            }
+            dynamicPricingReason = getMenuEventDynamicPricingReason(eventDate, event.openHours);
+          } else {
+            // For non-event dates, use normal menu pricing reason
+            dynamicPricingReason = getMenuDynamicPricingReason({
+              basePrice,
+              clubOpenDays: menuItem.club.openDays,
+              openHours: menuItem.club.openHours,
+              selectedDate: cartItem.date ? new Date(cartItem.date) : undefined,
+            });
+          }
+        }
+
         console.log(`[UNIFIED-CHECKOUT-SERVICE] Menu item pricing debug:`, {
           menuItemId: cartItem.menuItemId,
           menuItemName: menuItem.name,
@@ -896,7 +958,8 @@ export class UnifiedCheckoutService {
           basePrice: basePrice,
           dynamicPrice: cartItem.dynamicPrice,
           finalPrice: Number(cartItem.dynamicPrice || basePrice),
-          dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== basePrice
+          dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== basePrice,
+          dynamicPricingReason: dynamicPricingReason
         });
 
         console.log(`[MENU-PURCHASE] Creating menu purchase with transaction ID: ${transaction.id}`);
@@ -920,9 +983,10 @@ export class UnifiedCheckoutService {
           originalBasePrice: basePrice,
           priceAtCheckout: Number(cartItem.dynamicPrice || basePrice),
           dynamicPricingWasApplied: cartItem.dynamicPrice && Number(cartItem.dynamicPrice) !== basePrice,
+          dynamicPricingReason: dynamicPricingReason,
           clubReceives: Number(cartItem.dynamicPrice || basePrice) * cartItem.quantity,
-          platformFee: (Number(cartItem.dynamicPrice || basePrice) * cartItem.quantity) * 0.025, // TODO: Use actual fee calculation
-          platformFeeApplied: 0.025,
+          platformFee: (Number(cartItem.dynamicPrice || basePrice) * cartItem.quantity) * getMenuCommissionRate(),
+          platformFeeApplied: getMenuCommissionRate(),
           isUsed: false
         });
 
@@ -1152,5 +1216,34 @@ export class UnifiedCheckoutService {
       'DEPRECATED: processSuccessfulCheckout(...) has been removed. ' +
       'Use processSuccessfulCheckoutInTransaction(transaction, cartItems, transactionalEntityManager) instead.'
     );
+  }
+
+  /**
+   * Get event details for a given date and club
+   */
+  private async getEventForDate(date: Date | undefined, clubId: string): Promise<any | null> {
+    if (!date) return null;
+    
+    try {
+      // Query the Event entity to get event details on this date for this club
+      const eventRepo = AppDataSource.getRepository('Event');
+      
+      // Convert date to string format for database comparison
+      const dateString = date.toISOString().split('T')[0]; // "2025-09-15"
+      
+      const event = await eventRepo.findOne({
+        where: {
+          clubId: clubId,
+          availableDate: dateString,
+          isActive: true,
+          isDeleted: false
+        }
+      });
+      
+      return event;
+    } catch (error) {
+      console.error('[UNIFIED-CHECKOUT] Error fetching event for date:', error);
+      return null;
+    }
   }
 }

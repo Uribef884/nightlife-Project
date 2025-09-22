@@ -5,14 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { EventDTO, TicketDTO } from "@/services/clubs.service";
 import TicketCard from "./TicketCard";
-import {
-  addTicketToCart,
-  getMenuCartSummary,
-  getTicketCartSummary,
-  updateTicketQty,
-  removeTicketItem,
-  clearMenuCart,
-} from "@/services/cart.service";
+import { useCartContext } from "@/contexts/CartContext";
+import { useClubProtection } from "@/hooks/useClubProtection";
+import { CartClubChangeModal } from "@/components/cart";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 /* ---------------- small helpers ---------------- */
@@ -277,11 +272,15 @@ export function ClubEvents({
   selectedDate,
   available,
   onChooseDate,
+  clubId,
+  clubName,
 }: {
   events: EventDTO[];
   selectedDate?: string | null;
   available?: AvailableForDay;
   onChooseDate: (d: string) => void;
+  clubId?: string;
+  clubName?: string;
 }) {
   // Local lightbox (no redirect)
   const [lightbox, setLightbox] = useState<{ open: boolean; url: string | null }>({ open: false, url: null });
@@ -293,28 +292,36 @@ export function ClubEvents({
   // Per-event "show full description" state
   const [descExpanded, setDescExpanded] = useState<Record<string, boolean>>({});
 
-  // Cart state
-  const [ticketCart, setTicketCart] = useState<{ items: { id: string; ticketId: string; quantity: number }[] } | null>(null);
-  const [menuCart, setMenuCart] = useState<{ items: any[] } | null>(null);
+  const {
+    items: cartItems,
+    addTicket,
+    updateItemQuantity,
+    removeItem,
+    isLoading: cartLoading,
+    error: cartError
+  } = useCartContext();
 
-  // Modal when user tries to add while menu cart has items
-  const [showConfirmClearMenu, setShowConfirmClearMenu] = useState(false);
-  const [pendingTicket, setPendingTicket] = useState<TicketDTO | null>(null);
+  // Club protection (only if clubId is provided)
+  const clubProtection = useClubProtection({
+    clubId: clubId || '',
+    clubName: clubName || "este club",
+  });
 
-  async function refreshCarts() {
-    const [t, m] = await Promise.all([getTicketCartSummary(), getMenuCartSummary()]);
-    setTicketCart(t as any);
-    setMenuCart(m as any);
-  }
-  useEffect(() => {
-    refreshCarts().catch(() => {});
-  }, []);
 
   const qtyByTicketId = useMemo(() => {
     const map = new Map<string, { qty: number; itemId: string }>();
-    for (const it of ticketCart?.items ?? []) map.set(it.ticketId, { qty: it.quantity, itemId: it.id });
+    for (const item of cartItems) {
+      if (item.itemType === 'ticket' && item.ticketId) {
+        map.set(item.ticketId, { qty: item.quantity, itemId: item.id });
+      }
+    }
     return map;
-  }, [ticketCart]);
+  }, [cartItems]);
+
+  // Check if there are menu items in cart (for clearing confirmation)
+  const hasMenuItems = useMemo(() => {
+    return cartItems.some(item => item.itemType === 'menu');
+  }, [cartItems]);
 
   // Index events by date
   const byDate = useMemo(() => {
@@ -356,29 +363,50 @@ export function ClubEvents({
 
   // Add / change qty
   async function handleAdd(ticket: TicketDTO) {
-    if ((menuCart?.items?.length ?? 0) > 0) {
-      setPendingTicket(ticket);
-      setShowConfirmClearMenu(true);
-      return;
+    if (!selectedDate) return;
+    
+    const addFunction = async () => {
+      await addTicket((ticket as any).id, selectedDate, 1);
+    };
+    
+    // Use club protection if clubId is provided
+    if (clubId) {
+      await clubProtection.handleAddWithProtection(addFunction);
+    } else {
+      await addFunction();
     }
-    await addTicketToCart({ ticketId: (ticket as any).id, quantity: 1, date: selectedDate! });
-    await refreshCarts();
   }
+  
   async function handleChangeQty(itemId: string, nextQty: number) {
-    if (nextQty <= 0) await removeTicketItem(itemId);
-    else await updateTicketQty({ id: itemId, quantity: nextQty });
-    await refreshCarts();
+    if (nextQty <= 0) {
+      await removeItem(itemId);
+    } else {
+      await updateItemQuantity(itemId, nextQty);
+    }
   }
+  
   async function confirmClearMenuAndAdd() {
+    if (!pendingTicket || !selectedDate) return;
     try {
-      await clearMenuCart();
-      if (pendingTicket && selectedDate) {
-        await addTicketToCart({ ticketId: (pendingTicket as any).id, quantity: 1, date: selectedDate });
+      // Clear menu items from cart first
+      const menuItems = cartItems.filter(item => item.itemType === 'menu');
+      for (const item of menuItems) {
+        await removeItem(item.id);
+      }
+      // Then add the ticket
+      const addFunction = async () => {
+        await addTicket((pendingTicket as any).id, selectedDate, 1);
+      };
+      
+      // Use club protection if clubId is provided
+      if (clubId) {
+        await clubProtection.handleAddWithProtection(addFunction);
+      } else {
+        await addFunction();
       }
     } finally {
       setPendingTicket(null);
       setShowConfirmClearMenu(false);
-      await refreshCarts();
     }
   }
 
@@ -532,26 +560,17 @@ export function ClubEvents({
         </button>
       )}
 
-      {/* Confirm clearing OTHER cart (menu) */}
-      {showConfirmClearMenu && (
-        <ConfirmModal
-          title="Tienes consumos en el carrito"
-          body="Para comprar entradas debes vaciar primero el carrito de consumos. ¿Quieres vaciarlo y continuar?"
-          onClose={() => {
-            setShowConfirmClearMenu(false);
-            setPendingTicket(null);
-          }}
-          onConfirm={async () => {
-            await clearMenuCart();
-            if (pendingTicket && selectedDate) {
-              await addTicketToCart({ ticketId: (pendingTicket as any).id, quantity: 1, date: selectedDate });
-            }
-            setPendingTicket(null);
-            setShowConfirmClearMenu(false);
-            await refreshCarts();
-          }}
+      {/* Club Change Modal */}
+      {clubId && (
+        <CartClubChangeModal
+          isOpen={clubProtection.showClubModal}
+          onClose={clubProtection.handleCancelClubChange}
+          onClearCart={clubProtection.handleClearCartAndClose}
+          currentClubName={clubProtection.currentClubName}
+          newClubName={clubName || "este club"}
         />
       )}
+
     </section>
   );
 }

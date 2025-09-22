@@ -15,6 +15,9 @@ export class UnifiedPurchaseTransaction {
   @Column({ nullable: true })
   userId?: string;
 
+  @Column({ type: "varchar", nullable: true, default: null })
+  sessionId?: string | null;
+
   @Column()
   clubId!: string;
 

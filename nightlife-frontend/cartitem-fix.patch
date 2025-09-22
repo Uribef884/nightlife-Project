@@ -1,0 +1,34 @@
+--- a/src/components/cart/CartItem.tsx
++++ b/src/components/cart/CartItem.tsx
+@@ -133,7 +133,7 @@ export default function CartItem({
+   };
+ 
+-  const formatPrice = (price: number) => {
++  const formatPrice = (price: number | undefined) => {
+     return new Intl.NumberFormat('es-CO', {
+       style: 'currency',
+       currency: 'COP',
+       minimumFractionDigits: 0,
+-    }).format(price);
++    }).format(price || 0);
+   };
+ 
+   const getCategoryBadge = () => {
+@@ -213,7 +213,7 @@ export default function CartItem({
+                 return isDiscount ? (
+                   <div>
+                     <p className="text-sm font-medium text-slate-100">
+-                      {formatPrice(item.dynamicPrice)}
++                      {formatPrice(item.dynamicPrice || 0)}
+                     </p>
+                     <p className="text-xs text-slate-400 line-through">
+                       {formatPrice(item.unitPrice)}
+@@ -367,7 +367,7 @@ export default function CartItem({
+                 return isDiscount ? (
+                   <>
+                     <p className="text-sm font-medium text-slate-100">
+-                      {formatPrice(item.dynamicPrice)}
++                      {formatPrice(item.dynamicPrice || 0)}
+                     </p>
+                     <p className="text-xs text-slate-400 line-through">
+                       {formatPrice(item.unitPrice)}

@@ -49,12 +49,10 @@ app.use(cookieParser()); // must come before attachSessionId
 app.use(attachSessionId); // injects sessionId or user
 
 // CORS must allow the Next.js dev app and send cookies
-const FRONTEND = process.env.FRONTEND_URL ?? "http://localhost:3000";
+const FRONTEND = process.env.FRONTEND_BASE_URL;
 // Allow both localhost and IP-based access for mobile testing
 const allowedOrigins = [
   FRONTEND,
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
   // Allow any local IP for development (no hardcoding)
   ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : []),
 ];
@@ -78,6 +76,13 @@ app.use(
                          /^http:\/\/172\.(1[6-9]|2\d|3[01])\.\d+\.\d+:\d+$/.test(origin);
         
         if (isLocalhost || isLocalIP) {
+          console.log(`[CORS] Allowing development origin: ${origin}`);
+          return callback(null, true);
+        }
+        
+        // Additional fallback for any local development URL
+        if (origin.startsWith('http://') && (origin.includes('192.168.') || origin.includes('10.') || origin.includes('172.'))) {
+          console.log(`[CORS] Allowing local development origin: ${origin}`);
           return callback(null, true);
         }
       }
@@ -106,8 +111,6 @@ app.use(
         // Allow the Next dev app + websockets + your own API + mobile access
         connectSrc: [
           "'self'", 
-          "http://localhost:3000", 
-          "http://127.0.0.1:3000", 
           "ws:", 
           "wss:",
           ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
@@ -159,6 +162,10 @@ app.use("/ticket-menu", ticketIncludedMenuRoutes);
 // Wompi Integration Routes
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/pse', pseRoutes);
+
+// Server-Sent Events Routes
+import sseRoutes from './routes/sse.routes';
+app.use('/api/sse', sseRoutes);
 
 // Unified Cart and Checkout Routes
 app.use("/unified-cart", unifiedCartRoutes);

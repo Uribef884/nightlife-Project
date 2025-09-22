@@ -93,7 +93,7 @@ export async function fetchClubsSSR(raw: ClubQuery): Promise<ClubListResponse> {
 
   const endpoint = hasFilters ? "/clubs/filter" : "/clubs";
   // Use API_BASE_SSR from env
-  const u = new URL(endpoint, API_BASE_SSR || "http://localhost");
+  const u = new URL(endpoint, API_BASE_SSR);
   const sp = u.searchParams;
 
   if (isNonEmpty(q)) sp.set("query", q); // q -> query for backend
@@ -354,7 +354,7 @@ function buildCSRUrl(nq: NormalizedClubQuery): string {
   const origin =
     typeof window !== "undefined" && window.location?.origin
       ? window.location.origin
-      : API_BASE_CSR || "http://localhost";
+      : API_BASE_CSR;
 
   const u = new URL(`${base}${endpoint}`, origin);
   const sp = u.searchParams;

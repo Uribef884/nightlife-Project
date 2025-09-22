@@ -195,7 +195,7 @@ export default function RegisterForm() {
         <p className="text-xs text-gray-400 text-center mt-3">
           Al crear una cuenta, aceptas nuestros{' '}
           <Link href="/terms" tabIndex={-1} className="text-purple-400 hover:text-purple-300 underline">
-            Términos
+            Términos de Servicio
           </Link>{' '}
           y reconoces nuestra{' '}
           <Link href="/privacy" tabIndex={-1} className="text-purple-400 hover:text-purple-300 underline">

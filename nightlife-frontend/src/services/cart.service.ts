@@ -4,16 +4,80 @@ import { API_BASE_CSR, joinUrl } from "@/lib/env";
 
 type Id = string;
 
-// ───────────────────────── Tickets cart ─────────────────────────
+// ───────────────────────── Unified Cart Types ─────────────────────────
 export type AddTicketBody = {
+  itemType: 'ticket';
   ticketId: string;   // ticket UUID
   date: string;       // YYYY-MM-DD
   quantity: number;   // >= 1
 };
 
+export type AddMenuBody = {
+  itemType: 'menu';
+  menuItemId: string;   // item uuid (parent or variant's parent)
+  variantId?: string;   // optional; include when adding a variant
+  date: string;         // YYYY-MM-DD
+  quantity: number;     // >= 1
+};
+
 export type UpdateQtyBody = {
   id: Id;             // cart item id
   quantity: number;   // >= 0 (0 means remove)
+};
+
+export type CartItem = {
+  id: string;
+  itemType: 'ticket' | 'menu';
+  quantity: number;
+  date: string;
+  clubId: string;
+  
+  // Ticket-specific
+  ticketId?: string;
+  ticket?: {
+    id: string;
+    name: string;
+    price: number;
+    category: 'general' | 'event' | 'free';
+    description?: string;
+    dynamicPricingEnabled: boolean;
+    maxPerPerson: number;
+    includesMenuItem: boolean;
+  };
+  
+  // Menu-specific
+  menuItemId?: string;
+  variantId?: string;
+  menuItem?: {
+    id: string;
+    name: string;
+    price?: number;
+    description?: string;
+    imageUrl?: string;
+    hasVariants: boolean;
+    maxPerPerson?: number;
+  };
+  variant?: {
+    id: string;
+    name: string;
+    price: number;
+    maxPerPerson?: number;
+  };
+  
+  // Pricing
+  unitPrice: number;
+  subtotal: number;
+  dynamicPrice?: number;
+  priceBreakdown?: any;
+};
+
+export type CartSummary = {
+  items: CartItem[];
+  ticketSubtotal: number;
+  menuSubtotal: number;
+  totalSubtotal: number;
+  itemCount: number;
+  clubId: string;
 };
 
 const JSON_HEADERS = {
@@ -39,7 +103,7 @@ function assertOk(resp: Response, label: string) {
   }
 }
 
-/** POST /cart/add */
+/** POST /unified-cart/add - Add ticket to cart */
 export async function addTicketToCart(body: AddTicketBody) {
   const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/add"), {
     method: "POST",
@@ -51,79 +115,7 @@ export async function addTicketToCart(body: AddTicketBody) {
   return parseJsonSafe<any>(resp);
 }
 
-/** PATCH /cart/update */
-export async function updateTicketQty(body: UpdateQtyBody) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/update"), {
-    method: "PATCH",
-    headers: JSON_HEADERS,
-    credentials: "include",
-    body: JSON.stringify(body),
-  });
-  assertOk(resp, "updateTicketQty");
-  return parseJsonSafe<any>(resp);
-}
-
-/** DELETE /cart/item/:id */
-export async function removeTicketItem(itemId: Id) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, `/unified-cart/item/${encodeURIComponent(itemId)}`), {
-    method: "DELETE",
-    credentials: "include",
-  });
-  assertOk(resp, "removeTicketItem");
-  return true;
-}
-
-/** GET /cart */
-export async function getTicketCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart"), {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    credentials: "include",
-  });
-  assertOk(resp, "getTicketCart");
-  return parseJsonSafe<any>(resp);
-}
-
-/** DELETE /cart/clear */
-export async function clearTicketCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/clear"), {
-    method: "DELETE",
-    credentials: "include",
-  });
-  assertOk(resp, "clearTicketCart");
-  return true;
-}
-
-/** DELETE /cart/clear-other-cart */
-export async function clearOtherTicketCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/clear-other-cart"), {
-    method: "DELETE",
-    credentials: "include",
-  });
-  assertOk(resp, "clearOtherTicketCart");
-  return true;
-}
-
-/** GET /unified-cart/summary (used to calculate DP/mix rules) */
-export async function getTicketCartSummary() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/summary"), {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    credentials: "include",
-  });
-  assertOk(resp, "getTicketCartSummary");
-  return parseJsonSafe<any>(resp);
-}
-
-// ───────────────────────── Menu cart ─────────────────────────
-
-export type AddMenuBody = {
-  menuItemId: string;   // item uuid (parent or variant's parent)
-  quantity: number;     // >= 1
-  variantId?: string;   // optional; include when adding a variant
-};
-
-/** POST /menu/cart/add */
+/** POST /unified-cart/add - Add menu item to cart */
 export async function addMenuItemToCart(body: AddMenuBody) {
   const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/add"), {
     method: "POST",
@@ -135,66 +127,110 @@ export async function addMenuItemToCart(body: AddMenuBody) {
   return parseJsonSafe<any>(resp);
 }
 
-/** PATCH /menu/cart/update */
-export async function updateMenuItemQty(body: UpdateQtyBody) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/update"), {
+/** PATCH /unified-cart/line/:id - Update item quantity */
+export async function updateCartItemQuantity(itemId: Id, quantity: number) {
+  const resp = await fetch(joinUrl(API_BASE_CSR, `/unified-cart/line/${encodeURIComponent(itemId)}`), {
     method: "PATCH",
     headers: JSON_HEADERS,
     credentials: "include",
-    body: JSON.stringify(body),
+    body: JSON.stringify({ quantity }),
   });
-  assertOk(resp, "updateMenuItemQty");
+  assertOk(resp, "updateCartItemQuantity");
   return parseJsonSafe<any>(resp);
 }
 
-/** DELETE /menu/cart/item/:id */
-export async function removeMenuItem(itemId: Id) {
-  const resp = await fetch(joinUrl(API_BASE_CSR, `/unified-cart/item/${encodeURIComponent(itemId)}`), {
+/** DELETE /unified-cart/line/:id - Remove item from cart */
+export async function removeCartItem(itemId: Id) {
+  const resp = await fetch(joinUrl(API_BASE_CSR, `/unified-cart/line/${encodeURIComponent(itemId)}`), {
     method: "DELETE",
     credentials: "include",
   });
-  assertOk(resp, "removeMenuItem");
+  assertOk(resp, "removeCartItem");
   return true;
 }
 
-/** GET /menu/cart */
-export async function getMenuCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/menu/cart"), {
+/** GET /unified-cart - Get all cart items */
+export async function getCart() {
+  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart"), {
     method: "GET",
     headers: { Accept: "application/json" },
     credentials: "include",
   });
-  assertOk(resp, "getMenuCart");
-  return parseJsonSafe<any>(resp);
+  assertOk(resp, "getCart");
+  return parseJsonSafe<CartItem[]>(resp);
 }
 
-/** DELETE /menu/cart/clear */
-export async function clearMenuCart() {
+/** DELETE /unified-cart/clear - Clear entire cart */
+export async function clearCart() {
   const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/clear"), {
     method: "DELETE",
     credentials: "include",
   });
-  assertOk(resp, "clearMenuCart");
+  assertOk(resp, "clearCart");
   return true;
 }
 
-/** DELETE /menu/cart/clear-other-cart */
-export async function clearOtherMenuCart() {
-  const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/clear-other-cart"), {
-    method: "DELETE",
-    credentials: "include",
-  });
-  assertOk(resp, "clearOtherMenuCart");
-  return true;
-}
-
-/** GET /menu/cart/summary */
-export async function getMenuCartSummary() {
+/** GET /unified-cart/summary - Get cart summary with totals */
+export async function getCartSummary() {
   const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/summary"), {
     method: "GET",
     headers: { Accept: "application/json" },
     credentials: "include",
   });
-  assertOk(resp, "getMenuCartSummary");
-  return parseJsonSafe<any>(resp);
+  assertOk(resp, "getCartSummary");
+  return parseJsonSafe<CartSummary>(resp);
 }
+
+// ───────────────────────── Legacy Support ─────────────────────────
+// These functions are kept for backward compatibility but use the unified cart
+
+/** @deprecated Use addTicketToCart instead */
+export async function updateTicketQty(body: UpdateQtyBody) {
+  return updateCartItemQuantity(body.id, body.quantity);
+}
+
+/** @deprecated Use removeCartItem instead */
+export async function removeTicketItem(itemId: Id) {
+  return removeCartItem(itemId);
+}
+
+/** @deprecated Use getCart instead */
+export async function getTicketCart() {
+  return getCart();
+}
+
+/** @deprecated Use clearCart instead */
+export async function clearTicketCart() {
+  return clearCart();
+}
+
+/** @deprecated Use getCartSummary instead */
+export async function getTicketCartSummary() {
+  return getCartSummary();
+}
+
+/** @deprecated Use addMenuItemToCart instead */
+export async function updateMenuItemQty(body: UpdateQtyBody) {
+  return updateCartItemQuantity(body.id, body.quantity);
+}
+
+/** @deprecated Use removeCartItem instead */
+export async function removeMenuItem(itemId: Id) {
+  return removeCartItem(itemId);
+}
+
+/** @deprecated Use getCart instead */
+export async function getMenuCart() {
+  return getCart();
+}
+
+/** @deprecated Use clearCart instead */
+export async function clearMenuCart() {
+  return clearCart();
+}
+
+/** @deprecated Use getCartSummary instead */
+export async function getMenuCartSummary() {
+  return getCartSummary();
+}
+
