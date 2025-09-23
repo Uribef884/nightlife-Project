@@ -9,7 +9,8 @@ export interface User {
   lastName?: string;
   avatar?: string;
   isOAuthUser?: boolean;
-  clubId?: string;
+  clubId?: string | null;
+  clubIds?: string[] | null;
 }
 
 export interface LoginResponse {
@@ -169,6 +170,45 @@ class AuthService extends ApiService {
   // Check if user can access club (clubowner, bouncer, waiter)
   canAccessClub(user: User | null): boolean {
     return this.hasAnyRole(user, ['clubowner', 'bouncer', 'waiter']);
+  }
+
+  // Get available clubs for the current user
+  async getAvailableClubs(): Promise<{ clubs: Array<{
+    id: string;
+    name: string;
+    description?: string;
+    city?: string;
+    profileImageUrl?: string;
+    isActive: boolean;
+  }> }> {
+    const response = await this.request('/auth/available-clubs', {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to fetch available clubs');
+    }
+
+    return response.json();
+  }
+
+  // Select a club as active
+  async selectClub(clubId: string): Promise<{ token: string; user: User }> {
+    const response = await this.request('/auth/select-club', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ clubId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to select club');
+    }
+
+    return response.json();
   }
 }
 

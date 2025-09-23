@@ -8,7 +8,7 @@ import { MenuPurchase } from "../entities/MenuPurchase";
 import { decryptQR, QRPayload } from "./decryptQR";
 
 export async function validateClubAccess(
-  user: { id: string; role: string; clubId?: string },
+  user: { id: string; role: string; clubId?: string | null },
   clubId: string
 ): Promise<boolean> {
   // If user is waiter/bouncer, check if they belong to the club
@@ -114,7 +114,7 @@ export function validateQRType(type: string, expected: "menu" | "ticket" | "menu
 
 export async function validateTicketPurchase(
   qrCode: string,
-  user: { id: string; role: string; clubId?: string },
+  user: { id: string; role: string; clubId?: string | null },
   isPreview: boolean = false // New parameter to distinguish between preview and confirmation
 ): Promise<{
   isValid: boolean;
@@ -315,7 +315,7 @@ export async function validateTicketPurchase(
 // 🎯 PREVIEW FUNCTION: No restrictions - can be used anytime, any day by bouncers/waiters
 export async function previewMenuFromTicketPurchase(
   qrCode: string,
-  user: { id: string; role: string; clubId?: string }
+  user: { id: string; role: string; clubId?: string | null }
 ): Promise<{
   isValid: boolean;
   purchase?: TicketPurchase;
@@ -367,7 +367,7 @@ export async function previewMenuFromTicketPurchase(
 
 export async function validateMenuFromTicketPurchase(
   qrCode: string,
-  user: { id: string; role: string; clubId?: string },
+  user: { id: string; role: string; clubId?: string | null },
   isPreview: boolean = false // New parameter to distinguish between preview and confirmation
 ): Promise<{
   isValid: boolean;
@@ -546,7 +546,7 @@ export async function validateMenuFromTicketPurchase(
 // Preview function for unified menu transactions (standalone menu purchases)
 export async function previewUnifiedMenuTransaction(
   qrCode: string,
-  user: { id: string; role: string; clubId?: string }
+  user: { id: string; role: string; clubId?: string | null }
 ): Promise<{
   isValid: boolean;
   transaction?: UnifiedPurchaseTransaction;
@@ -588,7 +588,7 @@ export async function previewUnifiedMenuTransaction(
 // Validation function for unified menu transactions (standalone menu purchases)
 export async function validateUnifiedMenuTransaction(
   qrCode: string,
-  user: { id: string; role: string; clubId?: string }
+  user: { id: string; role: string; clubId?: string | null }
 ): Promise<{
   isValid: boolean;
   transaction?: UnifiedPurchaseTransaction;

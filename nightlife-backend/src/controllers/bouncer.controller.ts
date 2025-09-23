@@ -51,12 +51,19 @@ export const createBouncer = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
 
-    const club = await clubRepo.findOneBy({ ownerId: requester.id });
-    if (!club) {
-      res.status(403).json({ error: "No eres propietario de un club" });
+    // Use the active club from the authenticated user
+    if (!requester.clubId) {
+      res.status(403).json({ error: "No tienes un club activo seleccionado" });
       return;
     }
-    const clubId = club.id;
+    
+    // Verify the user owns this active club
+    if (!requester.clubIds?.includes(requester.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
+      return;
+    }
+    
+    const clubId = requester.clubId;
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newBouncer = userRepo.create({
@@ -83,14 +90,20 @@ export const getBouncers = async (req: AuthenticatedRequest, res: Response): Pro
     return;
   }
 
-  const club = await AppDataSource.getRepository(Club).findOneBy({ ownerId: requester.id });
-  if (!club) {
-    res.status(403).json({ error: "No eres propietario de un club" });
+  // Use the active club from the authenticated user
+  if (!requester.clubId) {
+    res.status(403).json({ error: "No tienes un club activo seleccionado" });
+    return;
+  }
+  
+  // Verify the user owns this active club
+  if (!requester.clubIds?.includes(requester.clubId)) {
+    res.status(403).json({ error: "No eres propietario del club activo" });
     return;
   }
 
   const bouncers = await userRepo.find({
-    where: { role: "bouncer", clubId: club.id },
+    where: { role: "bouncer", clubId: requester.clubId },
     select: ["id", "email", "createdAt"],
   });
 
@@ -113,8 +126,19 @@ export const deleteBouncer = async (req: AuthenticatedRequest, res: Response): P
     return;
   }
 
-  const ownerClub = await AppDataSource.getRepository(Club).findOneBy({ ownerId: requester.id });
-  if (!ownerClub || bouncer.clubId !== ownerClub.id) {
+  // Use the active club from the authenticated user
+  if (!requester.clubId) {
+    res.status(403).json({ error: "No tienes un club activo seleccionado" });
+    return;
+  }
+  
+  // Verify the user owns this active club
+  if (!requester.clubIds?.includes(requester.clubId)) {
+    res.status(403).json({ error: "No eres propietario del club activo" });
+    return;
+  }
+  
+  if (bouncer.clubId !== requester.clubId) {
     res.status(403).json({ error: "No estás autorizado para eliminar este portero" });
     return;
   }

@@ -1133,60 +1133,71 @@ export class UnifiedCheckoutService {
           where: { id: transaction.clubId }
         }) as any;
 
-        // Prepare items for invoice using actual purchase prices (with dynamic pricing)
+        // Prepare items for invoice using actual purchase prices from TicketPurchase and MenuPurchase entities
         const invoiceItems: any[] = [];
+        const itemMap = new Map<string, any>(); // Map to group identical items
         
-        // Add ticket items with actual prices (use stored dynamic prices from cart)
-        if (ticketItems.length > 0) {
-          for (const cartItem of ticketItems) {
-            const ticket = await transactionalEntityManager.findOne('Ticket', {
-              where: { id: cartItem.ticketId }
-            }) as any;
+        // Add ticket items using priceAtCheckout from TicketPurchase entities
+        const ticketPurchases = await transactionalEntityManager.find('TicketPurchase', {
+          where: { transactionId: transaction.id },
+          relations: ['ticket']
+        }) as any[];
+        
+        if (ticketPurchases.length > 0) {
+          for (const ticketPurchase of ticketPurchases) {
+            // Use the actual price that was charged during checkout (stored in priceAtCheckout)
+            const actualPrice = Number(ticketPurchase.priceAtCheckout);
+            const itemKey = `${ticketPurchase.ticket.name}|${null}|${actualPrice}`;
             
-            if (ticket) {
-              // Use the actual price that was charged during checkout (includes dynamic pricing)
-              const actualPrice = Number(cartItem.dynamicPrice || ticket.price);
-              
-              invoiceItems.push({
-                name: ticket.name,
+            if (itemMap.has(itemKey)) {
+              // Group identical items together
+              const existingItem = itemMap.get(itemKey);
+              existingItem.quantity += 1;
+              existingItem.subtotal += actualPrice;
+            } else {
+              itemMap.set(itemKey, {
+                name: ticketPurchase.ticket.name,
                 variant: null,
-                quantity: cartItem.quantity,
+                quantity: 1,
                 unitPrice: actualPrice,
-                subtotal: actualPrice * cartItem.quantity
+                subtotal: actualPrice
               });
             }
           }
         }
         
-        // Add menu items with actual prices (use stored dynamic prices from cart)
-        if (menuItems.length > 0) {
-          for (const cartItem of menuItems) {
-            const menuItem = await transactionalEntityManager.findOne('MenuItem', {
-              where: { id: cartItem.menuItemId },
-              relations: ['club']
-            }) as any;
+        // Add menu items using priceAtCheckout from MenuPurchase entities
+        const menuPurchases = await transactionalEntityManager.find('MenuPurchase', {
+          where: { transactionId: transaction.id },
+          relations: ['menuItem', 'variant']
+        }) as any[];
+        
+        if (menuPurchases.length > 0) {
+          for (const menuPurchase of menuPurchases) {
+            // Use the actual price that was charged during checkout (stored in priceAtCheckout)
+            const actualPrice = Number(menuPurchase.priceAtCheckout);
+            const variantName = menuPurchase.variant?.name || null;
+            const itemKey = `${menuPurchase.menuItem.name}|${variantName}|${actualPrice}`;
             
-            if (menuItem) {
-              let variant: any = null;
-              if (cartItem.variantId) {
-                variant = await transactionalEntityManager.findOne('MenuItemVariant', {
-                  where: { id: cartItem.variantId }
-                }) as any;
-              }
-              
-              // Use the actual price that was charged during checkout (includes dynamic pricing)
-              const actualPrice = Number(cartItem.dynamicPrice || (variant ? variant.price : menuItem.price));
-              
-              invoiceItems.push({
-                name: menuItem.name,
-                variant: variant?.name || null,
-                quantity: cartItem.quantity,
+            if (itemMap.has(itemKey)) {
+              // Group identical items together
+              const existingItem = itemMap.get(itemKey);
+              existingItem.quantity += menuPurchase.quantity;
+              existingItem.subtotal += actualPrice * menuPurchase.quantity;
+            } else {
+              itemMap.set(itemKey, {
+                name: menuPurchase.menuItem.name,
+                variant: variantName,
+                quantity: menuPurchase.quantity,
                 unitPrice: actualPrice,
-                subtotal: actualPrice * cartItem.quantity
+                subtotal: actualPrice * menuPurchase.quantity
               });
             }
           }
         }
+        
+        // Convert map to array for invoice
+        invoiceItems.push(...Array.from(itemMap.values()));
 
         // Calculate totals for invoice using actual transaction subtotals (with dynamic pricing)
         const actualSubtotal = Number(transaction.ticketSubtotal || 0) + Number(transaction.menuSubtotal || 0);
@@ -1195,7 +1206,7 @@ export class UnifiedCheckoutService {
         const gatewayIVA = Number(transaction.gatewayIVA || 0);
         const total = Number(transaction.totalPaid || 0);
         
-        console.log(`[UNIFIED-CHECKOUT-SERVICE] Invoice calculation with dynamic pricing:`, {
+        console.log(`[UNIFIED-CHECKOUT-SERVICE] Invoice calculation using stored purchase prices (priceAtCheckout) with grouped items:`, {
           invoiceItems: invoiceItems.map(item => ({
             name: item.name,
             variant: item.variant,

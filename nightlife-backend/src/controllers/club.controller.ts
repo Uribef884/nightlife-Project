@@ -112,12 +112,7 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
     return;
   }
 
-  // Check if the user is already an owner of another club
-  const existingClub = await repo.findOne({ where: { ownerId } });
-  if (existingClub) {
-    res.status(400).json({ error: "Usuario ya es propietario de otro club" });
-    return;
-  }
+  // Allow multiple club ownership - no single ownership check needed
 
   const club = repo.create({
     name,
@@ -144,11 +139,21 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
 
   await repo.save(club);
 
-  // Update user's role and clubId
+  // Update user's role and add club to owned clubs
   if (owner.role === "user") {
     owner.role = "clubowner";
   }
-  owner.clubId = club.id;
+  
+  // Add club to owned clubs array (only for club owners)
+  if (owner.role === "clubowner") {
+    owner.clubIds = [...(owner.clubIds || []), club.id];
+  }
+  
+  // Set as active club if this is their first club
+  if (!owner.clubId) {
+    owner.clubId = club.id;
+  }
+  
   await userRepo.save(owner);
 
   res.status(201).json(club);
@@ -254,28 +259,47 @@ export async function updateClub(req: AuthenticatedRequest, res: Response): Prom
         return;
       }
 
-      // Check if new owner is already an owner of another club
-      const existingClub = await repo.findOne({ where: { ownerId } });
-      if (existingClub && existingClub.id !== club.id) {
-        res.status(400).json({ error: "Nuevo propietario ya es propietario de otro club" });
-        return;
-      }
+      // Allow multiple club ownership - no single ownership check needed
 
-      // Update old owner's clubId and role
+      // Update old owner - remove club from owned clubs
       const oldOwner = club.owner;
       if (oldOwner) {
-        // Use raw SQL to ensure NULL is set in database
-        await userRepo.query('UPDATE "user" SET "clubId" = NULL WHERE id = $1', [oldOwner.id]);
-        
-        // Only demote to user if they don't have other roles (like admin)
-        if (oldOwner.role === "clubowner") {
-          oldOwner.role = "user";
-          await userRepo.save(oldOwner);
+        // Remove club from old owner's clubIds array (only for club owners)
+        if (oldOwner.role === "clubowner" && oldOwner.clubIds) {
+          oldOwner.clubIds = oldOwner.clubIds.filter(id => id !== club.id);
+          
+          // If this was their active club, set a fallback
+          if (oldOwner.clubId === club.id) {
+            oldOwner.clubId = oldOwner.clubIds[0] || undefined;
+          }
+          
+          // Only demote to user if they don't have other clubs
+          if (oldOwner.clubIds.length === 0) {
+            oldOwner.role = "user";
+            oldOwner.clubIds = null; // Clear clubIds for non-club owners
+          }
+        } else {
+          // For non-club owners, just clear the active club
+          if (oldOwner.clubId === club.id) {
+            oldOwner.clubId = undefined;
+          }
         }
+        
+        await userRepo.save(oldOwner);
       }
 
-      // Update new owner's clubId and role
-      newOwner.clubId = club.id;
+      // Update new owner - add club to owned clubs (only for club owners)
+      if (newOwner.role === "clubowner") {
+        if (!newOwner.clubIds?.includes(club.id)) {
+          newOwner.clubIds = [...(newOwner.clubIds || []), club.id];
+        }
+      }
+      
+      // Set as active club if they don't have one
+      if (!newOwner.clubId) {
+        newOwner.clubId = club.id;
+      }
+      
       if (newOwner.role === "user") {
         newOwner.role = "clubowner";
       }

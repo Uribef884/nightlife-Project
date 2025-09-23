@@ -35,6 +35,7 @@ export const authMiddleware = (
       role: decoded.role,
       email: decoded.email,
       clubId: decoded.clubId,
+      clubIds: decoded.clubIds || null,
     };
 
     next();
@@ -84,6 +85,28 @@ export const requireClubOwnerAuth = (
 
   if (!user || user.role !== "clubowner") {
     res.status(403).json({ error: "Forbidden: Solo propietarios de club" });
+    return;
+  }
+
+  next();
+};
+
+export const requireClubAccess = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  const user = req.user;
+  const clubId = req.params.clubId || req.body.clubId;
+
+  if (!clubId) {
+    next();
+    return;
+  }
+
+  // Defense-in-depth: verify user owns this club
+  if (!user?.clubIds?.includes(clubId)) {
+    res.status(403).json({ error: "No autorizado para este club" });
     return;
   }
 

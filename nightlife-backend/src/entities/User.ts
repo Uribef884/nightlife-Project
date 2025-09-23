@@ -52,7 +52,10 @@ export class User {
   club?: Club;
 
   @Column({ nullable: true })
-  clubId?: string;
+  clubId?: string | null;
+
+  @Column("text", { array: true, nullable: true, name: "club_ids" })
+  clubIds?: string[] | null;
 
   @CreateDateColumn()
   createdAt!: Date;

@@ -2,6 +2,7 @@ export type JwtPayload = {
   id: string;
   role: "admin" | "user" | "clubowner" | "bouncer" | "waiter";
   email: string;
-  clubId?: string;
+  clubId?: string | null;
+  clubIds?: string[] | null;
   isDeleted?: boolean;
 };

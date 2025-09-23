@@ -105,9 +105,21 @@ export async function createTicket(req: Request, res: Response): Promise<void> {
       club = await clubRepo.findOne({ where: { id: clubId }, relations: ["owner"] });
     }
 
-    // 🔐 Clubowners derive clubId from login
+    // 🔐 Clubowners use their active club
     else if (user.role === "clubowner") {
-      club = await clubRepo.findOne({ where: { ownerId: user.id } });
+      // Use the active club from the authenticated user
+      if (!user.clubId) {
+        res.status(403).json({ error: "No tienes un club activo seleccionado" });
+        return;
+      }
+      
+      // Verify the user owns this active club
+      if (!user.clubIds?.includes(user.clubId)) {
+        res.status(403).json({ error: "No eres propietario del club activo" });
+        return;
+      }
+      
+      club = await clubRepo.findOne({ where: { id: user.clubId }, relations: ["owner"] });
     }
 
     if (!club) {
@@ -895,10 +907,22 @@ export const getTicketsForMyClub = async (req: AuthenticatedRequest, res: Respon
     const clubRepo = AppDataSource.getRepository(Club);
     const ticketRepo = AppDataSource.getRepository(Ticket);
 
-    const club = await clubRepo.findOne({ where: { ownerId: user.id } });
+    // Use the active club from the authenticated user
+    if (!user.clubId) {
+      res.status(403).json({ error: "No tienes un club activo seleccionado" });
+      return;
+    }
+    
+    // Verify the user owns this active club
+    if (!user.clubIds?.includes(user.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
+      return;
+    }
+
+    const club = await clubRepo.findOne({ where: { id: user.clubId } });
 
     if (!club) {
-      res.status(404).json({ error: "Club no encontrado para este usuario" });
+      res.status(404).json({ error: "Club activo no encontrado" });
       return;
     }
 

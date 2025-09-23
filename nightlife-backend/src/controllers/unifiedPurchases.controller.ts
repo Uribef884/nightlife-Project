@@ -260,7 +260,7 @@ export const getClubUnifiedPurchaseById = async (req: AuthenticatedRequest, res:
     const txRepo = AppDataSource.getRepository(UnifiedPurchaseTransaction);
 
     const tx = await txRepo.findOne({
-      where: { id, clubId },
+      where: { id, clubId: clubId || undefined },
       relations: ["user", "ticketPurchases", "ticketPurchases.ticket", "ticketPurchases.ticket.event", "ticketPurchases.club", "menuPurchases", "menuPurchases.menuItem", "menuPurchases.variant", "menuPurchases.club"]
     });
 

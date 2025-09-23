@@ -13,6 +13,7 @@ import { forgotPasswordSchema, resetPasswordSchema } from "../schemas/forgot.sch
 import { sendPasswordResetEmail } from "../services/emailService";
 import { OAuthService, GoogleUserInfo } from "../services/oauthService";
 import { sanitizeInput } from "../utils/sanitizeInput";
+import { UserService } from "../services/user.service";
 import { anonymizeUser, canUserBeDeleted } from "../utils/anonymizeUser";
 import { AuthInputSanitizer, validateAuthInputs } from "../utils/authInputSanitizer";
 import { strictRateLimiter } from "../middlewares/queryRateLimiter";
@@ -154,10 +155,22 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   let clubId: string | undefined = undefined;
   if (user.role === "clubowner") {
-    const club = await AppDataSource.getRepository(Club).findOneBy({ ownerId: user.id });
-    if (club) clubId = club.id;
+    // Clear clubId for club owners on login to prevent accidental edits to other clubs
+    // They must explicitly select a club after login
+    console.log(`[LOGIN] Clearing clubId for club owner ${user.id}. Previous clubId: ${user.clubId}`);
+    clubId = undefined;
+    
+    // Also clear it in the database to ensure consistency
+    user.clubId = null;
+    try {
+      // Use direct SQL update to ensure it actually gets saved
+      await repo.manager.query('UPDATE "user" SET "clubId" = NULL WHERE "id" = $1', [user.id]);
+      console.log(`[LOGIN] Successfully cleared clubId in DB using direct SQL update`);
+    } catch (error) {
+      console.error(`[LOGIN] Failed to clear clubId in DB for user ${user.id}:`, error);
+    }
   } else if (user.role === "bouncer" || user.role === "waiter") {
-    clubId = user.clubId;
+    clubId = user.clubId || undefined;
   }
 
   const token = jwt.sign(
@@ -167,6 +180,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       email: user.email,
       isDeleted: user.isDeleted,
       ...(clubId ? { clubId } : {}),
+      ...(user.role === "clubowner" ? { clubIds: user.clubIds || [] } : {}),
     },
     JWT_SECRET,
     { expiresIn: "7d" }
@@ -199,6 +213,22 @@ export async function logout(req: Request, res: Response): Promise<void> {
 
   try {
     if (userId) {
+      // Clear clubId for club owners on logout to prevent accidental edits
+      const userRepo = AppDataSource.getRepository(User);
+      const user = await userRepo.findOneBy({ id: userId });
+      
+      if (user && user.role === "clubowner") {
+        console.log(`[LOGOUT] Clearing clubId for club owner ${user.id}. Previous clubId: ${user.clubId}`);
+        user.clubId = null;
+        try {
+          // Use direct SQL update to ensure it actually gets saved
+          await userRepo.manager.query('UPDATE "user" SET "clubId" = NULL WHERE "id" = $1', [user.id]);
+          console.log(`[LOGOUT] Successfully cleared clubId in DB using direct SQL update`);
+        } catch (error) {
+          console.error(`[LOGOUT] Failed to clear clubId in DB for user ${user.id}:`, error);
+        }
+      }
+      
       await unifiedCartRepo.delete({ userId });
       res.clearCookie("token", {
         httpOnly: true,
@@ -601,10 +631,10 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
     // Get clubId for clubowner/bouncer/waiter
     let clubId: string | undefined = undefined;
     if (user.role === "clubowner") {
-      const club = await AppDataSource.getRepository(Club).findOneBy({ ownerId: user.id });
-      if (club) clubId = club.id;
+      // Use the active clubId from user object (already set in clubIds array)
+      clubId = user.clubId || undefined;
     } else if (user.role === "bouncer" || user.role === "waiter") {
-      clubId = user.clubId;
+      clubId = user.clubId || undefined;
     }
 
     // Create JWT token
@@ -615,6 +645,7 @@ export async function googleCallback(req: Request, res: Response): Promise<void>
         email: user.email,
         isDeleted: user.isDeleted,
         ...(clubId ? { clubId } : {}),
+        ...(user.role === "clubowner" ? { clubIds: user.clubIds || [] } : {}),
       },
       JWT_SECRET,
       { expiresIn: "7d" }
@@ -727,10 +758,22 @@ export async function googleTokenAuth(req: Request, res: Response): Promise<void
     // Get clubId for clubowner/bouncer/waiter
     let clubId: string | undefined = undefined;
     if (user.role === "clubowner") {
-      const club = await AppDataSource.getRepository(Club).findOneBy({ ownerId: user.id });
-      if (club) clubId = club.id;
+      // Clear clubId for club owners on login to prevent accidental edits to other clubs
+      // They must explicitly select a club after login
+      console.log(`[GOOGLE-OAUTH] Clearing clubId for club owner ${user.id}. Previous clubId: ${user.clubId}`);
+      clubId = undefined;
+      
+      // Also clear it in the database to ensure consistency
+      user.clubId = null;
+      try {
+        // Use direct SQL update to ensure it actually gets saved
+        await userRepo.manager.query('UPDATE "user" SET "clubId" = NULL WHERE "id" = $1', [user.id]);
+        console.log(`[GOOGLE-OAUTH] Successfully cleared clubId in DB using direct SQL update`);
+      } catch (error) {
+        console.error(`[GOOGLE-OAUTH] Failed to clear clubId in DB for user ${user.id}:`, error);
+      }
     } else if (user.role === "bouncer" || user.role === "waiter") {
-      clubId = user.clubId;
+      clubId = user.clubId || undefined;
     }
 
     // Create JWT token
@@ -741,6 +784,7 @@ export async function googleTokenAuth(req: Request, res: Response): Promise<void
         email: user.email,
         isDeleted: user.isDeleted,
         ...(clubId ? { clubId } : {}),
+        ...(user.role === "clubowner" ? { clubIds: user.clubIds || [] } : {}),
       },
       JWT_SECRET,
       { expiresIn: "7d" }
@@ -811,6 +855,313 @@ export async function checkUserDeletionStatus(req: Request, res: Response): Prom
     }
   } catch (error) {
     console.error("❌ Error checking user deletion status:", error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+}
+
+// GET AVAILABLE CLUBS (CLUB OWNER ONLY)
+export async function getAvailableClubs(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user!.id;
+    
+    // Load fresh user from DB
+    const userRepo = AppDataSource.getRepository(User);
+    const user = await userRepo.findOneBy({ id: userId });
+    
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+    
+    // Only club owners can access this endpoint
+    if (user.role !== "clubowner") {
+      res.status(403).json({ error: "Solo los propietarios de club pueden acceder a esta información" });
+      return;
+    }
+    
+    // Get club details for each owned club
+    const clubRepo = AppDataSource.getRepository(Club);
+    const clubs = [];
+    
+    for (const clubId of user.clubIds || []) {
+      const club = await clubRepo.findOne({
+        where: { id: clubId, isActive: true, isDeleted: false },
+        select: ['id', 'name', 'description', 'city', 'profileImageUrl']
+      });
+      
+      if (club) {
+        clubs.push({
+          id: club.id,
+          name: club.name,
+          description: club.description,
+          city: club.city,
+          profileImageUrl: club.profileImageUrl,
+          isActive: club.id === user.clubId
+        });
+      }
+    }
+    
+    res.json({ clubs });
+  } catch (error) {
+    console.error('Error fetching available clubs:', error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+}
+
+// SELECT CLUB (CLUB OWNER ONLY)
+export async function selectClub(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { clubId } = req.body;
+    const userId = req.user!.id;
+    
+    // Load fresh user from DB
+    const userRepo = AppDataSource.getRepository(User);
+    const user = await userRepo.findOneBy({ id: userId });
+    
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+    
+    // Only club owners can select clubs
+    if (user.role !== "clubowner") {
+      res.status(403).json({ error: "Solo los propietarios de club pueden cambiar de club" });
+      return;
+    }
+    
+    // Verify clubId ∈ user.clubIds
+    if (!user.clubIds?.includes(clubId)) {
+      res.status(403).json({ error: "No autorizado para este club" });
+      return;
+    }
+    
+    // Verify club exists and is enabled
+    const clubRepo = AppDataSource.getRepository(Club);
+    const club = await clubRepo.findOne({ 
+      where: { id: clubId, isActive: true, isDeleted: false } 
+    });
+    
+    if (!club) {
+      res.status(404).json({ error: "Club no encontrado o deshabilitado" });
+      return;
+    }
+    
+    // Update active club
+    user.clubId = clubId;
+    await userRepo.save(user);
+    
+    // Issue new JWT with only necessary claims
+    const token = jwt.sign(
+      { 
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        clubId: user.clubId,
+        isDeleted: user.isDeleted,
+        ...(user.role === "clubowner" ? { clubIds: user.clubIds || [] } : {}),
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+    
+    // Set secure cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+    
+    res.json({ 
+      token, 
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        clubId: user.clubId,
+        clubIds: user.clubIds
+      }
+    });
+  } catch (error) {
+    console.error('Error selecting club:', error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+}
+
+// ADMIN: ADD CLUB TO USER (ADMIN ONLY)
+export async function adminAddClubToUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { userId, clubId } = req.body;
+    
+    // Validate input
+    if (!userId || !clubId) {
+      res.status(400).json({ error: "userId y clubId son requeridos" });
+      return;
+    }
+    
+    // Verify club exists and is active
+    const clubRepo = AppDataSource.getRepository(Club);
+    const club = await clubRepo.findOne({
+      where: { id: clubId, isActive: true, isDeleted: false }
+    });
+    
+    if (!club) {
+      res.status(404).json({ error: "Club no encontrado o deshabilitado" });
+      return;
+    }
+    
+    // Use admin service method
+    await UserService.adminAddClubToUser(userId, clubId);
+    
+    res.json({ 
+      message: "Club agregado exitosamente al usuario",
+      userId,
+      clubId,
+      clubName: club.name
+    });
+  } catch (error) {
+    console.error('Error adding club to user:', error);
+    if (error instanceof Error && error.message === 'User not found') {
+      res.status(404).json({ error: "Usuario no encontrado" });
+    } else {
+      res.status(500).json({ error: "Error interno del servidor" });
+    }
+  }
+}
+
+// ADMIN: REMOVE CLUB FROM USER (ADMIN ONLY)
+export async function adminRemoveClubFromUser(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { userId, clubId } = req.body;
+    
+    // Validate input
+    if (!userId || !clubId) {
+      res.status(400).json({ error: "userId y clubId son requeridos" });
+      return;
+    }
+    
+    // Verify club exists
+    const clubRepo = AppDataSource.getRepository(Club);
+    const club = await clubRepo.findOne({
+      where: { id: clubId }
+    });
+    
+    if (!club) {
+      res.status(404).json({ error: "Club no encontrado" });
+      return;
+    }
+    
+    // Use admin service method
+    await UserService.adminRemoveClubFromUser(userId, clubId);
+    
+    res.json({ 
+      message: "Club removido exitosamente del usuario",
+      userId,
+      clubId,
+      clubName: club.name
+    });
+  } catch (error) {
+    console.error('Error removing club from user:', error);
+    if (error instanceof Error && error.message === 'User not found') {
+      res.status(404).json({ error: "Usuario no encontrado" });
+    } else {
+      res.status(500).json({ error: "Error interno del servidor" });
+    }
+  }
+}
+
+// ADMIN: GET USER'S OWNED CLUBS (ADMIN ONLY)
+export async function adminGetUserClubs(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { userId } = req.params;
+    
+    // Validate input
+    if (!userId) {
+      res.status(400).json({ error: "userId es requerido" });
+      return;
+    }
+    
+    // Get user with clubs
+    const userRepo = AppDataSource.getRepository(User);
+    const user = await userRepo.findOneBy({ id: userId });
+    
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+    
+    // Get club details for each owned club
+    const clubRepo = AppDataSource.getRepository(Club);
+    const clubs = [];
+    
+    if (user.clubIds && user.clubIds.length > 0) {
+      for (const clubId of user.clubIds) {
+        const club = await clubRepo.findOne({
+          where: { id: clubId },
+          select: ['id', 'name', 'description', 'city', 'profileImageUrl', 'isActive', 'isDeleted']
+        });
+        
+        if (club) {
+          clubs.push({
+            id: club.id,
+            name: club.name,
+            description: club.description,
+            city: club.city,
+            profileImageUrl: club.profileImageUrl,
+            isActive: club.isActive,
+            isDeleted: club.isDeleted,
+            isActiveClub: club.id === user.clubId
+          });
+        }
+      }
+    }
+    
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        clubId: user.clubId
+      },
+      ownedClubs: clubs,
+      totalClubs: clubs.length
+    });
+  } catch (error) {
+    console.error('Error fetching user clubs:', error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
+}
+
+// DEBUG: Test endpoint to manually clear clubId
+export async function debugClearClubId(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.user!.id;
+    const userRepo = AppDataSource.getRepository(User);
+    
+    const user = await userRepo.findOneBy({ id: userId });
+    if (!user) {
+      res.status(404).json({ error: "Usuario no encontrado" });
+      return;
+    }
+    
+    console.log(`[DEBUG] Before clearing - User ${userId} clubId: ${user.clubId}`);
+    
+    user.clubId = null;
+    // Use direct SQL update to ensure it actually gets saved
+    await userRepo.manager.query('UPDATE "user" SET "clubId" = NULL WHERE "id" = $1', [userId]);
+    
+    // Verify the update worked by fetching the user again
+    const updatedUser = await userRepo.findOneBy({ id: userId });
+    console.log(`[DEBUG] After clearing - User ${userId} clubId: ${updatedUser?.clubId}`);
+    
+    res.json({ 
+      message: "ClubId cleared",
+      before: user.clubId,
+      after: updatedUser?.clubId,
+      userId: userId
+    });
+  } catch (error) {
+    console.error('Error clearing clubId:', error);
     res.status(500).json({ error: "Error interno del servidor" });
   }
 }

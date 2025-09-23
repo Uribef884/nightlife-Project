@@ -47,10 +47,23 @@ export const createMenuItem = async (req: AuthenticatedRequest, res: Response): 
 
     // Check if club is in structured menu mode
     const clubRepo = AppDataSource.getRepository(Club);
-    const club = await clubRepo.findOne({ where: { ownerId: user.id } });
+    
+    // Use the active club from the authenticated user
+    if (!user.clubId) {
+      res.status(403).json({ error: "No tienes un club activo seleccionado" });
+      return;
+    }
+    
+    // Verify the user owns this active club
+    if (!user.clubIds?.includes(user.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
+      return;
+    }
+    
+    const club = await clubRepo.findOne({ where: { id: user.clubId } });
     
     if (!club) {
-      res.status(404).json({ error: "Club no encontrado" });
+      res.status(404).json({ error: "Club activo no encontrado" });
       return;
     }
 
@@ -404,7 +417,7 @@ export const getItemsForMyClub = async (req: AuthenticatedRequest, res: Response
     const repo = AppDataSource.getRepository(MenuItem);
     const items = await repo.find({
       where: {
-        clubId: user.clubId,
+        clubId: user.clubId || undefined,
         isActive: true,
         isDeleted: false,
       },

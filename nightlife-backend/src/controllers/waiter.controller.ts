@@ -51,12 +51,19 @@ export const createWaiter = async (req: AuthenticatedRequest, res: Response): Pr
       return;
     }
 
-    const club = await clubRepo.findOneBy({ ownerId: requester.id });
-    if (!club) {
-      res.status(403).json({ error: "No eres propietario de un club" });
+    // Use the active club from the authenticated user
+    if (!requester.clubId) {
+      res.status(403).json({ error: "No tienes un club activo seleccionado" });
       return;
     }
-    const clubId = club.id;
+    
+    // Verify the user owns this active club
+    if (!requester.clubIds?.includes(requester.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
+      return;
+    }
+    
+    const clubId = requester.clubId;
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newWaiter = userRepo.create({
@@ -83,14 +90,20 @@ export const getWaiters = async (req: AuthenticatedRequest, res: Response): Prom
     return;
   }
 
-  const club = await AppDataSource.getRepository(Club).findOneBy({ ownerId: requester.id });
-  if (!club) {
-    res.status(403).json({ error: "No eres propietario de un club" });
+  // Use the active club from the authenticated user
+  if (!requester.clubId) {
+    res.status(403).json({ error: "No tienes un club activo seleccionado" });
+    return;
+  }
+  
+  // Verify the user owns this active club
+  if (!requester.clubIds?.includes(requester.clubId)) {
+    res.status(403).json({ error: "No eres propietario del club activo" });
     return;
   }
 
   const waiters = await userRepo.find({
-    where: { role: "waiter", clubId: club.id },
+    where: { role: "waiter", clubId: requester.clubId },
     select: ["id", "email", "createdAt"],
   });
 
@@ -113,8 +126,19 @@ export const deleteWaiter = async (req: AuthenticatedRequest, res: Response): Pr
     return;
   }
 
-  const ownerClub = await AppDataSource.getRepository(Club).findOneBy({ ownerId: requester.id });
-  if (!ownerClub || waiter.clubId !== ownerClub.id) {
+  // Use the active club from the authenticated user
+  if (!requester.clubId) {
+    res.status(403).json({ error: "No tienes un club activo seleccionado" });
+    return;
+  }
+  
+  // Verify the user owns this active club
+  if (!requester.clubIds?.includes(requester.clubId)) {
+    res.status(403).json({ error: "No eres propietario del club activo" });
+    return;
+  }
+  
+  if (waiter.clubId !== requester.clubId) {
     res.status(403).json({ error: "No estás autorizado para eliminar este mesero" });
     return;
   }
