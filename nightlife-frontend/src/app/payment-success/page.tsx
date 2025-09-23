@@ -16,9 +16,10 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/stores/auth.store';
 import { useCartStore } from '@/stores/cart.store';
-import { paymentDebugger, PaymentDebugInfo } from '@/utils/paymentDebug';
+import { getCheckoutSummary, clearCheckoutSummary } from '@/utils/checkoutSummary';
 
-interface TransactionDetails {
+// Simple transaction details type
+type TransactionDetails = {
   transactionId: string;
   status: string;
   totalPaid: number;
@@ -26,22 +27,17 @@ interface TransactionDetails {
   paymentMethod: string;
   email: string;
   purchaseDate: string;
-  items: Array<{
-    id: string;
-    name: string;
-    type: 'ticket' | 'menu';
-    quantity: number;
-    price: number;
-    clubName: string;
-    date: string;
-    image?: string;
-  }>;
+  items: any[];
   subtotal: number;
   serviceFee: number;
   discounts: number;
   total: number;
   actualTotal?: number;
-}
+  declineReason?: string;
+  timeoutDuration?: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
 
 export default function PaymentSuccessPage() {
   const router = useRouter();
@@ -55,8 +51,8 @@ export default function PaymentSuccessPage() {
 
   const fetchTransactionDetails = useCallback(async (transactionId: string) => {
     try {
-      paymentDebugger.logLifecycleEvent('Starting transaction details fetch', 'PaymentSuccess');
-      paymentDebugger.logUrlParams(searchParams, 'PaymentSuccess');
+      
+      
       
       // Fetch transaction details from backend API
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -68,14 +64,23 @@ export default function PaymentSuccessPage() {
         credentials: 'include',
       });
 
-      paymentDebugger.logApiResponse(response, `${apiUrl}/checkout/unified/status/${transactionId}`, 'PaymentSuccess');
+      
 
       if (!response.ok) {
         throw new Error(`Failed to fetch transaction details: ${response.status}`);
       }
 
       const data = await response.json();
-      paymentDebugger.logApiResponse(data, `${apiUrl}/checkout/unified/status/${transactionId}`, 'PaymentSuccess');
+      
+      
+      // Debug: Log the subtotal values specifically
+      console.log('PaymentSuccess - API Response subtotal data:', {
+        subtotal: data.subtotal,
+        totalPaid: data.totalPaid,
+        amount: data.amount,
+        typeOfSubtotal: typeof data.subtotal,
+        typeOfTotalPaid: typeof data.totalPaid
+      });
       
       // Check the actual transaction status and redirect if not APPROVED
       const actualStatus = data.status || 'APPROVED';
@@ -99,69 +104,101 @@ export default function PaymentSuccessPage() {
         }
       }
       
-      // Transform API response to TransactionDetails format
+      // Use simple transaction details mapping
       const transactionDetails: TransactionDetails = {
         transactionId: data.transactionId || transactionId,
-        status: actualStatus,
-        totalPaid: data.amount || data.totalPaid || 0,
-        isFreeCheckout: data.isFreeCheckout || false,
+        status: data.status || 'APPROVED',
+        totalPaid: data.totalPaid || data.amount || 0,
+        isFreeCheckout: Boolean(data.isFreeCheckout),
         paymentMethod: data.paymentMethod || 'CARD',
         email: data.customerEmail || user?.email || 'usuario@ejemplo.com',
         purchaseDate: data.createdAt || new Date().toISOString(),
-        items: data.items || [], // Load items from API response
+        items: data.items || [],
         subtotal: data.subtotal || 0,
         serviceFee: data.serviceFee || 0,
         discounts: data.discounts || 0,
         total: data.total || data.amount || 0,
-        actualTotal: data.actualTotal || data.amount || 0
+        actualTotal: data.actualTotal,
+        declineReason: data.declineReason,
+        timeoutDuration: data.timeoutDuration,
+        errorCode: data.errorCode,
+        errorMessage: data.errorMessage,
       };
       
+      // Debug: Log the final transaction details
+      console.log('PaymentSuccess - Final transaction details:', {
+        subtotal: transactionDetails.subtotal,
+        totalPaid: transactionDetails.totalPaid,
+        actualTotal: transactionDetails.actualTotal,
+        total: transactionDetails.total,
+        typeOfSubtotal: typeof transactionDetails.subtotal
+      });
+      
       // Log transaction details for debugging
-      paymentDebugger.logTransactionDetails(transactionDetails as PaymentDebugInfo, 'PaymentSuccess');
-      paymentDebugger.validateTransactionData(transactionDetails as PaymentDebugInfo, 'PaymentSuccess');
+      
+      
       
       setTransactionDetails(transactionDetails);
     } catch (err) {
-      paymentDebugger.logError(err, 'fetchTransactionDetails', 'PaymentSuccess');
+      
       setError('Error al cargar los detalles de la transacción');
     }
   }, [user?.email, router]);
 
   useEffect(() => {
-    paymentDebugger.logLifecycleEvent('Component mounted', 'PaymentSuccess');
+    
     
     // Get transaction details from URL params, localStorage, or sessionStorage
     const transactionId = searchParams.get('transactionId');
     const storedDetails = localStorage.getItem('lastTransactionDetails') || sessionStorage.getItem('lastTransactionDetails');
     
-    paymentDebugger.logUrlParams(searchParams, 'PaymentSuccess');
     
-    // Always fetch current status from backend to ensure accuracy
-    if (transactionId) {
-      paymentDebugger.logLifecycleEvent('Fetching current transaction status from API', 'PaymentSuccess');
-      fetchTransactionDetails(transactionId);
-    } else if (storedDetails) {
+    
+    // Use stored details first (they have correct pricing), only fetch from API if needed
+    if (storedDetails) {
       try {
         const details = JSON.parse(storedDetails);
-        paymentDebugger.logStoredData('localStorage', 'lastTransactionDetails', details, 'PaymentSuccess');
         
-        // If we have stored details with a transaction ID, fetch current status
-        if (details.transactionId) {
-          paymentDebugger.logLifecycleEvent('Fetching current status for stored transaction', 'PaymentSuccess');
-          fetchTransactionDetails(details.transactionId);
+        
+        // Use checkout summary for correct pricing if available
+        const checkoutSummary = getCheckoutSummary();
+        let transactionDetails = details;
+        
+        if (checkoutSummary) {
+          console.log('PaymentSuccess: Using checkout summary for correct pricing', checkoutSummary);
+          
+          // Update transaction details with correct pricing from checkout summary
+          transactionDetails = {
+            ...details,
+            subtotal: checkoutSummary.total,
+            serviceFee: checkoutSummary.operationalCosts,
+            total: checkoutSummary.actualTotal,
+            totalPaid: checkoutSummary.actualTotal,
+            actualTotal: checkoutSummary.actualTotal,
+          };
+          
+          // Clear checkout summary after successful payment
+          clearCheckoutSummary();
         } else {
-          // Fallback to stored details if no transaction ID
-          paymentDebugger.logTransactionDetails(details as PaymentDebugInfo, 'PaymentSuccess');
-          paymentDebugger.validateTransactionData(details as PaymentDebugInfo, 'PaymentSuccess');
-          setTransactionDetails(details);
+          console.log('PaymentSuccess: No checkout summary available, using stored details');
         }
+        
+        // Log transaction details for debugging
+        
+        
+        
+        setTransactionDetails(transactionDetails);
       } catch (err) {
-        paymentDebugger.logError(err, 'parseStoredDetails', 'PaymentSuccess');
+        
         setError('Error al cargar los detalles de la transacción');
       }
+    } else if (transactionId) {
+      // Only fetch from API if no stored details available
+      
+      fetchTransactionDetails(transactionId);
     } else {
       // No transaction data available
-      paymentDebugger.logLifecycleEvent('No transaction data available', 'PaymentSuccess');
+      
       setError('No se encontraron detalles de la transacción');
     }
     
@@ -173,7 +210,8 @@ export default function PaymentSuccessPage() {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(validPrice);
   };
 
@@ -267,7 +305,7 @@ export default function PaymentSuccessPage() {
           </h1>
           
           <p className="text-slate-300 text-lg mb-4">
-            Tu transacción fue aprobada y ya enviamos tus entradas a tu correo electrónico.
+            Tu transacción fue aprobada y enviamos tu(s) QR(s) a tu correo electrónico.
           </p>
 
           {!transactionDetails.isFreeCheckout && (
@@ -276,7 +314,7 @@ export default function PaymentSuccessPage() {
                 <strong>Total pagado:</strong>
               </p>
               <p className="text-green-100 text-2xl font-bold">
-                {formatPrice(transactionDetails.totalPaid || transactionDetails.actualTotal || transactionDetails.total || (transactionDetails.subtotal + transactionDetails.serviceFee - transactionDetails.discounts))}
+                {formatPrice(transactionDetails.totalPaid || transactionDetails.actualTotal || transactionDetails.total)}
               </p>
             </div>
           )}
@@ -321,7 +359,7 @@ export default function PaymentSuccessPage() {
                 <span className="text-slate-100 flex items-center text-sm sm:text-base">
                   {transactionDetails.paymentMethod === 'FREE' ? (
                     <>
-                      <span className="text-green-400 mr-1">🎁</span>
+                      <span className="text-green-400 mr-1"></span>
                       Gratuito
                     </>
                   ) : transactionDetails.paymentMethod === 'CARD' ? (
@@ -367,50 +405,40 @@ export default function PaymentSuccessPage() {
               <div className="bg-blue-900/20 border border-blue-500/50 rounded-lg p-3">
                 <p className="text-blue-200 text-sm">
                   <strong>Confirmación enviada</strong><br />
-                  Revisa tu correo electrónico para obtener tus entradas y QR codes.
+                  Revisa tu correo electrónico para obtener tus códigos QR.
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing Summary */}
+          <div className="mt-6 pt-6 border-t border-slate-600">
+            <h3 className="text-lg font-medium text-slate-100 mb-4">Resumen de Precios</h3>
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-slate-300 text-sm sm:text-base">Subtotal:</span>
+                <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.subtotal)}</span>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-slate-300 text-sm sm:text-base">Tarifa de servicio:</span>
+                <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.serviceFee)}</span>
+              </div>
+              {transactionDetails.discounts > 0 && (
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-green-400">
+                  <span className="text-sm sm:text-base">Descuentos:</span>
+                  <span className="text-sm sm:text-base">-{formatPrice(transactionDetails.discounts)}</span>
+                </div>
+              )}
+              <div className="border-t border-slate-600 pt-2">
+                <div className="flex flex-col sm:flex-row sm:justify-between text-lg font-semibold">
+                  <span className="text-slate-100 text-sm sm:text-base">Total:</span>
+                  <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.totalPaid || transactionDetails.actualTotal || transactionDetails.total)}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Price Breakdown */}
-        {!transactionDetails.isFreeCheckout && (
-          <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-4 sm:p-6 mb-6">
-            <h2 className="text-xl font-semibold text-slate-100 mb-4 flex items-center">
-              <CreditCard className="h-5 w-5 mr-2" />
-              Resumen de Precios
-            </h2>
-            
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-300">Subtotal:</span>
-                <span className="text-slate-100 font-medium">{formatPrice(transactionDetails.subtotal)}</span>
-              </div>
-              
-              {(transactionDetails.serviceFee || 0) > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-300">Tarifa de servicio:</span>
-                  <span className="text-slate-100 font-medium">{formatPrice(transactionDetails.serviceFee)}</span>
-                </div>
-              )}
-              
-              {(transactionDetails.discounts || 0) > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-300">Descuentos:</span>
-                  <span className="text-green-400 font-medium">-{formatPrice(transactionDetails.discounts)}</span>
-                </div>
-              )}
-              
-              <div className="border-t border-slate-600 pt-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-100 text-lg font-semibold">Total pagado:</span>
-                  <span className="text-green-400 text-xl font-bold">{formatPrice(transactionDetails.totalPaid || transactionDetails.actualTotal || transactionDetails.total || (transactionDetails.subtotal + transactionDetails.serviceFee - transactionDetails.discounts))}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Action Buttons */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">

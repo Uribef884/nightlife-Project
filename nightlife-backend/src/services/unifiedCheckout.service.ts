@@ -97,8 +97,21 @@ export class UnifiedCheckoutService {
     if (isFreeCheckout) {
       console.log("[UNIFIED-CHECKOUT-SERVICE] 🎁 Free checkout detected. Processing immediately.");
       
+      // Override payment method to FREE for free checkouts
+      const freeCustomerInfo = {
+        ...customerInfo,
+        paymentMethod: 'FREE'
+      };
+      
+      console.log("[UNIFIED-CHECKOUT-SERVICE] 🎁 Free checkout - Updated customer info:", {
+        originalPaymentMethod: customerInfo.paymentMethod,
+        freePaymentMethod: freeCustomerInfo.paymentMethod,
+        fullCustomerInfo: customerInfo,
+        fullFreeCustomerInfo: freeCustomerInfo
+      });
+      
       // Process free checkout immediately (no payment needed)
-      const result = await this.processFreeCheckoutDirect(email, cartItems, customerInfo, userId, sessionId);
+      const result = await this.processFreeCheckoutDirect(email, cartItems, freeCustomerInfo, userId, sessionId);
       return {
         transactionId: result.transactionId,
         wompiTransactionId: result.transactionId,
@@ -509,6 +522,11 @@ export class UnifiedCheckoutService {
     const clubId = cartItems[0].clubId;
     const transactionDate = cartItems[0]?.date; // All items should have the same date
 
+    console.log("[UNIFIED-CHECKOUT-SERVICE] 🎁 Creating free checkout transaction with customer info:", {
+      customerInfo,
+      paymentMethod: customerInfo.paymentMethod
+    });
+    
     // Create unified transaction for free checkout
     const transaction = this.transactionRepo.create({
       userId: userId || undefined,
@@ -537,6 +555,8 @@ export class UnifiedCheckoutService {
       customerLegalIdType: customerInfo.legalIdType,
       paymentMethod: customerInfo.paymentMethod
     });
+    
+    console.log("[UNIFIED-CHECKOUT-SERVICE] 🎁 Transaction created with payment method:", transaction.paymentMethod);
 
     const savedTransaction = await this.transactionRepo.save(transaction);
 
@@ -547,6 +567,15 @@ export class UnifiedCheckoutService {
 
     // Clear cart
     await this.cartService.clearCart(userId, sessionId);
+
+    // Unlock cart after successful free checkout
+    try {
+      const { unlockCart } = await import('../utils/cartLock');
+      unlockCart(userId || null, sessionId || null);
+      console.log(`[UNIFIED-CHECKOUT-SERVICE] 🔓 Cart unlocked after successful free checkout for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
+    } catch (unlockError) {
+      console.error(`[UNIFIED-CHECKOUT-SERVICE] ❌ Failed to unlock cart after free checkout:`, unlockError);
+    }
 
     return {
       transactionId: savedTransaction.id,
@@ -728,6 +757,26 @@ export class UnifiedCheckoutService {
               useDateBasedLogic: false,
             });
           }
+        }
+
+        // Update ticket quantity if it has a quantity limit
+        if (ticket.quantity != null && ticket.quantity > 0) {
+          const newQuantity = ticket.quantity - cartItem.quantity;
+          if (newQuantity < 0) {
+            throw new Error(`Insufficient ticket quantity. Available: ${ticket.quantity}, Requested: ${cartItem.quantity}`);
+          }
+          
+          // Update the ticket quantity in the database
+          await transactionalEntityManager.update('Ticket', 
+            { id: ticket.id }, 
+            { quantity: newQuantity }
+          );
+          
+          console.log(`[UNIFIED-CHECKOUT-SERVICE] ✅ Updated ticket ${ticket.id} (${ticket.name}) quantity: ${ticket.quantity} → ${newQuantity} (sold ${cartItem.quantity})`);
+        } else if (ticket.quantity === 0) {
+          console.log(`[UNIFIED-CHECKOUT-SERVICE] ⚠️ Ticket ${ticket.id} (${ticket.name}) has zero quantity - this should have been caught earlier`);
+        } else {
+          console.log(`[UNIFIED-CHECKOUT-SERVICE] ℹ️ Ticket ${ticket.id} (${ticket.name}) has unlimited quantity (null) - no quantity update needed`);
         }
 
         // Create individual ticket purchases (one per quantity unit)

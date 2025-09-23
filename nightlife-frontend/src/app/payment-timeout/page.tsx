@@ -14,9 +14,10 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/stores/auth.store';
 import { useCartStore } from '@/stores/cart.store';
-import { paymentDebugger, PaymentDebugInfo } from '@/utils/paymentDebug';
+import { getCheckoutSummary, clearCheckoutSummary } from '@/utils/checkoutSummary';
 
-interface TransactionDetails {
+// Simple transaction details type
+type TransactionDetails = {
   transactionId: string;
   status: string;
   totalPaid: number;
@@ -30,8 +31,11 @@ interface TransactionDetails {
   discounts: number;
   total: number;
   actualTotal?: number;
+  declineReason?: string;
   timeoutDuration?: number;
-}
+  errorCode?: string;
+  errorMessage?: string;
+};
 
 export default function PaymentTimeoutPage() {
   const router = useRouter();
@@ -45,9 +49,6 @@ export default function PaymentTimeoutPage() {
 
   const fetchTransactionDetails = useCallback(async (transactionId: string) => {
     try {
-      paymentDebugger.logLifecycleEvent('Starting transaction details fetch', 'PaymentTimeout');
-      paymentDebugger.logUrlParams(searchParams, 'PaymentTimeout');
-      
       // Fetch transaction details from backend API
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${apiUrl}/checkout/unified/status/${transactionId}`, {
@@ -58,80 +59,95 @@ export default function PaymentTimeoutPage() {
         credentials: 'include',
       });
 
-      paymentDebugger.logApiResponse(response, `${apiUrl}/checkout/unified/status/${transactionId}`, 'PaymentTimeout');
-
       if (!response.ok) {
         throw new Error(`Failed to fetch transaction details: ${response.status}`);
       }
 
       const data = await response.json();
-      paymentDebugger.logApiResponse(data, `${apiUrl}/checkout/unified/status/${transactionId}`, 'PaymentTimeout');
       
-      // Transform API response to TransactionDetails format
+      // Use simple transaction details mapping
       const transactionDetails: TransactionDetails = {
         transactionId: data.transactionId || transactionId,
         status: data.status || 'TIMEOUT',
-        totalPaid: data.amount || data.totalPaid || 0,
-        isFreeCheckout: data.isFreeCheckout || false,
+        totalPaid: data.totalPaid || data.amount || 0,
+        isFreeCheckout: Boolean(data.isFreeCheckout),
         paymentMethod: data.paymentMethod || 'CARD',
         email: data.customerEmail || user?.email || 'usuario@ejemplo.com',
         purchaseDate: data.createdAt || new Date().toISOString(),
-        items: data.items || [], // Load items from API response
+        items: data.items || [],
         subtotal: data.subtotal || 0,
         serviceFee: data.serviceFee || 0,
         discounts: data.discounts || 0,
         total: data.total || data.amount || 0,
-        actualTotal: data.actualTotal || data.amount || 0,
-        timeoutDuration: data.timeoutDuration || 30
+        actualTotal: data.actualTotal,
+        declineReason: data.declineReason,
+        timeoutDuration: data.timeoutDuration,
+        errorCode: data.errorCode,
+        errorMessage: data.errorMessage,
       };
-      
-      // Log transaction details for debugging
-      paymentDebugger.logTransactionDetails(transactionDetails as PaymentDebugInfo, 'PaymentTimeout');
-      paymentDebugger.validateTransactionData(transactionDetails as PaymentDebugInfo, 'PaymentTimeout');
       
       setTransactionDetails(transactionDetails);
     } catch (err) {
-      paymentDebugger.logError(err, 'fetchTransactionDetails', 'PaymentTimeout');
+      console.error('Error fetching transaction details:', err);
       setError('Error al cargar los detalles de la transacción');
     }
-  }, [user?.email, searchParams]);
+  }, [user?.email]);
 
   useEffect(() => {
-    paymentDebugger.logLifecycleEvent('Component mounted', 'PaymentTimeout');
     
     // Get transaction details from URL params, localStorage, or sessionStorage
     const transactionId = searchParams.get('transactionId');
     const storedDetails = localStorage.getItem('lastTransactionDetails') || sessionStorage.getItem('lastTransactionDetails');
 
-    paymentDebugger.logUrlParams(searchParams, 'PaymentTimeout');
+    
     
     if (storedDetails) {
       try {
         const details = JSON.parse(storedDetails);
-        paymentDebugger.logStoredData('localStorage', 'lastTransactionDetails', details, 'PaymentTimeout');
+        
+        
+        // Use checkout summary for correct pricing, fallback to stored details
+        const checkoutSummary = getCheckoutSummary();
+        let transactionDetails = details;
+        
+        if (checkoutSummary) {
+          console.log('PaymentTimeout: Using checkout summary for correct pricing', checkoutSummary);
+          
+          // Update transaction details with correct pricing from checkout summary
+          transactionDetails = {
+            ...details,
+            subtotal: checkoutSummary.total,
+            serviceFee: checkoutSummary.operationalCosts,
+            total: checkoutSummary.actualTotal,
+            totalPaid: checkoutSummary.actualTotal,
+            actualTotal: checkoutSummary.actualTotal,
+          };
+        } else {
+          console.log('PaymentTimeout: No checkout summary available, using stored details');
+        }
         
         // Log transaction details for debugging
-        paymentDebugger.logTransactionDetails(details as PaymentDebugInfo, 'PaymentTimeout');
-        paymentDebugger.validateTransactionData(details as PaymentDebugInfo, 'PaymentTimeout');
+        
+        
         
         // Successfully parsed transaction details
-        setTransactionDetails(details);
+        setTransactionDetails(transactionDetails);
         // Clear the stored details after displaying (with delay to prevent race conditions)
         setTimeout(() => {
           localStorage.removeItem('lastTransactionDetails');
           sessionStorage.removeItem('lastTransactionDetails');
         }, 2000);
       } catch (err) {
-        paymentDebugger.logError(err, 'parseStoredDetails', 'PaymentTimeout');
+        console.error("Error:", err);
         setError('Error al cargar los detalles de la transacción');
       }
     } else if (transactionId) {
       // If we have a transaction ID but no stored details, try to fetch them
-      paymentDebugger.logLifecycleEvent('Fetching transaction details from API', 'PaymentTimeout');
+      
       fetchTransactionDetails(transactionId);
     } else {
       // No transaction data available
-      paymentDebugger.logLifecycleEvent('No transaction data available', 'PaymentTimeout');
+      
       setError('No se encontraron detalles de la transacción');
     }
 
@@ -143,7 +159,8 @@ export default function PaymentTimeoutPage() {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(validPrice);
   };
 
@@ -242,6 +259,7 @@ export default function PaymentTimeoutPage() {
 
   const getPaymentMethodIcon = (method: string) => {
     switch (method) {
+      case 'FREE': return <span className="text-green-400 text-lg">🎁</span>;
       case 'CARD': return <CreditCard className="h-5 w-5 text-slate-400" />;
       case 'NEQUI': return <Phone className="h-5 w-5 text-slate-400" />;
       case 'PSE': return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 text-slate-400"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 2c4.418 0 8 3.582 8 8s-3.582 8-8 8-8-3.582-8-8 3.582-8 8-8zm-1 4h2v6h-2V8zm0 8h2v2h-2v-2z"/></svg>;
@@ -252,6 +270,7 @@ export default function PaymentTimeoutPage() {
 
   const getPaymentMethodLabel = (method: string) => {
     switch (method) {
+      case 'FREE': return 'Gratuito';
       case 'CARD': return 'Tarjeta';
       case 'PSE': return 'PSE';
       case 'BANCOLOMBIA_TRANSFER': return 'Botón Bancolombia';
@@ -361,12 +380,10 @@ export default function PaymentTimeoutPage() {
                 <span className="text-slate-300 text-sm sm:text-base">Subtotal:</span>
                 <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.subtotal)}</span>
               </div>
-              {transactionDetails.serviceFee > 0 && (
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-slate-300 text-sm sm:text-base">Tarifa de servicio:</span>
-                  <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.serviceFee)}</span>
-                </div>
-              )}
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-slate-300 text-sm sm:text-base">Tarifa de servicio:</span>
+                <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.serviceFee)}</span>
+              </div>
               {transactionDetails.discounts > 0 && (
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-green-400">
                   <span className="text-sm sm:text-base">Descuentos:</span>

@@ -100,36 +100,47 @@ export class UnifiedCheckoutController {
         redirect_url,
         customer_data
       } = typedReq.body;
+      
 
       if (!paymentMethod) {
         res.status(400).json({ error: "Método de pago es requerido" });
         return;
       }
 
-      // Validate payment method specific data
-      if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.CARD) {
-        if (!paymentData || !paymentData.number || !paymentData.cvc || !paymentData.exp_month || !paymentData.exp_year || !paymentData.card_holder) {
-          res.status(400).json({ error: "Datos completos de tarjeta son requeridos" });
+      // Check if this is a free checkout first
+      const cartItems = await this.checkoutService.cartService.getCartItemsWithDynamicPricing(userId || undefined, sessionId || undefined);
+      const totals = await this.checkoutService.cartService.calculateCartTotals(userId || undefined, sessionId || undefined);
+      const isFreeCheckout = totals.totalSubtotal === 0;
+
+      // Only validate payment method if it's NOT a free checkout
+      if (!isFreeCheckout) {
+        // Validate payment method specific data
+        if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.CARD) {
+          if (!paymentData || !paymentData.number || !paymentData.cvc || !paymentData.exp_month || !paymentData.exp_year || !paymentData.card_holder) {
+            res.status(400).json({ error: "Datos completos de tarjeta son requeridos" });
+            return;
+          }
+        } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.NEQUI) {
+          if (!paymentData || !paymentData.phone_number) {
+            res.status(400).json({ error: "Número de teléfono es requerido para pagos con Nequi" });
+            return;
+          }
+        } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.PSE) {
+          if (!paymentData || !paymentData.user_legal_id || !paymentData.financial_institution_code || !customer_data?.full_name) {
+            res.status(400).json({ error: "Datos completos de PSE incluyendo información del cliente son requeridos" });
+            return;
+          }
+        } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.BANCOLOMBIA_TRANSFER) {
+          if (!paymentData || !paymentData.payment_description) {
+            res.status(400).json({ error: "Descripción de pago es requerida para Transferencia Bancolombia" });
+            return;
+          }
+        } else if (!Object.values(WOMPI_CONFIG.PAYMENT_METHODS).includes(paymentMethod)) {
+          res.status(400).json({ error: "Método de pago no soportado" });
           return;
         }
-      } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.NEQUI) {
-        if (!paymentData || !paymentData.phone_number) {
-          res.status(400).json({ error: "Número de teléfono es requerido para pagos con Nequi" });
-          return;
-        }
-      } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.PSE) {
-        if (!paymentData || !paymentData.user_legal_id || !paymentData.financial_institution_code || !customer_data?.full_name) {
-          res.status(400).json({ error: "Datos completos de PSE incluyendo información del cliente son requeridos" });
-          return;
-        }
-      } else if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.BANCOLOMBIA_TRANSFER) {
-        if (!paymentData || !paymentData.payment_description) {
-          res.status(400).json({ error: "Descripción de pago es requerida para Transferencia Bancolombia" });
-          return;
-        }
-      } else if (!Object.values(WOMPI_CONFIG.PAYMENT_METHODS).includes(paymentMethod)) {
-        res.status(400).json({ error: "Método de pago no soportado" });
-        return;
+      } else {
+        console.log("[UNIFIED-CHECKOUT-INITIATE] 🎁 Free checkout detected, skipping payment method validation");
       }
 
       // Enhanced customer information capture
@@ -139,7 +150,16 @@ export class UnifiedCheckoutController {
         legalId?: string;
         legalIdType?: string;
         paymentMethod: string;
-      } = { paymentMethod };
+      } = { 
+        paymentMethod: isFreeCheckout ? 'FREE' : paymentMethod 
+      };
+      
+      console.log('[UNIFIED-CHECKOUT-INITIATE] Customer info setup:', {
+        isFreeCheckout,
+        originalPaymentMethod: paymentMethod,
+        finalPaymentMethod: customerInfo.paymentMethod
+      });
+      
 
       // Capture customer information based on payment method requirements
       if (paymentMethod === WOMPI_CONFIG.PAYMENT_METHODS.CARD) {
@@ -267,8 +287,14 @@ export class UnifiedCheckoutController {
         console.error(`[UNIFIED-CHECKOUT-INITIATE] ❌ Failed to unlock cart after error:`, unlockError);
       }
       
+      // Return more specific error message for free checkout issues
+      let errorMessage = error.message || "Error al iniciar el checkout unificado";
+      if (error.message?.includes("payment method not supported") || error.message?.includes("Método de pago no soportado")) {
+        errorMessage = "Error en el procesamiento del checkout gratuito. Por favor, intenta de nuevo.";
+      }
+      
       res.status(400).json({ 
-        error: error.message || "Error al iniciar el checkout unificado" 
+        error: errorMessage
       });
     }
   };
@@ -338,18 +364,44 @@ export class UnifiedCheckoutController {
           id: existingTransaction.id,
           paymentStatus: existingTransaction.paymentStatus,
           totalPaid: existingTransaction.totalPaid,
-          buyerEmail: existingTransaction.buyerEmail
+          buyerEmail: existingTransaction.buyerEmail,
+          paymentMethod: existingTransaction.paymentMethod,
+          paymentProvider: existingTransaction.paymentProvider,
+          ticketSubtotal: existingTransaction.ticketSubtotal,
+          menuSubtotal: existingTransaction.menuSubtotal,
+          gatewayFee: existingTransaction.gatewayFee,
+          gatewayIVA: existingTransaction.gatewayIVA
+        });
+        
+        const calculatedSubtotal = (existingTransaction.ticketSubtotal + existingTransaction.menuSubtotal);
+        const calculatedServiceFee = (existingTransaction.gatewayFee + existingTransaction.gatewayIVA);
+        
+        console.log(`[UNIFIED-CHECKOUT-STATUS] Calculated values:`, {
+          calculatedSubtotal,
+          calculatedServiceFee,
+          ticketSubtotalRaw: existingTransaction.ticketSubtotal,
+          menuSubtotalRaw: existingTransaction.menuSubtotal,
+          gatewayFeeRaw: existingTransaction.gatewayFee,
+          gatewayIVARaw: existingTransaction.gatewayIVA
         });
         
         res.json({
           transactionId: existingTransaction.id,
           status: existingTransaction.paymentStatus,
           amount: existingTransaction.totalPaid,
+          totalPaid: existingTransaction.totalPaid,
           currency: 'COP',
           customerEmail: existingTransaction.buyerEmail,
           createdAt: existingTransaction.createdAt,
           finalizedAt: existingTransaction.updatedAt,
           isFreeCheckout: existingTransaction.paymentProvider === 'free',
+          paymentMethod: existingTransaction.paymentMethod,
+          // Financial breakdown fields
+          subtotal: (existingTransaction.ticketSubtotal + existingTransaction.menuSubtotal),
+          serviceFee: (existingTransaction.gatewayFee + existingTransaction.gatewayIVA),
+          discounts: 0, // No discounts implemented yet
+          total: existingTransaction.totalPaid,
+          actualTotal: existingTransaction.totalPaid,
           lineItemsCount: (existingTransaction.ticketPurchases?.length || 0) + (existingTransaction.menuPurchases?.length || 0)
         });
         return;
@@ -424,6 +476,9 @@ export class UnifiedCheckoutController {
           if (status === WOMPI_CONFIG.STATUSES.APPROVED) {
             // ✅ APPROVED → Process checkout, send email
             console.log(`[UNIFIED-CHECKOUT-AUTO] ✅ Transaction approved! Processing checkout...`);
+            
+            // Update transaction status to APPROVED and broadcast via SSE
+            await this.updateUnifiedTransactionStatus(transactionId, "APPROVED");
             
             // Get stored transaction data
             const storedData = this.getStoredTransactionData(wompiTransactionId);
@@ -689,6 +744,46 @@ export class UnifiedCheckoutController {
       console.error(`[UNIFIED-CHECKOUT-AUTO] Error updating transaction status:`, error);
     }
   }
+
+  /**
+   * DEBUG: Unlock cart (temporary endpoint for debugging)
+   * POST /checkout/unified/debug/unlock-cart
+   */
+  debugUnlockCart = async (req: Request, res: Response): Promise<void> => {
+    const typedReq = req as AuthenticatedRequest;
+    const userId = typedReq.user?.id ?? null;
+    const sessionId: string | null = !userId && typedReq.sessionId ? typedReq.sessionId : null;
+
+    try {
+      console.log(`[DEBUG-UNLOCK-CART] Attempting to unlock cart for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
+      
+      const unlocked = unlockCart(userId, sessionId);
+      
+      if (unlocked) {
+        console.log(`[DEBUG-UNLOCK-CART] ✅ Cart successfully unlocked for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
+        res.json({ 
+          success: true, 
+          message: "Cart unlocked successfully",
+          userId: userId || null,
+          sessionId: sessionId || null
+        });
+      } else {
+        console.log(`[DEBUG-UNLOCK-CART] ℹ️ No cart lock found for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
+        res.json({ 
+          success: true, 
+          message: "No cart lock found (cart was not locked)",
+          userId: userId || null,
+          sessionId: sessionId || null
+        });
+      }
+    } catch (error: any) {
+      console.error(`[DEBUG-UNLOCK-CART] ❌ Error unlocking cart:`, error);
+      res.status(500).json({ 
+        error: "Failed to unlock cart",
+        details: error.message 
+      });
+    }
+  };
 }
 
 // Export controller instance

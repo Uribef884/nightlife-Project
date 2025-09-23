@@ -13,8 +13,10 @@ import {
 import { useUser } from '@/stores/auth.store';
 import { useCartStore } from '@/stores/cart.store';
 import { useSSE } from '@/hooks/useSSE';
+import { getCheckoutSummary, clearCheckoutSummary } from '@/utils/checkoutSummary';
 
-interface TransactionDetails {
+// Simple transaction details type
+type TransactionDetails = {
   transactionId: string;
   status: string;
   totalPaid: number;
@@ -27,11 +29,12 @@ interface TransactionDetails {
   serviceFee: number;
   discounts: number;
   total: number;
+  actualTotal?: number;
   declineReason?: string;
+  timeoutDuration?: number;
   errorCode?: string;
   errorMessage?: string;
-  timeoutDuration?: number;
-}
+};
 
 export default function PaymentProcessingPage() {
   const router = useRouter();
@@ -46,7 +49,7 @@ export default function PaymentProcessingPage() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   // Handle status updates from SSE
-  const handleStatusUpdate = useCallback((status: string, data: any) => {
+  const handleStatusUpdate = useCallback(async (status: string, data: any) => {
     setStatusUpdateCount(prev => prev + 1);
     
     console.log('PaymentProcessing - Status update received:', { status, data });
@@ -68,22 +71,13 @@ export default function PaymentProcessingPage() {
         }
       }
       
-      // Status has changed, update localStorage and redirect
-      const updatedDetails = {
+      // Status has changed, use simple mapping
+      const updatedDetails: TransactionDetails = {
         ...baseDetails,
+        ...data,
         status: status,
-        // Preserve financial details from the original transaction
-        totalPaid: data.totalPaid || baseDetails.totalPaid || data.actualTotal || baseDetails.actualTotal || 0,
-        subtotal: data.subtotal || baseDetails.subtotal || 0,
-        serviceFee: data.serviceFee || baseDetails.serviceFee || 0,
-        discounts: data.discounts || baseDetails.discounts || 0,
-        total: data.total || data.actualTotal || baseDetails.total || baseDetails.actualTotal || 0,
-        actualTotal: data.actualTotal || baseDetails.actualTotal || 0,
-        // Add status-specific fields
-        declineReason: data.declineReason,
-        errorCode: data.errorCode,
-        errorMessage: data.errorMessage,
-        timeoutDuration: data.timeoutDuration
+        transactionId: baseDetails.transactionId || data.transactionId || 'unknown',
+        email: user?.email || 'usuario@ejemplo.com',
       };
       
       console.log('PaymentProcessing - Updated details to store:', updatedDetails);
@@ -94,6 +88,14 @@ export default function PaymentProcessingPage() {
       
       // Redirect to appropriate page based on final status
       if (status === 'APPROVED') {
+        // Clear cart only for APPROVED transactions
+        try {
+          await clearCart();
+          console.log('PaymentProcessing - Cart cleared successfully for APPROVED transaction');
+        } catch (cartError) {
+          console.error('PaymentProcessing - Failed to clear cart for APPROVED transaction:', cartError);
+          // Don't fail the redirect if cart clearing fails
+        }
         router.push('/payment-success');
       } else if (status === 'DECLINED') {
         router.push('/payment-declined');
@@ -126,7 +128,27 @@ export default function PaymentProcessingPage() {
         console.log('PaymentProcessing - Loaded transaction details:', details);
         
         if (details.status === 'PENDING') {
-          setTransactionDetails(details);
+          // Use checkout summary for correct pricing, fallback to stored details
+          const checkoutSummary = getCheckoutSummary();
+          let transactionDetails = details;
+          
+          if (checkoutSummary) {
+            console.log('PaymentProcessing: Using checkout summary for correct pricing', checkoutSummary);
+            
+            // Update transaction details with correct pricing from checkout summary
+            transactionDetails = {
+              ...details,
+              subtotal: checkoutSummary.total,
+              serviceFee: checkoutSummary.operationalCosts,
+              total: checkoutSummary.actualTotal,
+              totalPaid: checkoutSummary.actualTotal,
+              actualTotal: checkoutSummary.actualTotal,
+            };
+          } else {
+            console.log('PaymentProcessing: No checkout summary available, using stored details');
+          }
+          
+          setTransactionDetails(transactionDetails);
           setLoading(false);
           
           // Check current status immediately since transaction might already be processed
@@ -195,7 +217,8 @@ export default function PaymentProcessingPage() {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(price);
   };
 
@@ -340,7 +363,8 @@ export default function PaymentProcessingPage() {
               <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                 <span className="text-slate-300 text-sm sm:text-base">Método de pago:</span>
                 <span className="text-slate-100 text-sm sm:text-base">
-                  {transactionDetails.paymentMethod === 'CARD' ? 'Tarjeta' : 
+                  {transactionDetails.paymentMethod === 'FREE' ? 'Gratuito' :
+                   transactionDetails.paymentMethod === 'CARD' ? 'Tarjeta' : 
                    transactionDetails.paymentMethod === 'PSE' ? 'PSE' :
                    transactionDetails.paymentMethod === 'BANCOLOMBIA_TRANSFER' ? 'Botón Bancolombia' :
                    transactionDetails.paymentMethod === 'NEQUI' ? 'NEQUI' : transactionDetails.paymentMethod}
@@ -354,12 +378,10 @@ export default function PaymentProcessingPage() {
                 <span className="text-slate-300 text-sm sm:text-base">Subtotal:</span>
                 <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.subtotal)}</span>
               </div>
-              {transactionDetails.serviceFee > 0 && (
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
-                  <span className="text-slate-300 text-sm sm:text-base">Tarifa de servicio:</span>
-                  <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.serviceFee)}</span>
-                </div>
-              )}
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-slate-300 text-sm sm:text-base">Tarifa de servicio:</span>
+                <span className="text-slate-100 text-sm sm:text-base">{formatPrice(transactionDetails.serviceFee)}</span>
+              </div>
               {transactionDetails.discounts > 0 && (
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 text-green-400">
                   <span className="text-sm sm:text-base">Descuentos:</span>

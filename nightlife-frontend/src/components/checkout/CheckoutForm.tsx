@@ -13,6 +13,7 @@ import {
 } from '@/services/checkout.service';
 import { CreditCard, Smartphone, Building2, ArrowRight, AlertCircle, CheckCircle, ShoppingCart, Ticket, Utensils } from 'lucide-react';
 import CartItem from '@/components/cart/CartItem';
+import { storeCheckoutSummary } from '@/utils/checkoutSummary';
 
 interface CheckoutFormProps {
   onSuccess?: (result: any) => void;
@@ -26,7 +27,8 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
     items, 
     getTicketItems, 
     getMenuItems, 
-    getItemsByDate 
+    getItemsByDate,
+    clearCart
   } = useCartStore();
   const user = useUser();
   
@@ -39,6 +41,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   const [email, setEmail] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('CARD');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   // Acceptance tokens state
   const [acceptanceTokens, setAcceptanceTokens] = useState<WompiAcceptanceTokens | null>(null);
@@ -232,9 +235,15 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null); // Clear any previous errors
+    
+    // Store checkout summary with correct pricing data before proceeding
+    storeCheckoutSummary();
     
     if (!email) {
-      onError?.('Email is required');
+      const errorMessage = 'Email is required';
+      setError(errorMessage);
+      onError?.(errorMessage);
       return;
     }
     
@@ -316,6 +325,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
         },
       };
       
+      
       const result = await initiateCheckout(request);
       
       // Check if we have a transaction ID (successful initiation)
@@ -380,6 +390,8 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
           return;
         }
         
+        // Note: Cart clearing is now handled in checkout/page.tsx based on transaction status
+        
         // Add a small delay to ensure localStorage is written before redirect
         setTimeout(() => {
           onSuccess?.(result);
@@ -391,11 +403,15 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
           window.location.reload();
           return;
         }
-        onError?.(result.error || 'Checkout failed');
+        const errorMessage = result.error || 'Checkout failed';
+        setError(errorMessage);
+        onError?.(errorMessage);
       }
     } catch (error) {
       console.error('Checkout error:', error);
-      onError?.(error instanceof Error ? error.message : 'Checkout failed');
+      const errorMessage = error instanceof Error ? error.message : 'Checkout failed';
+      setError(errorMessage);
+      onError?.(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -409,6 +425,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   // Check if this is a free checkout
   // Server summary uses 'total', client summary uses 'totalSubtotal'
   const isFreeCheckout = currentCartSummary && (currentCartSummary.total === 0 || currentCartSummary.totalSubtotal === 0);
+  
   
   // Validate payment method specific fields
   const isPaymentMethodValid = () => {
@@ -613,7 +630,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                  { value: 'CARD', label: 'Tarjeta de Crédito/Débito', icon: CreditCard },
                  { value: 'NEQUI', label: 'Nequi', icon: Smartphone },
                  { value: 'PSE', label: 'PSE', icon: Building2 },
-                 { value: 'BANCOLOMBIA_TRANSFER', label: 'Transferencia Bancolombia', icon: Building2 },
+                 { value: 'BANCOLOMBIA_TRANSFER', label: 'Botón  Bancolombia', icon: Building2 },
                ].map(({ value, label, icon: Icon }) => (
                  <button
                    key={value}
@@ -1012,7 +1029,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                        </svg>
                      </div>
                      <div className="text-sm">
-                       <p className="text-blue-200 font-medium mb-1">Transferencia Bancolombia</p>
+                       <p className="text-blue-200 font-medium mb-1">Botón  Bancolombia</p>
                        <p className="text-blue-300">
                          Al procesar el pago, serás redirigido a Bancolombia para completar la transferencia. 
                          Una vez finalizado el pago, serás redirigido automáticamente de vuelta a nuestra aplicación.
@@ -1113,6 +1130,25 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
             </>
           )}
         </button>
+        
+        {/* Error Display - Below Submit Button */}
+        {error && (
+          <div className="mt-4 bg-red-900/20 border border-red-500/50 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="text-red-100 font-medium">Error en el Checkout</h3>
+            </div>
+            <p className="text-red-200 mt-2">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="mt-3 text-sm text-red-300 hover:text-red-200 underline"
+            >
+              Intentar de nuevo
+            </button>
+          </div>
+        )}
         
         {/* Nightlife Terms - Amazon-style text with links */}
         <div className="text-xs text-slate-400 text-center mt-4">

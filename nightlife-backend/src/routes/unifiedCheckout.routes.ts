@@ -15,4 +15,7 @@ router.post("/confirm", unifiedCheckoutController.confirmCheckout.bind(unifiedCh
 // Get transaction status
 router.get("/status/:transactionId", unifiedCheckoutController.getTransactionStatus.bind(unifiedCheckoutController));
 
+// DEBUG: Unlock cart (temporary endpoint for debugging)
+router.post("/debug/unlock-cart", unifiedCheckoutController.debugUnlockCart.bind(unifiedCheckoutController));
+
 export default router;

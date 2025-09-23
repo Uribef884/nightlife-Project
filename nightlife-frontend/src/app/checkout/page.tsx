@@ -1,19 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import CheckoutForm from '@/components/checkout/CheckoutForm';
+import { useCartStore } from '@/stores/cart.store';
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const { clearCart } = useCartStore();
 
   const handleBack = () => {
     router.back();
   };
 
-  const handleCheckoutSuccess = (result: any) => {
+  const handleCheckoutSuccess = async (result: any) => {
     // Check the transaction status and redirect accordingly
     const status = result.wompiStatus || result.status || 'APPROVED';
     
@@ -29,12 +30,12 @@ export default function CheckoutPage() {
       case 'APPROVED':
         // Store transaction details for success page (in case they weren't already stored)
         if (result.transactionId) {
-          const transactionDetails = {
-            transactionId: result.transactionId,
-            status: 'APPROVED',
-            totalPaid: result.totalPaid || result.actualTotal || 0,
-            isFreeCheckout: result.isFreeCheckout || false,
-            paymentMethod: result.paymentMethod || 'CARD',
+              const transactionDetails = {
+                transactionId: result.transactionId,
+                status: 'APPROVED',
+                totalPaid: result.totalPaid || result.actualTotal || 0,
+                isFreeCheckout: result.isFreeCheckout || false,
+                paymentMethod: result.paymentMethod || (result.isFreeCheckout ? 'FREE' : 'CARD'),
             email: result.email || '',
             purchaseDate: new Date().toISOString(),
             items: result.items || [],
@@ -48,6 +49,16 @@ export default function CheckoutPage() {
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
         }
+        
+        // Clear cart only for APPROVED transactions
+        try {
+          await clearCart();
+          console.log('CheckoutPage - Cart cleared successfully for APPROVED transaction');
+        } catch (cartError) {
+          console.error('CheckoutPage - Failed to clear cart for APPROVED transaction:', cartError);
+          // Don't fail the checkout if cart clearing fails
+        }
+        
         router.push('/payment-success');
         break;
       case 'DECLINED':
@@ -58,7 +69,7 @@ export default function CheckoutPage() {
             status: 'DECLINED',
             totalPaid: result.totalPaid || 0,
             isFreeCheckout: result.isFreeCheckout || false,
-            paymentMethod: result.paymentMethod || 'CARD',
+            paymentMethod: result.paymentMethod || (result.isFreeCheckout ? 'FREE' : 'CARD'),
             email: result.email || '',
             purchaseDate: new Date().toISOString(),
             items: result.items || [],
@@ -81,7 +92,7 @@ export default function CheckoutPage() {
             status: 'ERROR',
             totalPaid: result.totalPaid || 0,
             isFreeCheckout: result.isFreeCheckout || false,
-            paymentMethod: result.paymentMethod || 'CARD',
+            paymentMethod: result.paymentMethod || (result.isFreeCheckout ? 'FREE' : 'CARD'),
             email: result.email || '',
             purchaseDate: new Date().toISOString(),
             items: result.items || [],
@@ -105,7 +116,7 @@ export default function CheckoutPage() {
             status: 'TIMEOUT',
             totalPaid: result.totalPaid || 0,
             isFreeCheckout: result.isFreeCheckout || false,
-            paymentMethod: result.paymentMethod || 'CARD',
+            paymentMethod: result.paymentMethod || (result.isFreeCheckout ? 'FREE' : 'CARD'),
             email: result.email || '',
             purchaseDate: new Date().toISOString(),
             items: result.items || [],
@@ -129,7 +140,7 @@ export default function CheckoutPage() {
 
   const handleCheckoutError = (errorMessage: string) => {
     console.error('Checkout error:', errorMessage);
-    setError(errorMessage);
+    // Error is now handled by CheckoutForm component
   };
 
   return (
@@ -158,23 +169,6 @@ export default function CheckoutPage() {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-3xl mx-auto">
-          {/* Error Display */}
-          {error && (
-            <div className="mb-6 bg-red-900/20 border border-red-500/50 rounded-lg p-4">
-              <div className="flex items-center space-x-2">
-                <AlertCircle className="h-5 w-5 text-red-400" />
-                <h3 className="text-red-100 font-medium">Error en el Checkout</h3>
-              </div>
-              <p className="text-red-200 mt-2">{error}</p>
-              <button
-                onClick={() => setError(null)}
-                className="mt-3 text-sm text-red-300 hover:text-red-200 underline"
-              >
-                Intentar de nuevo
-              </button>
-            </div>
-          )}
-
           {/* Checkout Form */}
           <CheckoutForm
             onSuccess={handleCheckoutSuccess}
