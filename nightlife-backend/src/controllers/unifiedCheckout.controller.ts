@@ -4,6 +4,7 @@ import { UnifiedCheckoutService } from "../services/unifiedCheckout.service";
 import { lockAndValidateCart, updateCartLockTransactionId, unlockCart } from "../utils/cartLock";
 import { sanitizeInput } from "../utils/sanitizeInput";
 import { isDisposableEmail } from "../utils/disposableEmailValidator";
+import { validateAuthInputs } from "../utils/authInputSanitizer";
 import { wompiService } from "../services/wompi.service";
 import { WOMPI_CONFIG } from "../config/wompi";
 import { generateTransactionSignature } from "../utils/generateWompiSignature";
@@ -69,16 +70,23 @@ export class UnifiedCheckoutController {
     try {
       console.log(`[UNIFIED-CHECKOUT-INITIATE] Starting checkout for ${userId ? 'user' : 'session'}: ${userId || sessionId}`);
 
-      // Sanitize email input
+      // Validate and sanitize email input
       const rawEmail = typedReq.user?.email ?? typedReq.body?.email;
-      const sanitizedEmail = sanitizeInput(rawEmail);
+      
+      // Use proper email validation
+      const emailValidation = validateAuthInputs({
+        email: rawEmail?.toLowerCase().trim()
+      });
 
-      if (!sanitizedEmail) {
-        res.status(400).json({ error: "Email válido es requerido para completar la compra." });
+      if (!emailValidation.isValid) {
+        res.status(400).json({ 
+          error: "Email inválido", 
+          details: emailValidation.errors 
+        });
         return;
       }
 
-      const email = sanitizedEmail;
+      const email = emailValidation.sanitized.email;
 
       if (!req.user && isDisposableEmail(email)) {
         res.status(403).json({ error: "Dominios de email desechables no están permitidos." });

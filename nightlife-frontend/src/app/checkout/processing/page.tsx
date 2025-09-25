@@ -77,7 +77,7 @@ export default function PaymentProcessingPage() {
         ...data,
         status: status,
         transactionId: baseDetails.transactionId || data.transactionId || 'unknown',
-        email: user?.email || 'usuario@ejemplo.com',
+        email: baseDetails.email || data.customerEmail || user?.email || 'usuario@ejemplo.com',
       };
       
       console.log('PaymentProcessing - Updated details to store:', updatedDetails);
@@ -96,20 +96,20 @@ export default function PaymentProcessingPage() {
           console.error('PaymentProcessing - Failed to clear cart for APPROVED transaction:', cartError);
           // Don't fail the redirect if cart clearing fails
         }
-        router.push('/payment-success');
+        router.push('/checkout/success');
       } else if (status === 'DECLINED') {
-        router.push('/payment-declined');
+        router.push('/checkout/declined');
       } else if (status === 'ERROR') {
         // Check if this was originally a timeout
         if (data.originalStatus === 'TIMEOUT') {
-          router.push('/payment-timeout');
+          router.push('/checkout/timeout');
         } else {
-          router.push('/payment-error');
+          router.push('/checkout/error');
         }
       } else if (status === 'TIMEOUT') {
-        router.push('/payment-timeout');
+        router.push('/checkout/timeout');
       } else {
-        router.push('/payment-success');
+        router.push('/checkout/success');
       }
     }
   }, [router]);
@@ -184,15 +184,15 @@ export default function PaymentProcessingPage() {
           // Not a pending transaction, redirect to appropriate page
           console.log('PaymentProcessing - Non-pending transaction, redirecting...');
           if (details.status === 'APPROVED') {
-            router.push('/payment-success');
+            router.push('/checkout/success');
           } else if (details.status === 'DECLINED') {
-            router.push('/payment-declined');
+            router.push('/checkout/declined');
           } else if (details.status === 'ERROR') {
-            router.push('/payment-error');
+            router.push('/checkout/error');
           } else if (details.status === 'TIMEOUT') {
-            router.push('/payment-timeout');
+            router.push('/checkout/timeout');
           } else {
-            router.push('/payment-success');
+            router.push('/checkout/success');
           }
         }
       } catch (err) {

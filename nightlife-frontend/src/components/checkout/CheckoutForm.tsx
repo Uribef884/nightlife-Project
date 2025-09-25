@@ -42,6 +42,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   const [paymentMethod, setPaymentMethod] = useState('CARD');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
   
   // Acceptance tokens state
   const [acceptanceTokens, setAcceptanceTokens] = useState<WompiAcceptanceTokens | null>(null);
@@ -111,7 +112,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
       const baseUrl = getBaseUrl();
       setBancolombiaData(prev => ({
         ...prev,
-        ecommerce_url: `${baseUrl}/payment-processing`
+        ecommerce_url: `${baseUrl}/checkout/processing`
       }));
     }
   }, [paymentMethod]);
@@ -209,6 +210,49 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
     return `(${limitedPhoneNumber.slice(0, 3)}) ${limitedPhoneNumber.slice(3, 6)}-${limitedPhoneNumber.slice(6)}`;
   };
 
+  const formatExpiryDate = (month: string, year: string) => {
+    if (!month && !year) return '';
+    if (!month && !year) return '';
+    
+    // If we have both month and year, format as MM/YY
+    if (month && year) {
+      return `${month}/${year}`;
+    }
+    
+    // If we only have month (user is typing), show just the month
+    if (month && !year) {
+      return month;
+    }
+    
+    // If we only have year (shouldn't happen in normal flow), show just the year
+    if (!month && year) {
+      return year;
+    }
+    
+    return '';
+  };
+
+  const formatExpiryDateInput = (value: string) => {
+    // Remove all non-numeric characters
+    const digits = value.replace(/\D/g, '');
+    
+    // Limit to 4 digits (MMYY)
+    const limitedDigits = digits.slice(0, 4);
+    
+    if (limitedDigits.length === 0) {
+      return { month: '', year: '' };
+    }
+    
+    const month = limitedDigits.slice(0, 2);
+    const year = limitedDigits.slice(2, 4);
+    
+    // Let user type whatever they want - validation only happens on submit
+    return {
+      month: month,
+      year: year
+    };
+  };
+
   const formatCardNumber = (value: string) => {
     // Remove all non-numeric characters
     const cardNumber = value.replace(/\D/g, '');
@@ -236,14 +280,27 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null); // Clear any previous errors
+    setHasTriedSubmit(true); // Mark that user has attempted to submit
     
     // Store checkout summary with correct pricing data before proceeding
     storeCheckoutSummary();
     
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email) {
-      const errorMessage = 'Email is required';
+      const errorMessage = 'Email es requerido';
       setError(errorMessage);
       onError?.(errorMessage);
+      // Scroll to email field
+      document.getElementById('email')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (!emailRegex.test(email)) {
+      const errorMessage = 'Formato de email inválido';
+      setError(errorMessage);
+      onError?.(errorMessage);
+      // Scroll to email field
+      document.getElementById('email')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     
@@ -254,6 +311,70 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
     // For paid checkouts, require all acceptance checkboxes
     if (!isFreeCheckout && (!acceptanceAccepted || !personalDataAccepted)) {
       onError?.('Debes aceptar todos los términos y condiciones para continuar');
+      // Scroll to acceptance checkboxes
+      document.getElementById('acceptance')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    
+    // Validate payment method specific fields for paid checkouts
+    if (!isFreeCheckout && !isPaymentMethodValid()) {
+      let errorMessage = '';
+      let fieldToScrollTo = '';
+      
+      switch (paymentMethod) {
+        case 'CARD':
+          if (cardData.number.length !== 16) {
+            errorMessage = 'Número de tarjeta inválido';
+            fieldToScrollTo = 'card-number';
+          } else if (cardData.cvc.length !== 3) {
+            errorMessage = 'CVC inválido';
+            fieldToScrollTo = 'card-cvc';
+          } else if (cardData.exp_month.length < 1 || cardData.exp_year.length < 1) {
+            errorMessage = 'Fecha de vencimiento requerida';
+            fieldToScrollTo = 'card-expiry';
+          } else if (cardData.exp_month.length === 2 && (parseInt(cardData.exp_month) < 1 || parseInt(cardData.exp_month) > 12)) {
+            errorMessage = 'Fecha de vencimiento inválida';
+            fieldToScrollTo = 'card-expiry';
+          } else if (cardData.exp_year.length === 2 && parseInt(cardData.exp_year) < (new Date().getFullYear() % 100)) {
+            errorMessage = 'Fecha de vencimiento inválida';
+            fieldToScrollTo = 'card-expiry';
+          } else if (cardData.card_holder.trim().length === 0) {
+            errorMessage = 'Nombre del titular es requerido';
+            fieldToScrollTo = 'cardholder-name';
+          }
+          break;
+        case 'NEQUI':
+          if (nequiData.phone_number.length !== 10) {
+            errorMessage = 'Número de teléfono inválido';
+            fieldToScrollTo = 'nequi-phone';
+          }
+          break;
+        case 'PSE':
+          if (pseData.user_legal_id.length === 0) {
+            errorMessage = 'Número de documento es requerido';
+            fieldToScrollTo = 'pse-legal-id';
+          } else if (pseData.financial_institution_code.length === 0) {
+            errorMessage = 'Debes seleccionar un banco';
+            fieldToScrollTo = 'pse-bank';
+          } else if (pseData.full_name.trim().length === 0) {
+            errorMessage = 'Nombre completo es requerido';
+            fieldToScrollTo = 'pse-full-name';
+          } else if (pseData.phone_number.length !== 10) {
+            errorMessage = 'Número de teléfono inválido';
+            fieldToScrollTo = 'pse-phone';
+          }
+          break;
+      }
+      
+      onError?.(errorMessage || 'Información de pago incompleta');
+      
+      // Scroll to the first invalid field
+      if (fieldToScrollTo) {
+        setTimeout(() => {
+          document.getElementById(fieldToScrollTo)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+      }
+      
       return;
     }
     
@@ -302,11 +423,11 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
         
         // For redirect-based payment methods (PSE, Bancolombia Transfer), use processing page
         if (paymentMethod === 'PSE' || paymentMethod === 'BANCOLOMBIA_TRANSFER') {
-          return `${baseUrl}/payment-processing`;
+          return `${baseUrl}/checkout/processing`;
         }
         
         // For other payment methods, use success page
-        return `${baseUrl}/payment-success`;
+        return `${baseUrl}/checkout/success`;
       };
 
       const request: CheckoutInitiateRequest = {
@@ -433,10 +554,16 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
     
     switch (paymentMethod) {
       case 'CARD':
+        const isExpMonthValid = cardData.exp_month.length === 2 && 
+                               parseInt(cardData.exp_month) >= 1 && 
+                               parseInt(cardData.exp_month) <= 12;
+        const isExpYearValid = cardData.exp_year.length === 2 && 
+                              parseInt(cardData.exp_year) >= (new Date().getFullYear() % 100);
+        
         return cardData.number.length === 16 && 
                cardData.cvc.length === 3 && 
-               cardData.exp_month.length >= 1 && 
-               cardData.exp_year.length === 2 && 
+               isExpMonthValid && 
+               isExpYearValid && 
                cardData.card_holder.trim().length > 0;
       
       case 'NEQUI':
@@ -457,6 +584,26 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   };
   
   const isFormValid = email && (isFreeCheckout || (acceptanceAccepted && personalDataAccepted)) && isPaymentMethodValid();
+  
+  // Helper functions to determine if fields should show red highlighting
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const isEmailInvalid = hasTriedSubmit && (!email || !emailRegex.test(email));
+  const isCardNumberInvalid = hasTriedSubmit && paymentMethod === 'CARD' && cardData.number.length !== 16;
+  const isCardCvcInvalid = hasTriedSubmit && paymentMethod === 'CARD' && cardData.cvc.length !== 3;
+  const isCardExpiryInvalid = hasTriedSubmit && paymentMethod === 'CARD' && (
+    cardData.exp_month.length < 1 || 
+    cardData.exp_year.length < 1 ||
+    (cardData.exp_month.length === 2 && (parseInt(cardData.exp_month) < 1 || parseInt(cardData.exp_month) > 12)) ||
+    (cardData.exp_year.length === 2 && parseInt(cardData.exp_year) < (new Date().getFullYear() % 100))
+  );
+  const isCardHolderInvalid = hasTriedSubmit && paymentMethod === 'CARD' && cardData.card_holder.trim().length === 0;
+  const isNequiPhoneInvalid = hasTriedSubmit && paymentMethod === 'NEQUI' && nequiData.phone_number.length !== 10;
+  const isPseLegalIdInvalid = hasTriedSubmit && paymentMethod === 'PSE' && pseData.user_legal_id.length === 0;
+  const isPseBankInvalid = hasTriedSubmit && paymentMethod === 'PSE' && pseData.financial_institution_code.length === 0;
+  const isPseFullNameInvalid = hasTriedSubmit && paymentMethod === 'PSE' && pseData.full_name.trim().length === 0;
+  const isPsePhoneInvalid = hasTriedSubmit && paymentMethod === 'PSE' && pseData.phone_number.length !== 10;
+  const isAcceptanceInvalid = hasTriedSubmit && !isFreeCheckout && !acceptanceAccepted;
+  const isPersonalDataInvalid = hasTriedSubmit && !isFreeCheckout && !personalDataAccepted;
 
   // Memoize cart items section to prevent unnecessary re-renders
   const cartItemsSection = useMemo(() => {
@@ -589,7 +736,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   return (
     <div className={`space-y-6 ${className}`}>
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on" noValidate>
         {/* Email Input */}
         <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-6">
           <h3 className="text-lg font-medium text-slate-100 mb-4">Información de Contacto</h3>
@@ -597,24 +744,32 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
             <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
               Dirección de Email *
             </label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 ${
-                user?.email 
-                  ? 'bg-slate-600 border-slate-500 cursor-not-allowed' 
-                  : 'bg-slate-700 border-slate-600'
-              } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-              placeholder="tu@email.com"
-              required
-              readOnly={!!user?.email}
-              disabled={isSubmitting}
-            />
+             <input
+               type="email"
+               id="email"
+               name="email"
+               value={email}
+               onChange={(e) => {
+                 if (user?.email) return; // Don't allow changes if user is logged in
+                 setEmail(e.target.value);
+                 setHasTriedSubmit(false); // Clear validation state when user types
+               }}
+               className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 ${
+                 isEmailInvalid 
+                   ? 'border-red-500 bg-red-900/20 focus:ring-red-500' 
+                   : user?.email 
+                     ? 'bg-slate-600 border-slate-500 text-slate-300 cursor-not-allowed' 
+                     : 'bg-slate-700 border-slate-600 focus:ring-violet-500'
+               } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+               placeholder="tu@email.com"
+               autoComplete="email"
+               required
+               disabled={isSubmitting || !!user?.email}
+               readOnly={!!user?.email}
+             />
             <p className="text-xs text-slate-400 mt-1">
               {user?.email 
-                ? 'Te enviaremos tus QR\'s y recibos a este email'
+                ? 'Te enviaremos tus QR\'s y recibos a este email de tu cuenta'
                 : 'Te enviaremos tus QR\'s y recibos a este email'
               }
             </p>
@@ -682,14 +837,24 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                      <div className="relative">
                        <input
                          type="text"
+                         name="card-number"
+                         id="card-number"
                          value={formatCardNumber(cardData.number)}
                          onChange={(e) => {
                            if (isSubmitting) return;
                            const rawNumber = e.target.value.replace(/\D/g, '').slice(0, 16);
                            setCardData({ ...cardData, number: rawNumber });
+                           setHasTriedSubmit(false); // Clear validation state when user types
                          }}
-                         className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                           isCardNumberInvalid 
+                             ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                             : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                         } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                          placeholder="0000 0000 0000 0000"
+                         autoComplete="cc-number"
+                         inputMode="numeric"
+                         pattern="[0-9\s]{13,19}"
                          maxLength={19}
                          disabled={isSubmitting}
                        />
@@ -706,14 +871,24 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                        <div className="relative">
                          <input
                            type="text"
+                           name="card-cvc"
+                           id="card-cvc"
                            value={cardData.cvc}
                            onChange={(e) => {
                              if (isSubmitting) return;
                              const value = e.target.value.replace(/\D/g, '').slice(0, 3);
                              setCardData({ ...cardData, cvc: value });
+                             setHasTriedSubmit(false); // Clear validation state when user types
                            }}
-                           className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                           className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                             isCardCvcInvalid 
+                               ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                               : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                           } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                            placeholder="000"
+                           autoComplete="cc-csc"
+                           inputMode="numeric"
+                           pattern="[0-9]{3,4}"
                            maxLength={3}
                            disabled={isSubmitting}
                          />
@@ -726,52 +901,41 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                      </div>
                      <div>
                        <label className="block text-sm font-medium text-slate-300 mb-2">Vencimiento</label>
-                       <div className="grid grid-cols-2 gap-2">
-                         <div className="relative">
-                           <input
-                             type="text"
-                             value={cardData.exp_month}
-                             onChange={(e) => {
-                               if (isSubmitting) return;
-                               const value = e.target.value.replace(/\D/g, '').slice(0, 2);
-                               // Allow empty, single digits (0-9), or double digits (01-12)
-                               if (value === '' || 
-                                   (value.length === 1 && parseInt(value) >= 0 && parseInt(value) <= 9) ||
-                                   (value.length === 2 && parseInt(value) >= 1 && parseInt(value) <= 12)) {
-                                 setCardData({ ...cardData, exp_month: value });
-                               }
-                             }}
-                             className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                             placeholder="MM"
-                             maxLength={2}
-                             disabled={isSubmitting}
-                           />
-                           {!cardData.exp_month && (
-                             <div className="absolute inset-0 flex items-center px-3 pointer-events-none">
-                               <span className="text-slate-400">MM</span>
-                             </div>
-                           )}
-                         </div>
-                         <div className="relative">
-                           <input
-                             type="text"
-                             value={cardData.exp_year}
-                             onChange={(e) => {
-                               if (isSubmitting) return;
-                               const value = e.target.value.replace(/\D/g, '').slice(0, 2);
-                               setCardData({ ...cardData, exp_year: value });
-                             }}
-                             className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                             placeholder="AA"
-                             maxLength={2}
-                             disabled={isSubmitting}
-                           />
-                           {!cardData.exp_year && (
-                             <div className="absolute inset-0 flex items-center px-3 pointer-events-none">
-                               <span className="text-slate-400">AA</span>
-                             </div>
-                           )}
-                         </div>
+                       <div className="relative">
+                         <input
+                           type="text"
+                           name="card-expiry"
+                           id="card-expiry"
+                           value={formatExpiryDate(cardData.exp_month, cardData.exp_year)}
+                           onChange={(e) => {
+                             if (isSubmitting) return;
+                             const formatted = formatExpiryDateInput(e.target.value);
+                             if (formatted) {
+                               setCardData({ 
+                                 ...cardData, 
+                                 exp_month: formatted.month, 
+                                 exp_year: formatted.year 
+                               });
+                               setHasTriedSubmit(false); // Clear validation state when user types
+                             }
+                           }}
+                           className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                             isCardExpiryInvalid
+                               ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                               : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                           } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                           placeholder="MM/AA"
+                           autoComplete="cc-exp"
+                           inputMode="numeric"
+                           pattern="[0-9]{2}/[0-9]{2}"
+                           maxLength={5}
+                           disabled={isSubmitting}
+                         />
+                         {!cardData.exp_month && !cardData.exp_year && (
+                           <div className="absolute inset-0 flex items-center px-3 pointer-events-none">
+                             <span className="text-slate-400">MM/AA</span>
+                           </div>
+                         )}
                        </div>
                      </div>
                    </div>
@@ -800,14 +964,22 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                      <div className="relative">
                        <input
                          type="text"
+                         name="cardholder-name"
+                         id="cardholder-name"
                          value={cardData.card_holder}
                          onChange={(e) => {
                            if (isSubmitting) return;
                            const value = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '').slice(0, 50);
                            setCardData({ ...cardData, card_holder: value });
+                           setHasTriedSubmit(false); // Clear validation state when user types
                          }}
-                         className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                           isCardHolderInvalid 
+                             ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                             : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                         } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                          placeholder="Nombre Completo"
+                         autoComplete="cc-name"
                          maxLength={50}
                          disabled={isSubmitting}
                        />
@@ -827,16 +999,23 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                  <label className="block text-sm font-medium text-slate-300 mb-2">Número de Teléfono</label>
                  <div className="relative">
                    <input
-                     type="text"
+                     type="tel"
+                     name="nequi-phone"
                      value={formatPhoneNumber(nequiData.phone_number)}
                      onChange={(e) => {
                        if (isSubmitting) return;
                        const formatted = formatPhoneNumber(e.target.value);
                        const rawNumber = e.target.value.replace(/\D/g, '');
                        setNequiData({ ...nequiData, phone_number: rawNumber });
+                       setHasTriedSubmit(false); // Clear validation state when user types
                      }}
-                     className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                     className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                       isNequiPhoneInvalid 
+                         ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                         : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                     } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                      placeholder="(XXX) XXX-XXXX"
+                     autoComplete="tel"
                      maxLength={14}
                      disabled={isSubmitting}
                    />
@@ -890,13 +1069,19 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                      <div className="relative">
                        <input
                          type="text"
+                         id="pse-legal-id"
                          value={pseData.user_legal_id}
                          onChange={(e) => {
                            if (isSubmitting) return;
                            const value = e.target.value.replace(/\D/g, '').slice(0, 20);
                            setPseData({ ...pseData, user_legal_id: value });
+                           setHasTriedSubmit(false); // Clear validation state when user types
                          }}
-                         className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                           isPseLegalIdInvalid 
+                             ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                             : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                         } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                          placeholder="00000000000000000000"
                          maxLength={20}
                          disabled={isSubmitting}
@@ -911,12 +1096,18 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                    <div>
                      <label className="block text-sm font-medium text-slate-300 mb-2">Banco</label>
                      <select
+                       id="pse-bank"
                        value={pseData.financial_institution_code}
                        onChange={(e) => {
                          if (isSubmitting) return;
                          setPseData({ ...pseData, financial_institution_code: e.target.value });
+                         setHasTriedSubmit(false); // Clear validation state when user types
                        }}
-                       className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                       className={`w-full px-3 py-2 border rounded-lg text-slate-100 focus:outline-none focus:ring-2 ${
+                         isPseBankInvalid 
+                           ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                           : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                       } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                        disabled={loadingBanks || isSubmitting}
                      >
                        <option key="bank-placeholder" value="">{loadingBanks ? 'Cargando bancos...' : 'Selecciona un banco...'}</option>
@@ -930,14 +1121,22 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                      <div className="relative">
                        <input
                          type="text"
+                         id="pse-full-name"
+                         name="pse-full-name"
                          value={pseData.full_name}
                          onChange={(e) => {
                            if (isSubmitting) return;
                            const value = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '').slice(0, 50);
                            setPseData({ ...pseData, full_name: value });
+                           setHasTriedSubmit(false); // Clear validation state when user types
                          }}
-                         className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                           isPseFullNameInvalid 
+                             ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                             : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                         } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                          placeholder="Nombre Completo"
+                         autoComplete="name"
                          maxLength={50}
                          disabled={isSubmitting}
                        />
@@ -952,15 +1151,23 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                      <label className="block text-sm font-medium text-slate-300 mb-2">Número de Teléfono</label>
                      <div className="relative">
                        <input
-                         type="text"
+                         type="tel"
+                         id="pse-phone"
+                         name="pse-phone"
                          value={formatPhoneNumber(pseData.phone_number)}
                          onChange={(e) => {
                            if (isSubmitting) return;
                            const rawNumber = e.target.value.replace(/\D/g, '');
                            setPseData({ ...pseData, phone_number: rawNumber });
+                           setHasTriedSubmit(false); // Clear validation state when user types
                          }}
-                         className={`w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         className={`w-full px-3 py-2 border rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                           isPsePhoneInvalid 
+                             ? 'border-red-500 bg-red-900/20 focus:ring-red-500 focus:border-red-500' 
+                             : 'bg-slate-700 border-slate-600 focus:ring-violet-500 focus:border-violet-500'
+                         } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                          placeholder="(XXX) XXX-XXXX"
+                         autoComplete="tel"
                          maxLength={14}
                          disabled={isSubmitting}
                        />
@@ -995,31 +1202,6 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
              
              {paymentMethod === 'BANCOLOMBIA_TRANSFER' && (
                <div className="space-y-4">
-                 <div>
-                   <label className="block text-sm font-medium text-slate-300 mb-2">Descripción del Pago</label>
-                   <div className="relative">
-                     <input
-                       type="text"
-                       value={bancolombiaData.payment_description}
-                       className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-slate-300 cursor-not-allowed"
-                       disabled={true}
-                       readOnly
-                     />
-                   </div>
-                 </div>
-                 <div>
-                   <label className="block text-sm font-medium text-slate-300 mb-2">URL de Ecommerce</label>
-                   <div className="relative">
-                     <input
-                       type="url"
-                       value={bancolombiaData.ecommerce_url}
-                       className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded-lg text-slate-300 cursor-not-allowed"
-                       disabled={true}
-                       readOnly
-                     />
-                   </div>
-                 </div>
-                 
                  {/* Bancolombia Transfer Payment Notice */}
                  <div className="bg-blue-900/20 border border-blue-500/50 rounded-lg p-4">
                    <div className="flex items-start space-x-3">
@@ -1050,7 +1232,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
         {!isFreeCheckout && acceptanceTokens && (
           <div className="bg-slate-800/50 border border-slate-700/60 rounded-lg p-6">
             <div className="space-y-4">
-              <div className="flex items-start space-x-3">
+              <div className={`flex items-start space-x-3 ${isAcceptanceInvalid ? 'ring-2 ring-red-500 ring-opacity-50 rounded-lg p-2 bg-red-900/10' : ''}`}>
                 <input
                   type="checkbox"
                   id="acceptance"
@@ -1058,8 +1240,13 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                   onChange={(e) => {
                     if (isSubmitting) return;
                     setAcceptanceAccepted(e.target.checked);
+                    setHasTriedSubmit(false); // Clear validation state when user checks
                   }}
-                  className={`mt-1 h-6 w-6 sm:h-5 sm:w-5 text-violet-600 border-slate-600 rounded focus:ring-violet-500 bg-slate-700 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  className={`mt-1 h-6 w-6 sm:h-5 sm:w-5 text-violet-600 rounded focus:ring-violet-500 ${
+                    isAcceptanceInvalid 
+                      ? 'border-red-500 bg-red-900/20' 
+                      : 'border-slate-600 bg-slate-700'
+                  } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   disabled={isSubmitting}
                 />
                 <label htmlFor="acceptance" className="text-sm text-slate-300 cursor-pointer">
@@ -1084,7 +1271,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                   {' '}para hacer este pago.
                 </label>
               </div>
-              <div className="flex items-start space-x-3">
+              <div className={`flex items-start space-x-3 ${isPersonalDataInvalid ? 'ring-2 ring-red-500 ring-opacity-50 rounded-lg p-2 bg-red-900/10' : ''}`}>
                 <input
                   type="checkbox"
                   id="personalData"
@@ -1092,8 +1279,13 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                   onChange={(e) => {
                     if (isSubmitting) return;
                     setPersonalDataAccepted(e.target.checked);
+                    setHasTriedSubmit(false); // Clear validation state when user checks
                   }}
-                  className={`mt-1 h-6 w-6 sm:h-5 sm:w-5 text-violet-600 border-slate-600 rounded focus:ring-violet-500 bg-slate-700 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  className={`mt-1 h-6 w-6 sm:h-5 sm:w-5 text-violet-600 rounded focus:ring-violet-500 ${
+                    isPersonalDataInvalid 
+                      ? 'border-red-500 bg-red-900/20' 
+                      : 'border-slate-600 bg-slate-700'
+                  } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   disabled={isSubmitting}
                 />
                 <label htmlFor="personalData" className="text-sm text-slate-300 cursor-pointer">
@@ -1115,8 +1307,8 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={!isFormValid || isSubmitting}
-          className="w-full text-white py-3 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2 bg-violet-600 hover:bg-violet-500"
+          disabled={isSubmitting}
+          className="w-full text-white py-3 px-4 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (
             <>
@@ -1130,25 +1322,6 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
             </>
           )}
         </button>
-        
-        {/* Error Display - Below Submit Button */}
-        {error && (
-          <div className="mt-4 bg-red-900/20 border border-red-500/50 rounded-lg p-4">
-            <div className="flex items-center space-x-2">
-              <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <h3 className="text-red-100 font-medium">Error en el Checkout</h3>
-            </div>
-            <p className="text-red-200 mt-2">{error}</p>
-            <button
-              onClick={() => setError(null)}
-              className="mt-3 text-sm text-red-300 hover:text-red-200 underline"
-            >
-              Intentar de nuevo
-            </button>
-          </div>
-        )}
         
         {/* Nightlife Terms - Amazon-style text with links */}
         <div className="text-xs text-slate-400 text-center mt-4">
@@ -1172,6 +1345,25 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
           </a>
           {' '}de Nightlife.
         </div>
+        
+        {/* Error Display - Below Terms and Privacy Policy */}
+        {error && (
+          <div className="mt-4 bg-red-900/20 border border-red-500/50 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="text-red-100 font-medium">Error en el Checkout</h3>
+            </div>
+            <p className="text-red-200 mt-2">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="mt-3 text-sm text-red-300 hover:text-red-200 underline"
+            >
+              Intentar de nuevo
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );

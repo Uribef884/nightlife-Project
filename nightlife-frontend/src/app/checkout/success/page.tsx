@@ -90,16 +90,16 @@ export default function PaymentSuccessPage() {
         console.log('PaymentSuccess - Transaction not approved, redirecting to appropriate page');
         // Redirect to the appropriate page based on status
         if (actualStatus === 'DECLINED') {
-          router.push('/payment-declined');
+          router.push('/checkout/declined');
           return;
         } else if (actualStatus === 'ERROR') {
-          router.push('/payment-error');
+          router.push('/checkout/error');
           return;
         } else if (actualStatus === 'TIMEOUT') {
-          router.push('/payment-timeout');
+          router.push('/checkout/timeout');
           return;
         } else if (actualStatus === 'PENDING') {
-          router.push('/payment-processing');
+          router.push('/checkout/processing');
           return;
         }
       }
@@ -111,7 +111,7 @@ export default function PaymentSuccessPage() {
         totalPaid: data.totalPaid || data.amount || 0,
         isFreeCheckout: Boolean(data.isFreeCheckout),
         paymentMethod: data.paymentMethod || 'CARD',
-        email: data.customerEmail || user?.email || 'usuario@ejemplo.com',
+        email: data.customerEmail || data.email || user?.email || 'usuario@ejemplo.com',
         purchaseDate: data.createdAt || new Date().toISOString(),
         items: data.items || [],
         subtotal: data.subtotal || 0,
@@ -154,11 +154,34 @@ export default function PaymentSuccessPage() {
     
     
     
-    // Use stored details first (they have correct pricing), only fetch from API if needed
+    // Check if stored details belong to current user/session
     if (storedDetails) {
       try {
         const details = JSON.parse(storedDetails);
         
+        // If user is logged in, check if the stored transaction email matches user's email
+        if (user && details.email && details.email !== user.email) {
+          console.log('PaymentSuccess: Stored transaction email does not match current user, clearing stale data');
+          localStorage.removeItem('lastTransactionDetails');
+          sessionStorage.removeItem('lastTransactionDetails');
+          clearCheckoutSummary();
+          router.push('/');
+          return;
+        }
+        
+        // Check if transaction is too old (older than 24 hours)
+        const transactionDate = new Date(details.purchaseDate);
+        const now = new Date();
+        const hoursDiff = (now.getTime() - transactionDate.getTime()) / (1000 * 60 * 60);
+        
+        if (hoursDiff > 24) {
+          console.log('PaymentSuccess: Transaction is older than 24 hours, clearing stale data');
+          localStorage.removeItem('lastTransactionDetails');
+          sessionStorage.removeItem('lastTransactionDetails');
+          clearCheckoutSummary();
+          router.push('/');
+          return;
+        }
         
         // Use checkout summary for correct pricing if available
         const checkoutSummary = getCheckoutSummary();
@@ -203,7 +226,7 @@ export default function PaymentSuccessPage() {
     }
     
     setLoading(false);
-  }, [searchParams, clearCart, fetchTransactionDetails]);
+  }, [searchParams, clearCart, fetchTransactionDetails, user]);
 
   const formatPrice = (price: number | undefined | null) => {
     const validPrice = price && !isNaN(price) ? price : 0;
@@ -441,14 +464,16 @@ export default function PaymentSuccessPage() {
 
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <button
-            onClick={handleViewPurchases}
-            className="flex items-center justify-center space-x-2 bg-slate-700 hover:bg-slate-600 text-slate-100 py-3 px-4 rounded-lg transition-colors"
-          >
-            <ShoppingBag className="h-5 w-5" />
-            <span>Ver historial</span>
-          </button>
+        <div className={`grid gap-4 mb-8 ${user ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+          {user && (
+            <button
+              onClick={handleViewPurchases}
+              className="flex items-center justify-center space-x-2 bg-slate-700 hover:bg-slate-600 text-slate-100 py-3 px-4 rounded-lg transition-colors"
+            >
+              <ShoppingBag className="h-5 w-5" />
+              <span>Ver historial</span>
+            </button>
+          )}
           
           <button
             onClick={handleContinueShopping}

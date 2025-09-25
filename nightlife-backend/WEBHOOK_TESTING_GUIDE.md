@@ -38,7 +38,7 @@ Create a test script to simulate Wompi webhook calls:
 // test-webhook.ts
 import axios from 'axios';
 
-const webhookUrl = 'http://localhost:4000/api/webhook/wompi';
+const webhookUrl = 'https://affa1a8a1187.ngrok-free.app/api/webhook/wompi';
 
 const mockWebhookData = {
   event: "transaction.updated",

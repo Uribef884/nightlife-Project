@@ -22,7 +22,7 @@ export default function CheckoutPage() {
     
     // If status is PENDING, redirect to processing page instead of success
     if (status.toUpperCase() === 'PENDING') {
-      router.push('/payment-processing');
+      router.push('/checkout/processing');
       return;
     }
     
@@ -59,7 +59,7 @@ export default function CheckoutPage() {
           // Don't fail the checkout if cart clearing fails
         }
         
-        router.push('/payment-success');
+        router.push('/checkout/success');
         break;
       case 'DECLINED':
         // Store transaction details for declined page
@@ -82,7 +82,7 @@ export default function CheckoutPage() {
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
         }
-        router.push('/payment-declined');
+        router.push('/checkout/declined');
         break;
       case 'ERROR':
         // Store transaction details for error page
@@ -106,7 +106,7 @@ export default function CheckoutPage() {
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
         }
-        router.push('/payment-error');
+        router.push('/checkout/error');
         break;
       case 'TIMEOUT':
         // Store transaction details for timeout page
@@ -129,11 +129,11 @@ export default function CheckoutPage() {
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
         }
-        router.push('/payment-timeout');
+        router.push('/checkout/timeout');
         break;
       default:
         // Default to success page for unknown statuses
-        router.push('/payment-success');
+        router.push('/checkout/success');
         break;
     }
   };
