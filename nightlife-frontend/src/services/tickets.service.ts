@@ -111,6 +111,17 @@ export async function getAvailableTicketsForDate(
     category: ticket.category,
     clubId: String(ticket.clubId),
     eventId: ticket.eventId ?? null,
+    // Add event data if available
+    event: ticket.event ? {
+      id: String(ticket.event.id),
+      name: String(ticket.event.name),
+      description: ticket.event.description ?? null,
+      availableDate: String(ticket.event.availableDate),
+      openHours: ticket.event.openHours ? {
+        open: String(ticket.event.openHours.open),
+        close: String(ticket.event.openHours.close)
+      } : undefined
+    } : null,
     includedMenuItems: Array.isArray(ticket.includedMenuItems)
       ? ticket.includedMenuItems.map((inc: any) => ({
           id: String(inc.id),

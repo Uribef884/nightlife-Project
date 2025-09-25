@@ -137,17 +137,59 @@ export default function TicketCard({
   const maxPerUser = getMaxPerUser(ticket);
   const soldOut = available !== null && available <= 0;
   
-  // Check if ticket is unavailable due to grace period being over
-  // For event tickets, check if event time + grace period (1 hour) < current time
+  // Simple grace period logic: if currentTime > eventStart + 1 hour, then unavailable
   let isUnavailableDueToGracePeriod = false;
   
-  if (ticket?.category === "event" && ticket?.availableDate) {
-    const eventDate = new Date(ticket.availableDate);
-    const gracePeriodEnd = new Date(eventDate.getTime() + 60 * 60 * 1000); // +1 hour
-    const now = new Date();
+  if (ticket?.category === "event") {
+    const { nowInBogota, parseBogotaDate, utcToBogotaDate } = require('@/utils/timezone');
     
-    isUnavailableDueToGracePeriod = now > gracePeriodEnd;
+    // Get event date and open hours
+    const eventDate = ticket.event?.availableDate ? new Date(ticket.event.availableDate) : 
+                     ticket.availableDate ? new Date(ticket.availableDate) : null;
+    const openHours = ticket.event?.openHours;
     
+    if (eventDate && openHours?.open) {
+      // Parse event date correctly as a local Bogota date
+      let eventDateStr: string;
+      
+      if (ticket.event?.availableDate) {
+        // Use the event date string directly - it should be in YYYY-MM-DD format
+        eventDateStr = ticket.event.availableDate;
+      } else if (ticket.availableDate) {
+        // Fallback to ticket's available date
+        eventDateStr = ticket.availableDate;
+      } else {
+        // Convert Date object to YYYY-MM-DD string in Bogota timezone for parsing
+        eventDateStr = parseBogotaDate(eventDate.toISOString().split('T')[0]).toISODate()!;
+      }
+      
+      // Parse the event date in Bogota timezone
+      const eventDateBogota = parseBogotaDate(eventDateStr);
+      
+      // Parse open time (e.g., "18:00" -> 18 hours, 0 minutes)  
+      const [openHour, openMinute] = openHours.open.split(':').map(Number);
+      const eventStart = eventDateBogota.set({ hour: openHour, minute: openMinute, second: 0, millisecond: 0 });
+      
+      // Grace period ends 1 hour after event starts
+      const gracePeriodEnd = eventStart.plus({ hours: 1 });
+      const now = nowInBogota();
+      
+      // SIMPLE LOGIC: If current time > grace period end, then unavailable
+      isUnavailableDueToGracePeriod = now > gracePeriodEnd;
+      
+      // Debug logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[GRACE PERIOD]', {
+          ticket: ticket.name,
+          eventDateStr,
+          eventStart: eventStart.toISO(),
+          gracePeriodEnd: gracePeriodEnd.toISO(),
+          currentTime: now.toISO(),
+          isUnavailable: isUnavailableDueToGracePeriod,
+          timeLeft: gracePeriodEnd.diff(now, 'minutes').minutes
+        });
+      }
+    }
   }
   
   const isUnavailable = soldOut || isUnavailableDueToGracePeriod;
@@ -323,7 +365,7 @@ export default function TicketCard({
         ) : (
           <button
             type="button"
-            onClick={() => onAdd()}
+            onClick={onAdd}
             disabled={isUnavailable}
             className={[
               "w-full rounded-full py-2 text-sm font-semibold",

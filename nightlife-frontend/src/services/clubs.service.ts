@@ -526,6 +526,7 @@ export type EventDTO = {
   description?: string | null;
   bannerUrl?: string | null;
   availableDate: string; // YYYY-MM-DD
+  openHours?: { open: string; close: string } | null; // Event open hours
   tickets?: TicketDTO[]; // ⬅️ keep event tickets when provided
 };
 
@@ -546,6 +547,13 @@ export type TicketDTO = {
   category: "general" | "event" | "free";
   clubId: string;
   eventId?: string | null;
+  event?: {
+    id: string;
+    name: string;
+    description?: string | null;
+    availableDate: string;
+    openHours?: { open: string; close: string };
+  } | null;
   includedMenuItems?: Array<{
     id: string;
     menuItemId: string;
@@ -650,13 +658,17 @@ export async function getEventsForClubCSR(clubId: string): Promise<EventDTO[]> {
     });
     if (!resp.ok) return [];
     const json = await resp.json();
-    return Array.isArray(json)
+        return Array.isArray(json)
       ? json.map((e: any) => ({
           id: String(e.id),
           name: String(e.name),
           description: e.description ?? null,
           bannerUrl: e.bannerUrl ?? null,
           availableDate: String(e.availableDate),
+          openHours: e.openHours ? {
+            open: String(e.openHours.open),
+            close: String(e.openHours.close)
+          } : null,
           tickets: Array.isArray(e.tickets)
             ? e.tickets.map((t: any) => ({
                 id: String(t.id),
@@ -695,6 +707,7 @@ export async function getEventsForClubCSR(clubId: string): Promise<EventDTO[]> {
 }
 
 // Always return an array for tickets
+// Always return an array for tickets
 export async function getTicketsForClubCSR(clubId: string): Promise<TicketDTO[]> {
   const url = joinUrl(API_BASE_CSR, `/tickets/club/${encodeURIComponent(clubId)}`);
   try {
@@ -706,42 +719,112 @@ export async function getTicketsForClubCSR(clubId: string): Promise<TicketDTO[]>
     });
     if (!resp.ok) return [];
     const json = await resp.json();
+
     const rows = Array.isArray(json)
       ? json
+      : Array.isArray(json?.tickets) ? json.tickets
       : Array.isArray(json?.items) ? json.items
       : Array.isArray(json?.data) ? json.data
       : Array.isArray(json?.results) ? json.results
       : [];
-    
-    // Map the rows to ensure includedMenuItems are properly structured
-    return rows.map((t: any) => ({
-      id: String(t.id),
-      name: String(t.name),
-      description: t.description ?? null,
-      price: t.price,
-      dynamicPricingEnabled: !!t.dynamicPricingEnabled,
-      dynamicPrice: t.dynamicPrice,
-      maxPerPerson: Number(t.maxPerPerson ?? 0),
-      priority: Number(t.priority ?? 0),
-      isActive: !!t.isActive,
-      includesMenuItem: !!t.includesMenuItem,
-      availableDate: t.availableDate ?? null,
-      quantity: t.quantity ?? null,
-      originalQuantity: t.originalQuantity ?? null,
-      category: t.category,
-      clubId: String(t.clubId),
-      eventId: t.eventId ?? null,
-      includedMenuItems: Array.isArray(t.includedMenuItems)
-        ? t.includedMenuItems.map((inc: any) => ({
-            id: String(inc.id),
-            menuItemId: String(inc.menuItemId),
-            menuItemName: String(inc.menuItemName),
-            variantId: inc.variantId ?? null,
-            variantName: inc.variantName ?? null,
-            quantity: Number(inc.quantity ?? 1),
-          }))
-        : [],
-    })) as TicketDTO[];
+
+    // Local helper: normalize various possible shapes for openHours
+    const normalizeOpenHours = (oh: any): { open: string; close: string } | undefined => {
+      if (!oh || typeof oh !== "object") return undefined;
+      // Accept common aliases (openTime/closeTime, snake_case, etc.)
+      const openRaw = oh.open ?? oh.openTime ?? oh.open_local ?? oh.open_time ?? null;
+      const closeRaw = oh.close ?? oh.closeTime ?? oh.close_local ?? oh.close_time ?? null;
+      if (!openRaw || !closeRaw) return undefined;
+      return { open: String(openRaw), close: String(closeRaw) };
+    };
+
+    return rows.map((t: any) => {
+      // Robust event extraction
+      const rawEvent =
+        t.event ??
+        t.eventDetails ??   // tolerate a couple of common alias keys
+        t.eventObj ??
+        null;
+
+      let event: TicketDTO["event"] = null;
+
+      if (rawEvent && typeof rawEvent === "object") {
+        // Backend provided a proper event object — pass it through (shape-normalized)
+        const evId = rawEvent.id ?? rawEvent.eventId ?? rawEvent.event_id;
+        const evName = rawEvent.name ?? "";
+        const evDesc = rawEvent.description ?? null;
+        const evDate = rawEvent.availableDate ?? rawEvent.date ?? rawEvent.available_date;
+        const evOH = normalizeOpenHours(rawEvent.openHours ?? rawEvent.open_hours);
+
+        if (evId && evDate) {
+          event = {
+            id: String(evId),
+            name: String(evName),
+            description: evDesc != null ? String(evDesc) : null,
+            availableDate: String(evDate),     // YYYY-MM-DD expected by consumers
+            openHours: evOH,                   // normalized to {open, close} | undefined
+          };
+        } else if (process.env.NODE_ENV !== "production") {
+          // Event object exists but missing essentials — log once for diagnosis
+          console.warn("[tickets] event present but missing id/availableDate", {
+            ticketId: t.id, rawEvent
+          });
+        }
+      } else if (t?.category === "event" && (t?.eventId || t?.availableDate)) {
+        // Fallback path: construct a minimal event so grace period logic works
+        // NOTE: this is a safety net if the backend omitted `event` for event tickets.
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[tickets] backend omitted `event` object; constructing minimal event", {
+            ticketId: t.id, eventId: t.eventId, availableDate: t.availableDate
+          });
+        }
+        const evId = t.eventId ?? t.id; // prefer eventId; fall back to ticket id
+        const evDate = t.availableDate ?? null;
+        if (evId && evDate) {
+          event = {
+            id: String(evId),
+            name: t.name ? String(t.name) : "",          // keep non-empty to match DTO
+            description: t.description ?? null,
+            availableDate: String(evDate),               // YYYY-MM-DD
+            openHours: normalizeOpenHours(t.openHours),  // if ticket carries it
+          };
+        }
+      }
+
+      // Final mapped ticket (keep event as resolved above)
+      return {
+        id: String(t.id),
+        name: String(t.name),
+        description: t.description ?? null,
+        price: t.price,
+        dynamicPricingEnabled: !!t.dynamicPricingEnabled,
+        dynamicPrice: t.dynamicPrice,
+        maxPerPerson: Number(t.maxPerPerson ?? 0),
+        priority: Number(t.priority ?? 0),
+        isActive: !!t.isActive,
+        includesMenuItem: !!t.includesMenuItem,
+        availableDate: t.availableDate ?? null, // for non-event categories
+        quantity: t.quantity ?? null,
+        originalQuantity: t.originalQuantity ?? null,
+        category: t.category,
+        clubId: String(t.clubId),
+        eventId: t.eventId ?? null,
+
+        // ✅ The actual fix: ensure `event` is carried through consistently
+        event,
+
+        includedMenuItems: Array.isArray(t.includedMenuItems)
+          ? t.includedMenuItems.map((inc: any) => ({
+              id: String(inc.id),
+              menuItemId: String(inc.menuItemId),
+              menuItemName: String(inc.menuItemName),
+              variantId: inc.variantId ?? null,
+              variantName: inc.variantName ?? null,
+              quantity: Number(inc.quantity ?? 1),
+            }))
+          : [],
+      } as TicketDTO;
+    }) as TicketDTO[];
   } catch {
     return [];
   }

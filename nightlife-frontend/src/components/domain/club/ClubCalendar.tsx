@@ -62,8 +62,9 @@ export function ClubCalendar({
   onDateChangeBlocked?: () => void;
 }) {
   /** Stabilize "today" so we don't churn state on each render */
-  const todayISO = useMemo(() => toISO(new Date()), []);
-  const today = useMemo(() => parseISO(todayISO), [todayISO]);
+  const { todayInBogota, parseBogotaDate } = require('@/utils/timezone');
+  const todayISO = useMemo(() => todayInBogota(), []);
+  const today = useMemo(() => parseBogotaDate(todayISO), [todayISO]);
 
   /** Single source of truth for the calendar view */
   const [focusISO, setFocusISO] = useState<string>(selectedDate ?? todayISO);
@@ -93,7 +94,7 @@ export function ClubCalendar({
     const requestedMonth = new Date(v.getFullYear(), v.getMonth(), 1);
     
     // Never allow showing past months - always show at least the current month
-    const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const currentMonth = new Date(today.year, today.month - 1, 1); // Luxon months are 1-based
     return requestedMonth < currentMonth ? currentMonth : requestedMonth;
   }, [focusISO, monthOffset, todayISO, today]);
   
@@ -118,10 +119,9 @@ export function ClubCalendar({
       const iso = toISO(date);
 
       // Disable past dates and dates more than 3 weeks in the future
-      const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000); // 3 weeks from today
-      const isPast = date < todayDate;
-      const isTooFarFuture = date > maxDate;
+      const { isPastDateInBogota, isDateSelectableInBogota } = require('@/utils/timezone');
+      const isPast = isPastDateInBogota(iso);
+      const isTooFarFuture = !isDateSelectableInBogota(iso);
       const inPast = isPast || isTooFarFuture;
       const isToday = iso === todayISO;
 
@@ -157,7 +157,7 @@ export function ClubCalendar({
   function computeAnchoredFocus(target: Date) {
     // Prefer selectedDate if it falls into target month; otherwise first of month
     // But never allow going to past months
-    const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const currentMonth = new Date(today.year, today.month - 1, 1); // Luxon months are 1-based
     const targetMonth = new Date(target.getFullYear(), target.getMonth(), 1);
     
     // If target is in the past, use current month instead
@@ -238,16 +238,17 @@ export function ClubCalendar({
                 const prevWeekISO = toISO(prevWeek);
                 
                 // Prevent going to past weeks (before current week)
-                const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const currentWeekStart = new Date(todayDate);
-                currentWeekStart.setDate(todayDate.getDate() - todayDate.getDay()); // Start of current week
+                const { startOfDayInBogota } = require('@/utils/timezone');
+                const todayDate = startOfDayInBogota(todayISO);
+                const currentWeekStart = new Date(todayDate.toJSDate());
+                currentWeekStart.setDate(todayDate.day - todayDate.weekday + 1); // Start of current week
                 
                 if (prevWeek >= currentWeekStart) {
                   setFocusISO(prevWeekISO);
                 }
               } else {
                 // Month mode: navigate by months
-                const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                const currentMonth = new Date(today.year, today.month - 1, 1); // Luxon months are 1-based
                 if (visibleMonthStart.getTime() <= currentMonth.getTime()) return;
                 
                 const prevMonth = addMonths(visibleMonthStart, -1);
@@ -260,12 +261,19 @@ export function ClubCalendar({
                 ? (() => {
                     // Week mode: disable if current week is the earliest allowed week
                     const currentDate = parseISO(focusISO);
-                    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                    const currentWeekStart = new Date(todayDate);
-                    currentWeekStart.setDate(todayDate.getDate() - todayDate.getDay());
+                    const { startOfDayInBogota } = require('@/utils/timezone');
+                    const todayDate = startOfDayInBogota(todayISO);
+                    const currentWeekStart = new Date(todayDate.toJSDate());
+                    currentWeekStart.setDate(todayDate.day - todayDate.weekday + 1);
                     return currentDate.getTime() <= currentWeekStart.getTime();
                   })()
-                : visibleMonthStart.getTime() <= new Date(today.getFullYear(), today.getMonth(), 1).getTime()
+                : (() => {
+                    // Month mode: disable if current month is the earliest allowed month
+                    const { startOfDayInBogota } = require('@/utils/timezone');
+                    const todayDate = startOfDayInBogota(todayISO);
+                    const currentMonthStart = new Date(todayDate.year, todayDate.month - 1, 1);
+                    return visibleMonthStart.getTime() <= currentMonthStart.getTime();
+                  })()
             }
             className="rounded-md bg-white/10 hover:bg-white/15 disabled:bg-white/5 disabled:cursor-not-allowed px-2 py-1 text-white disabled:text-white/50"
             aria-label={collapsed ? "Semana anterior" : "Mes anterior"}
@@ -281,7 +289,8 @@ export function ClubCalendar({
                 const nextWeekISO = toISO(nextWeek);
                 
                 // Check if next week is within 3 weeks limit OR has events
-                const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                const { isDateSelectableInBogota } = require('@/utils/timezone');
+                const isNextWeekSelectable = isDateSelectableInBogota(nextWeekISO);
                 const hasEventsInNextWeek = Array.from(eventDates).some(eventDate => {
                   const eventDateObj = parseISO(eventDate);
                   const weekStart = new Date(nextWeek);
@@ -291,7 +300,7 @@ export function ClubCalendar({
                   return eventDateObj >= weekStart && eventDateObj <= weekEnd;
                 });
                 
-                if (nextWeek <= maxDate || hasEventsInNextWeek) {
+                if (isNextWeekSelectable || hasEventsInNextWeek) {
                   setFocusISO(nextWeekISO);
                 }
               } else {
@@ -299,7 +308,9 @@ export function ClubCalendar({
                 const nextMonth = addMonths(visibleMonthStart, 1);
                 
                 // Check if next month would exceed 3 weeks limit OR has events
-                const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                const { isDateSelectableInBogota } = require('@/utils/timezone');
+                const nextMonthISO = toISO(nextMonth);
+                const isNextMonthSelectable = isDateSelectableInBogota(nextMonthISO);
                 const hasEventsInNextMonth = Array.from(eventDates).some(eventDate => {
                   const eventDateObj = parseISO(eventDate);
                   const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
@@ -307,7 +318,7 @@ export function ClubCalendar({
                   return eventDateObj >= nextMonthStart && eventDateObj <= nextMonthEnd;
                 });
                 
-                if (nextMonth <= maxDate || hasEventsInNextMonth) {
+                if (isNextMonthSelectable || hasEventsInNextMonth) {
                   const desired = computeAnchoredFocus(nextMonth);
                   if (desired !== focusRef.current) setFocusISO(desired);
                 }
@@ -319,7 +330,9 @@ export function ClubCalendar({
                     // Week mode: disable if next week would exceed 3 weeks limit AND has no events
                     const currentDate = parseISO(focusISO);
                     const nextWeek = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-                    const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                    const nextWeekISO = toISO(nextWeek);
+                    const { isDateSelectableInBogota } = require('@/utils/timezone');
+                    const isNextWeekSelectable = isDateSelectableInBogota(nextWeekISO);
                     
                     const hasEventsInNextWeek = Array.from(eventDates).some(eventDate => {
                       const eventDateObj = parseISO(eventDate);
@@ -330,12 +343,14 @@ export function ClubCalendar({
                       return eventDateObj >= weekStart && eventDateObj <= weekEnd;
                     });
                     
-                    return nextWeek > maxDate && !hasEventsInNextWeek;
+                    return !isNextWeekSelectable && !hasEventsInNextWeek;
                   })()
                 : (() => {
                     // Month mode: disable if next month would exceed 3 weeks limit AND has no events
                     const nextMonth = addMonths(visibleMonthStart, 1);
-                    const maxDate = new Date(today.getTime() + 21 * 24 * 60 * 60 * 1000);
+                    const nextMonthISO = toISO(nextMonth);
+                    const { isDateSelectableInBogota } = require('@/utils/timezone');
+                    const isNextMonthSelectable = isDateSelectableInBogota(nextMonthISO);
                     
                     const hasEventsInNextMonth = Array.from(eventDates).some(eventDate => {
                       const eventDateObj = parseISO(eventDate);
@@ -344,7 +359,7 @@ export function ClubCalendar({
                       return eventDateObj >= nextMonthStart && eventDateObj <= nextMonthEnd;
                     });
                     
-                    return nextMonth > maxDate && !hasEventsInNextMonth;
+                    return !isNextMonthSelectable && !hasEventsInNextMonth;
                   })()
             }
             className="rounded-md bg-white/10 hover:bg-white/15 disabled:bg-white/5 disabled:cursor-not-allowed px-2 py-1 text-white disabled:text-white/50"

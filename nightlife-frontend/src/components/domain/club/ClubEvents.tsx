@@ -59,12 +59,14 @@ function ExpandedEventTickets({
   qtyByTicketId,
   onAdd,
   onChangeQty,
+  eventData,
 }: {
   evKey: string;
   tickets: TicketDTO[];
   qtyByTicketId: Map<string, { qty: number; itemId: string }>;
   onAdd: (t: TicketDTO) => void;
   onChangeQty: (itemId: string, nextQty: number) => void;
+  eventData?: { availableDate: string; openHours?: { open: string; close: string } };
 }) {
   // Use the same categorization logic as TicketsGrid
   const combos = useMemo(() => tickets.filter(isCombo), [tickets]);
@@ -208,10 +210,21 @@ function ExpandedEventTickets({
       <Section id={`event-sec-combos-${evKey}`} title="Combos:" count={combos.length} innerRef={secRefs.combos}>
         {combos.map((t) => {
           const inCart = qtyByTicketId.get((t as any).id);
+          // Attach event data to ticket for grace period logic
+          const ticketWithEvent = eventData ? {
+            ...t,
+            event: {
+              id: t.event?.id || '',
+              name: t.event?.name || '',
+              description: t.event?.description || null,
+              availableDate: eventData.availableDate,
+              openHours: eventData.openHours || t.event?.openHours
+            }
+          } : t;
           return (
             <TicketCard
               key={(t as any).id}
-              ticket={t}
+              ticket={ticketWithEvent}
               bannerUrl={null}
               qtyInCart={inCart?.qty ?? 0}
               itemId={inCart?.itemId ?? ""}
@@ -227,10 +240,21 @@ function ExpandedEventTickets({
       <Section id={`event-sec-general-${evKey}`} title="General:" count={general.length} innerRef={secRefs.general}>
         {general.map((t) => {
           const inCart = qtyByTicketId.get((t as any).id);
+          // Attach event data to ticket for grace period logic
+          const ticketWithEvent = eventData ? {
+            ...t,
+            event: {
+              id: t.event?.id || '',
+              name: t.event?.name || '',
+              description: t.event?.description || null,
+              availableDate: eventData.availableDate,
+              openHours: eventData.openHours || t.event?.openHours
+            }
+          } : t;
           return (
             <TicketCard
               key={(t as any).id}
-              ticket={t}
+              ticket={ticketWithEvent}
               bannerUrl={null}
               qtyInCart={inCart?.qty ?? 0}
               itemId={inCart?.itemId ?? ""}
@@ -246,10 +270,21 @@ function ExpandedEventTickets({
       <Section id={`event-sec-gratis-${evKey}`} title="Gratis:" count={gratis.length} innerRef={secRefs.gratis}>
         {gratis.map((t) => {
           const inCart = qtyByTicketId.get((t as any).id);
+          // Attach event data to ticket for grace period logic
+          const ticketWithEvent = eventData ? {
+            ...t,
+            event: {
+              id: t.event?.id || '',
+              name: t.event?.name || '',
+              description: t.event?.description || null,
+              availableDate: eventData.availableDate,
+              openHours: eventData.openHours || t.event?.openHours
+            }
+          } : t;
           return (
             <TicketCard
               key={(t as any).id}
-              ticket={t}
+              ticket={ticketWithEvent}
               bannerUrl={null}
               qtyInCart={inCart?.qty ?? 0}
               itemId={inCart?.itemId ?? ""}
@@ -336,7 +371,19 @@ export function ClubEvents({
   const dayHasEvent = available?.dateHasEvent ?? (selectedDate ? byDate.has(selectedDate) : false);
   const selectedEvent = useMemo(() => {
     if (!dayHasEvent || !selectedDate) return null;
-    return available?.event ?? (byDate.get(selectedDate) as any) ?? null;
+    const eventFromAvailable = available?.event;
+    const eventFromByDate = byDate.get(selectedDate) as any;
+    const event = eventFromAvailable ?? eventFromByDate ?? null;
+    
+    // Ensure the event has openHours from the original event data
+    if (event && eventFromByDate) {
+      return {
+        ...event,
+        openHours: eventFromByDate.openHours || event.openHours
+      };
+    }
+    
+    return event;
   }, [dayHasEvent, selectedDate, available, byDate]);
 
   const eventTickets: TicketDTO[] = useMemo(() => {
@@ -385,30 +432,6 @@ export function ClubEvents({
     }
   }
   
-  async function confirmClearMenuAndAdd() {
-    if (!pendingTicket || !selectedDate) return;
-    try {
-      // Clear menu items from cart first
-      const menuItems = cartItems.filter(item => item.itemType === 'menu');
-      for (const item of menuItems) {
-        await removeItem(item.id);
-      }
-      // Then add the ticket
-      const addFunction = async () => {
-        await addTicket((pendingTicket as any).id, selectedDate, 1);
-      };
-      
-      // Use club protection if clubId is provided
-      if (clubId) {
-        await clubProtection.handleAddWithProtection(addFunction);
-      } else {
-        await addFunction();
-      }
-    } finally {
-      setPendingTicket(null);
-      setShowConfirmClearMenu(false);
-    }
-  }
 
   if (!events || events.length === 0) {
     return null;
@@ -418,7 +441,7 @@ export function ClubEvents({
     <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
       <h3 className="text-white font-semibold mb-3">Próximos eventos</h3>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-2">
         {events.map((ev) => {
           const evId = String((ev as any).id);
           const evDate = getEventDate(ev);
@@ -430,20 +453,32 @@ export function ClubEvents({
           return (
             <div key={evId} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
               {/* Header row with image + content */}
-              <div className="p-3">
-                <div className="flex items-start gap-3">
+              <div className="p-4">
+                <div className="flex items-start gap-4">
                   <button
                     type="button"
                     onClick={() => (ev as any).bannerUrl && setLightbox({ open: true, url: (ev as any).bannerUrl })}
-                    className="relative h-24 w-24 overflow-hidden rounded-lg shrink-0 ring-1 ring-white/10"
+                    className="relative h-28 w-28 sm:h-32 sm:w-32 overflow-hidden rounded-xl shrink-0 ring-1 ring-white/10 hover:ring-white/20 transition-all duration-200"
                     aria-label={`Ver imagen del evento ${(ev as any).name ?? ""}`}
                   >
                     <img src={(ev as any).bannerUrl ?? ""} alt={(ev as any).name ?? ""} className="absolute inset-0 h-full w-full object-cover" />
                   </button>
 
                   <div className="flex-1 min-w-0">
-                    <div className="text-white font-semibold">{(ev as any).name}</div>
-                    {evDate && <div className="text-white/60 text-sm">{formatDateLabel(evDate)}</div>}
+                    <div className="text-white font-semibold text-lg leading-tight">{(ev as any).name}</div>
+                    {evDate && (
+                      <div className="text-white/70 text-sm font-medium mt-1">
+                        {formatDateLabel(evDate)}
+                      </div>
+                    )}
+                    {(ev as any).openHours && (
+                      <div className="mt-2 flex items-center gap-2 text-white/70 text-sm">
+                        <svg className="h-4 w-4 text-white/60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>{(ev as any).openHours.open} - {(ev as any).openHours.close}</span>
+                      </div>
+                    )}
 
                     {/* Description (animated clamp) */}
                     {desc ? (
@@ -491,7 +526,7 @@ export function ClubEvents({
 
                     {!isSelected && (
                       <button
-                        className="mt-3 w-full rounded-full bg-violet-600 hover:bg-violet-500 text-white py-2 text-sm font-semibold"
+                        className="mt-4 w-full rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 text-white py-3 px-4 text-sm font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                         onClick={() => {
                           if (!evDate) return;
                           setPendingScrollToId(evId);
@@ -535,6 +570,10 @@ export function ClubEvents({
                             qtyByTicketId={qtyByTicketId}
                             onAdd={handleAdd}
                             onChangeQty={handleChangeQty}
+                            eventData={selectedEvent ? {
+                              availableDate: selectedEvent.availableDate,
+                              openHours: selectedEvent.openHours
+                            } : undefined}
                           />
                         ) : (
                           <div className="text-white/60">No hay reservas disponibles para esta fecha.</div>
