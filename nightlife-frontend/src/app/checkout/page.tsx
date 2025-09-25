@@ -18,7 +18,6 @@ export default function CheckoutPage() {
     // Check the transaction status and redirect accordingly
     const status = result.wompiStatus || result.status || 'APPROVED';
     
-    console.log('CheckoutPage - handleCheckoutSuccess called with:', { result, status });
     
     // If status is PENDING, redirect to processing page instead of success
     if (status.toUpperCase() === 'PENDING') {
@@ -45,7 +44,6 @@ export default function CheckoutPage() {
             total: result.total || result.actualTotal || 0,
             actualTotal: result.actualTotal || 0
           };
-          console.log('CheckoutPage - Storing APPROVED transaction details:', transactionDetails);
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
         }
@@ -53,7 +51,6 @@ export default function CheckoutPage() {
         // Clear cart only for APPROVED transactions
         try {
           await clearCart();
-          console.log('CheckoutPage - Cart cleared successfully for APPROVED transaction');
         } catch (cartError) {
           console.error('CheckoutPage - Failed to clear cart for APPROVED transaction:', cartError);
           // Don't fail the checkout if cart clearing fails

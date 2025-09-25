@@ -46,7 +46,13 @@ export class UnifiedCheckoutController {
       
       const acceptanceTokens = await wompiService().getAcceptanceTokens();
       
-      res.json(acceptanceTokens);
+      // Return only the required acceptance tokens, not the entire merchant data
+      const response = {
+        presigned_acceptance: acceptanceTokens.data.presigned_acceptance,
+        presigned_personal_data_auth: acceptanceTokens.data.presigned_personal_data_auth
+      };
+      
+      res.json(response);
     } catch (error) {
       console.error("[UNIFIED-CHECKOUT-ACCEPTANCE-TOKENS] Error:", error);
       res.status(500).json({

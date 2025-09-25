@@ -90,6 +90,17 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   useEffect(() => {
     loadInitialData();
   }, []); // Only run once on mount
+
+  // Load PSE banks when cart becomes available and PSE is selected
+  useEffect(() => {
+    const summary = getCartSummary();
+    if (summary && summary.items && summary.items.length > 0 && paymentMethod === 'PSE') {
+      const isFreeCheckout = summary && (summary.total === 0 || summary.totalSubtotal === 0);
+      if (!isFreeCheckout && pseBanks.length === 0) {
+        loadPSEBanks();
+      }
+    }
+  }, [items, paymentMethod, pseBanks.length]); // Watch for cart changes and payment method
   
   // Pre-fill email when user is logged in
   useEffect(() => {
@@ -119,6 +130,17 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   
   const loadInitialData = async () => {
     try {
+      // Load acceptance tokens immediately - they're needed for the UI regardless of cart state
+      if (!acceptanceTokens) {
+        try {
+          const tokens = await getAcceptanceTokens();
+          setAcceptanceTokens(tokens);
+        } catch (error) {
+          console.error('Error loading acceptance tokens:', error);
+          onError?.('Error loading payment data');
+        }
+      }
+      
       // Don't refresh cart on mount - it should already be loaded
       // await refreshCart();
       
@@ -135,17 +157,8 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
       const isFreeCheckout = summary && (summary.total === 0 || summary.totalSubtotal === 0);
       
       if (isFreeCheckout) {
-        // For free checkout, we don't need acceptance tokens or payment methods
+        // For free checkout, we don't need PSE banks
         return;
-      }
-      
-      // Load acceptance tokens for paid checkouts
-      try {
-        const tokens = await getAcceptanceTokens();
-        setAcceptanceTokens(tokens);
-      } catch (error) {
-        console.error('Error loading acceptance tokens:', error);
-        onError?.('Error loading payment data');
       }
       
       // Load PSE banks if PSE is selected
@@ -487,26 +500,19 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
         };
 
         // Use both localStorage and sessionStorage for redundancy
-        console.log('CheckoutForm - Storing transaction details:', transactionDetails);
         localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
         sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
         
         // Handle PSE redirection
         if (result.requiresRedirect && result.redirectUrl && paymentMethod === 'PSE') {
-          console.log('CheckoutForm - PSE payment requires redirection to:', result.redirectUrl);
-          
           // Redirect directly to the bank's website for PSE payment
-          console.log('CheckoutForm - Redirecting to PSE URL for bank payment');
           window.location.href = result.redirectUrl;
           return;
         }
-        
+
         // Handle Bancolombia Transfer redirection
         if (result.requiresRedirect && result.redirectUrl && paymentMethod === 'BANCOLOMBIA_TRANSFER') {
-          console.log('CheckoutForm - Bancolombia Transfer payment requires redirection to:', result.redirectUrl);
-          
           // Redirect directly to Bancolombia's website for transfer payment
-          console.log('CheckoutForm - Redirecting to Bancolombia Transfer URL for bank payment');
           window.location.href = result.redirectUrl;
           return;
         }
@@ -693,21 +699,6 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   }, [items, isFreeCheckout]); // Remove currentCartSummary dependency to prevent double re-renders
   
 
-  // Ensure acceptance tokens are loaded for paid checkouts
-  useEffect(() => {
-    const loadTokens = async () => {
-      if (!isFreeCheckout && !acceptanceTokens) {
-        try {
-          const tokens = await getAcceptanceTokens();
-          setAcceptanceTokens(tokens);
-        } catch (error) {
-          console.error('Error loading acceptance tokens in retry:', error);
-        }
-      }
-    };
-    
-    loadTokens();
-  }, [isFreeCheckout, acceptanceTokens]);
   
   
   // Removed isLoading check to prevent white flash during cart updates
@@ -1252,7 +1243,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                 <label htmlFor="acceptance" className="text-sm text-slate-300 cursor-pointer">
                   Acepto haber leído los{' '}
                   <a
-                    href={acceptanceTokens.data.presigned_acceptance.permalink}
+                    href={acceptanceTokens.presigned_acceptance.permalink}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-violet-400 hover:text-violet-300 underline font-bold"
@@ -1261,7 +1252,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                   </a>
                   {' '}y la{' '}
                   <a
-                    href={acceptanceTokens.data.presigned_personal_data_auth.permalink}
+                    href={acceptanceTokens.presigned_personal_data_auth.permalink}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-violet-400 hover:text-violet-300 underline font-bold"
@@ -1291,7 +1282,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                 <label htmlFor="personalData" className="text-sm text-slate-300 cursor-pointer">
                   Acepto la{' '}
                   <a
-                    href={acceptanceTokens.data.presigned_personal_data_auth.permalink}
+                    href={acceptanceTokens.presigned_personal_data_auth.permalink}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-violet-400 hover:text-violet-300 underline font-bold"

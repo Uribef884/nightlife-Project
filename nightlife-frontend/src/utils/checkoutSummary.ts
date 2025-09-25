@@ -34,8 +34,6 @@ export function storeCheckoutSummary(): void {
     
     // Store in localStorage
     localStorage.setItem(CHECKOUT_SUMMARY_KEY, JSON.stringify(checkoutSummary));
-    
-    console.log('CheckoutSummary: Stored checkout summary', checkoutSummary);
   } else {
     console.warn('CheckoutSummary: No unified summary available to store');
   }
@@ -60,7 +58,6 @@ export function getCheckoutSummary(): CheckoutSummary | null {
     // Check if summary is not too old (24 hours)
     const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
     if (Date.now() - summary.timestamp > maxAge) {
-      console.log('CheckoutSummary: Stored summary expired, removing');
       localStorage.removeItem(CHECKOUT_SUMMARY_KEY);
       return null;
     }
@@ -80,7 +77,6 @@ export function getCheckoutSummary(): CheckoutSummary | null {
 export function clearCheckoutSummary(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(CHECKOUT_SUMMARY_KEY);
-  console.log('CheckoutSummary: Cleared stored summary');
 }
 
 /**

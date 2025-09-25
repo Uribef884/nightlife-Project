@@ -3,17 +3,15 @@ import { API_BASE_CSR, joinUrl } from "@/lib/env";
 
 // Types for Wompi integration
 export interface WompiAcceptanceTokens {
-  data: {
-    presigned_acceptance: {
-      acceptance_token: string;
-      permalink: string;
-      type: string;
-    };
-    presigned_personal_data_auth: {
-      acceptance_token: string;
-      permalink: string;
-      type: string;
-    };
+  presigned_acceptance: {
+    acceptance_token: string;
+    permalink: string;
+    type: string;
+  };
+  presigned_personal_data_auth: {
+    acceptance_token: string;
+    permalink: string;
+    type: string;
   };
 }
 

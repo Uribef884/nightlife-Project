@@ -73,21 +73,10 @@ export default function PaymentSuccessPage() {
       const data = await response.json();
       
       
-      // Debug: Log the subtotal values specifically
-      console.log('PaymentSuccess - API Response subtotal data:', {
-        subtotal: data.subtotal,
-        totalPaid: data.totalPaid,
-        amount: data.amount,
-        typeOfSubtotal: typeof data.subtotal,
-        typeOfTotalPaid: typeof data.totalPaid
-      });
       
       // Check the actual transaction status and redirect if not APPROVED
       const actualStatus = data.status || 'APPROVED';
-      console.log('PaymentSuccess - Fetched transaction status:', actualStatus);
-      
       if (actualStatus !== 'APPROVED') {
-        console.log('PaymentSuccess - Transaction not approved, redirecting to appropriate page');
         // Redirect to the appropriate page based on status
         if (actualStatus === 'DECLINED') {
           router.push('/checkout/declined');
@@ -125,19 +114,6 @@ export default function PaymentSuccessPage() {
         errorMessage: data.errorMessage,
       };
       
-      // Debug: Log the final transaction details
-      console.log('PaymentSuccess - Final transaction details:', {
-        subtotal: transactionDetails.subtotal,
-        totalPaid: transactionDetails.totalPaid,
-        actualTotal: transactionDetails.actualTotal,
-        total: transactionDetails.total,
-        typeOfSubtotal: typeof transactionDetails.subtotal
-      });
-      
-      // Log transaction details for debugging
-      
-      
-      
       setTransactionDetails(transactionDetails);
     } catch (err) {
       
@@ -161,7 +137,6 @@ export default function PaymentSuccessPage() {
         
         // If user is logged in, check if the stored transaction email matches user's email
         if (user && details.email && details.email !== user.email) {
-          console.log('PaymentSuccess: Stored transaction email does not match current user, clearing stale data');
           localStorage.removeItem('lastTransactionDetails');
           sessionStorage.removeItem('lastTransactionDetails');
           clearCheckoutSummary();
@@ -175,7 +150,6 @@ export default function PaymentSuccessPage() {
         const hoursDiff = (now.getTime() - transactionDate.getTime()) / (1000 * 60 * 60);
         
         if (hoursDiff > 24) {
-          console.log('PaymentSuccess: Transaction is older than 24 hours, clearing stale data');
           localStorage.removeItem('lastTransactionDetails');
           sessionStorage.removeItem('lastTransactionDetails');
           clearCheckoutSummary();
@@ -188,7 +162,6 @@ export default function PaymentSuccessPage() {
         let transactionDetails = details;
         
         if (checkoutSummary) {
-          console.log('PaymentSuccess: Using checkout summary for correct pricing', checkoutSummary);
           
           // Update transaction details with correct pricing from checkout summary
           transactionDetails = {
@@ -202,13 +175,7 @@ export default function PaymentSuccessPage() {
           
           // Clear checkout summary after successful payment
           clearCheckoutSummary();
-        } else {
-          console.log('PaymentSuccess: No checkout summary available, using stored details');
         }
-        
-        // Log transaction details for debugging
-        
-        
         
         setTransactionDetails(transactionDetails);
       } catch (err) {
@@ -429,6 +396,12 @@ export default function PaymentSuccessPage() {
                 <p className="text-blue-200 text-sm">
                   <strong>Confirmación enviada</strong><br />
                   Revisa tu correo electrónico para obtener tus códigos QR.
+                </p>
+              </div>
+              
+              <div className="bg-amber-900/20 border border-amber-500/50 rounded-lg p-3 mt-3">
+                <p className="text-amber-200 text-sm">
+                  <strong>Recuerda verificar tu bandeja de no deseados</strong> - Los emails pueden llegar ahí ocasionalmente
                 </p>
               </div>
             </div>

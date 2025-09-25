@@ -52,20 +52,15 @@ export default function PaymentProcessingPage() {
   const handleStatusUpdate = useCallback(async (status: string, data: any) => {
     setStatusUpdateCount(prev => prev + 1);
     
-    console.log('PaymentProcessing - Status update received:', { status, data });
-    console.log('PaymentProcessing - Current transaction details:', transactionDetails);
     
     if (status !== 'PENDING') {
       // Get the current stored details to preserve all transaction data
       const currentStoredDetails = localStorage.getItem('lastTransactionDetails') || sessionStorage.getItem('lastTransactionDetails');
       let baseDetails: any = {};
       
-      console.log('PaymentProcessing - Current stored details:', currentStoredDetails);
-      
       if (currentStoredDetails) {
         try {
           baseDetails = JSON.parse(currentStoredDetails);
-          console.log('PaymentProcessing - Parsed base details:', baseDetails);
         } catch (err) {
           console.warn('Failed to parse stored transaction details:', err);
         }
@@ -80,7 +75,6 @@ export default function PaymentProcessingPage() {
         email: baseDetails.email || data.customerEmail || user?.email || 'usuario@ejemplo.com',
       };
       
-      console.log('PaymentProcessing - Updated details to store:', updatedDetails);
       
       // Update localStorage
       localStorage.setItem('lastTransactionDetails', JSON.stringify(updatedDetails));
@@ -91,7 +85,6 @@ export default function PaymentProcessingPage() {
         // Clear cart only for APPROVED transactions
         try {
           await clearCart();
-          console.log('PaymentProcessing - Cart cleared successfully for APPROVED transaction');
         } catch (cartError) {
           console.error('PaymentProcessing - Failed to clear cart for APPROVED transaction:', cartError);
           // Don't fail the redirect if cart clearing fails
@@ -125,7 +118,6 @@ export default function PaymentProcessingPage() {
     if (storedDetails) {
       try {
         const details = JSON.parse(storedDetails);
-        console.log('PaymentProcessing - Loaded transaction details:', details);
         
         if (details.status === 'PENDING') {
           // Use checkout summary for correct pricing, fallback to stored details
@@ -133,7 +125,6 @@ export default function PaymentProcessingPage() {
           let transactionDetails = details;
           
           if (checkoutSummary) {
-            console.log('PaymentProcessing: Using checkout summary for correct pricing', checkoutSummary);
             
             // Update transaction details with correct pricing from checkout summary
             transactionDetails = {
@@ -144,8 +135,6 @@ export default function PaymentProcessingPage() {
               totalPaid: checkoutSummary.actualTotal,
               actualTotal: checkoutSummary.actualTotal,
             };
-          } else {
-            console.log('PaymentProcessing: No checkout summary available, using stored details');
           }
           
           setTransactionDetails(transactionDetails);
@@ -154,21 +143,17 @@ export default function PaymentProcessingPage() {
           // Check current status immediately since transaction might already be processed
           const checkInitialStatus = async () => {
             if (isCheckingStatus) {
-              console.log('PaymentProcessing - Status check already in progress, skipping...');
               return;
             }
             
             setIsCheckingStatus(true);
             try {
               const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-              console.log('PaymentProcessing - Checking initial status for transaction:', details.transactionId);
               const response = await fetch(`${apiUrl}/checkout/unified/status/${details.transactionId}`);
               if (response.ok) {
                 const statusData = await response.json();
-                console.log('PaymentProcessing - Initial status check response:', statusData);
                 if (statusData.status && statusData.status !== 'PENDING') {
                   // Transaction status already updated
-                  console.log('PaymentProcessing - Transaction already processed, redirecting...');
                   handleStatusUpdate(statusData.status, statusData);
                 }
               }
@@ -182,7 +167,6 @@ export default function PaymentProcessingPage() {
           checkInitialStatus();
         } else {
           // Not a pending transaction, redirect to appropriate page
-          console.log('PaymentProcessing - Non-pending transaction, redirecting...');
           if (details.status === 'APPROVED') {
             router.push('/checkout/success');
           } else if (details.status === 'DECLINED') {

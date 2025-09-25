@@ -33,7 +33,6 @@ export const useSSE = (transactionId: string | null, options: UseSSEOptions = {}
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
     const url = `${apiUrl}/api/sse/transaction/${transactionId}`;
 
-    console.log('SSE - Connecting to:', url);
     const eventSource = new EventSource(url);
     eventSourceRef.current = eventSource;
 
@@ -47,59 +46,48 @@ export const useSSE = (transactionId: string | null, options: UseSSEOptions = {}
     eventSource.onmessage = (event) => {
       try {
         const data: SSEEvent = JSON.parse(event.data);
-        console.log('SSE - Message received:', data);
         setLastEvent(data);
 
         switch (data.type) {
           case 'connected':
-            console.log('SSE - Connected to transaction stream');
             break;
           case 'status_update':
-            console.log('SSE - Status update received:', data);
             if (data.status && onStatusUpdate) {
               onStatusUpdate(data.status, data);
             }
             break;
           case 'error':
-            console.log('SSE - Error received:', data.error);
             setError(data.error || 'Unknown error');
             if (onError) {
               onError(data.error || 'Unknown error');
             }
             break;
           case 'ping':
-            console.log('SSE - Ping received');
             // Keep connection alive
             break;
           default:
-            console.log('SSE - Unknown message type:', data.type);
             break;
         }
       } catch (err) {
-        console.error('SSE - Failed to parse server message:', err, event.data);
         setError('Failed to parse server message');
       }
     };
 
     eventSource.onerror = (event) => {
-      console.log('SSE - Error occurred:', event, 'ReadyState:', eventSource.readyState);
       setIsConnected(false);
       
       if (eventSource.readyState === EventSource.CLOSED) {
-        console.log('SSE - Connection closed');
         onDisconnect?.();
         
         // Attempt to reconnect
         if (reconnectAttempts.current < maxReconnectAttempts) {
           reconnectAttempts.current++;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000); // Exponential backoff, max 30s
-          console.log(`SSE - Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.current}/${maxReconnectAttempts})`);
           
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, delay);
         } else {
-          console.log('SSE - Max reconnection attempts reached');
           setError('Connection lost. Please refresh the page.');
         }
       }

@@ -107,10 +107,11 @@ if (isSandbox && ENV !== "production") {
 // Example in .env: MAIL_FORCE_TO=felipeu2009@outlook.com
 const MAIL_FORCE_TO = (process.env.MAIL_FORCE_TO || "").trim();
 
-// build a DMARC-safe From using the same domain as SMTP_USER
+// build a DMARC-safe From using the configured domain
 function buildFrom(label: string) {
   const local = process.env.MAIL_FROM_LOCAL || "no-reply";
-  return `"${label}" <${local}@${smtpDomain}>`;
+  const domain = process.env.MAIL_FROM_DOMAIN || smtpDomain;
+  return `"${label}" <${local}@${domain}>`;
 }
 
 // Single transporter for the whole app
