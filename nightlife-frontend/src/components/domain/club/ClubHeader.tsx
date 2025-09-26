@@ -74,13 +74,6 @@ const IdCardIcon = (p: React.SVGProps<SVGSVGElement>) => (
     <path d="M13.5 10h5M13.5 12h5M13.5 14h3" stroke="currentColor" strokeWidth="1.5" />
   </svg>
 );
-const MusicIcon = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...p}>
-    <path d="M9 18V5l12-2v13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <circle cx="6" cy="18" r="3" stroke="currentColor" strokeWidth="2" />
-    <circle cx="18" cy="16" r="3" stroke="currentColor" strokeWidth="2" />
-  </svg>
-);
 const CalendarIcon = (p: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...p}>
     <rect x="3" y="5" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
@@ -122,7 +115,7 @@ export function ClubHeader({ club }: Props) {
               className="object-cover"
               sizes="80px"
               onError={(e) => {
-                const el = (e.currentTarget as any).parentElement as HTMLElement | null;
+                const el = (e.currentTarget as HTMLImageElement).parentElement as HTMLElement | null;
                 if (el) {
                   el.innerHTML = `<div class="w-full h-full flex items-center justify-center
                     bg-gradient-to-br from-[#6B3FA0]/20 to-[#1C1F33]/60 text-white/70
@@ -158,7 +151,7 @@ export function ClubHeader({ club }: Props) {
                 };
                 if (navigator.share && typeof navigator.share === "function") {
                   try {
-                    await navigator.share(shareData as any);
+                    await navigator.share(shareData as ShareData);
                   } catch {}
                 } else {
                   try {

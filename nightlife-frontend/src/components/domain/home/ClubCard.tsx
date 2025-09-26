@@ -52,14 +52,14 @@ function initials(name: string) {
 export function ClubCard({ club }: { club: CardClub }) {
   // Defensive access for profile image across both shapes
   const profileImageUrl =
-    (club as any).profileImageUrl ?? (club as any).imageUrl ?? null;
+    (club as Record<string, unknown>).profileImageUrl ?? (club as Record<string, unknown>).imageUrl ?? null;
 
   const hasImage =
     typeof profileImageUrl === "string" && profileImageUrl.trim().length > 0;
 
   // Base city from the list row (may be missing)
   const cityProp: string =
-    "city" in club && typeof (club as any).city === "string" ? (club as any).city : "";
+    "city" in club && typeof (club as Record<string, unknown>).city === "string" ? (club as Record<string, unknown>).city as string : "";
 
   // If city is missing, we lazy-fetch the detail and cache it
   const [cityResolved, setCityResolved] = useState<string>("");
@@ -116,7 +116,7 @@ export function ClubCard({ club }: { club: CardClub }) {
             sizes="80px"
             // If you remove the svg later, we still show initials
             onError={(e) => {
-              const el = (e.currentTarget as any).parentElement as HTMLElement | null;
+              const el = (e.currentTarget as HTMLImageElement).parentElement as HTMLElement | null;
               if (el) {
                 el.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#6B3FA0]/20 to-black/60"><span class="text-white/80 font-semibold text-xl">${initials(
                   club.name

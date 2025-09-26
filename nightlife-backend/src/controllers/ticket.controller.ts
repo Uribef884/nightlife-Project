@@ -544,19 +544,17 @@ export async function getAllTickets(req: Request, res: Response): Promise<void> 
           // Event ticket - use event's date and openHours for dynamic pricing
           dynamicPrice = computeDynamicEventPrice(Number(t.price), new Date(t.event.availableDate), t.event.openHours, { isFree });
           
-          // Check if event has passed grace period
+          // If event has passed grace period, keep the base price but let frontend handle availability
           if (dynamicPrice === -1) {
-            // For ticket display, we'll show the ticket as unavailable instead of blocking
-            dynamicPrice = 0; // Set to 0 to indicate unavailable
+            dynamicPrice = Number(t.price); // Use base price, frontend will handle availability logic
           }
         } else if (t.category === "event" && t.availableDate) {
           // Fallback: Event ticket without event relation - use ticket's availableDate
           dynamicPrice = computeDynamicEventPrice(Number(t.price), new Date(t.availableDate), undefined, { isFree });
           
-          // Check if event has passed grace period
+          // If event has passed grace period, keep the base price but let frontend handle availability
           if (dynamicPrice === -1) {
-            // For ticket display, we'll show the ticket as unavailable instead of blocking
-            dynamicPrice = 0; // Set to 0 to indicate unavailable
+            dynamicPrice = Number(t.price); // Use base price, frontend will handle availability logic
           }
         } else {
           // General ticket - use time-based dynamic pricing
@@ -573,8 +571,8 @@ export async function getAllTickets(req: Request, res: Response): Promise<void> 
         if (t.event) {
           const gracePeriodCheck = computeDynamicEventPrice(Number(t.price), new Date(t.event.availableDate), t.event.openHours, { isFree: Number(t.price) === 0 });
           if (gracePeriodCheck === -1) {
-            // For ticket display, we'll show the ticket as unavailable instead of blocking
-            dynamicPrice = 0; // Set to 0 to indicate unavailable
+            // Event has passed grace period, keep base price but let frontend handle availability
+            dynamicPrice = Number(t.price); // Use base price, frontend will handle availability logic
           } else if (gracePeriodCheck > Number(t.price)) {
             // If grace period price is higher than base price, use grace period price
             dynamicPrice = gracePeriodCheck;
@@ -583,8 +581,8 @@ export async function getAllTickets(req: Request, res: Response): Promise<void> 
           const eventDate = new Date(t.availableDate);
           const gracePeriodCheck = computeDynamicEventPrice(Number(t.price), eventDate);
           if (gracePeriodCheck === -1) {
-            // For ticket display, we'll show the ticket as unavailable instead of blocking
-            dynamicPrice = 0; // Set to 0 to indicate unavailable
+            // Event has passed grace period, keep base price but let frontend handle availability
+            dynamicPrice = Number(t.price); // Use base price, frontend will handle availability logic
           } else if (gracePeriodCheck > Number(t.price)) {
             // If grace period price is higher than base price, use grace period price
             dynamicPrice = gracePeriodCheck;
@@ -623,6 +621,15 @@ export async function getAllTickets(req: Request, res: Response): Promise<void> 
         soldOut: t.quantity !== null && t.quantity === 0,
         dynamicPrice,
         includedMenuItems,
+        // Explicitly include event data for frontend
+        event: t.event ? {
+          id: t.event.id,
+          name: t.event.name,
+          description: t.event.description,
+          availableDate: t.event.availableDate,
+          openHours: typeof t.event.openHours === 'string' ? JSON.parse(t.event.openHours) : t.event.openHours,
+          bannerUrl: t.event.bannerUrl
+        } : null
       };
     }));
     
@@ -700,19 +707,17 @@ export async function getTicketsByClub(req: Request, res: Response): Promise<voi
           // Event ticket - use event's date and openHours for dynamic pricing
           dynamicPrice = computeDynamicEventPrice(Number(t.price), new Date(t.event.availableDate), t.event.openHours, { isFree: Number(t.price) === 0 });
           
-          // Check if event has passed grace period
+          // If event has passed grace period, keep the base price but let frontend handle availability
           if (dynamicPrice === -1) {
-            // For ticket display, we'll show the ticket as unavailable instead of blocking
-            dynamicPrice = 0; // Set to 0 to indicate unavailable
+            dynamicPrice = Number(t.price); // Use base price, frontend will handle availability logic
           }
         } else if (t.category === "event" && t.availableDate) {
           // Fallback: Event ticket without event relation - use ticket's availableDate
           dynamicPrice = computeDynamicEventPrice(Number(t.price), new Date(t.availableDate), undefined, { isFree: Number(t.price) === 0 });
           
-          // Check if event has passed grace period
+          // If event has passed grace period, keep the base price but let frontend handle availability
           if (dynamicPrice === -1) {
-            // For ticket display, we'll show the ticket as unavailable instead of blocking
-            dynamicPrice = 0; // Set to 0 to indicate unavailable
+            dynamicPrice = Number(t.price); // Use base price, frontend will handle availability logic
           }
         } else {
           // General ticket - use time-based dynamic pricing
@@ -729,8 +734,8 @@ export async function getTicketsByClub(req: Request, res: Response): Promise<voi
         if (t.event) {
           const gracePeriodCheck = computeDynamicEventPrice(Number(t.price), new Date(t.event.availableDate), t.event.openHours, { isFree: Number(t.price) === 0 });
           if (gracePeriodCheck === -1) {
-            // For ticket display, we'll show the ticket as unavailable instead of blocking
-            dynamicPrice = 0; // Set to 0 to indicate unavailable
+            // Event has passed grace period, keep base price but let frontend handle availability
+            dynamicPrice = Number(t.price); // Use base price, frontend will handle availability logic
           } else if (gracePeriodCheck > Number(t.price)) {
             // If grace period price is higher than base price, use grace period price
             dynamicPrice = gracePeriodCheck;
@@ -739,8 +744,8 @@ export async function getTicketsByClub(req: Request, res: Response): Promise<voi
           const eventDate = new Date(t.availableDate);
           const gracePeriodCheck = computeDynamicEventPrice(Number(t.price), eventDate);
           if (gracePeriodCheck === -1) {
-            // For ticket display, we'll show the ticket as unavailable instead of blocking
-            dynamicPrice = 0; // Set to 0 to indicate unavailable
+            // Event has passed grace period, keep base price but let frontend handle availability
+            dynamicPrice = Number(t.price); // Use base price, frontend will handle availability logic
           } else if (gracePeriodCheck > Number(t.price)) {
             // If grace period price is higher than base price, use grace period price
             dynamicPrice = gracePeriodCheck;
@@ -779,6 +784,15 @@ export async function getTicketsByClub(req: Request, res: Response): Promise<voi
         soldOut: t.quantity !== null && t.quantity === 0,
         dynamicPrice,
         includedMenuItems,
+        // Explicitly include event data for frontend
+        event: t.event ? {
+          id: t.event.id,
+          name: t.event.name,
+          description: t.event.description,
+          availableDate: t.event.availableDate,
+          openHours: typeof t.event.openHours === 'string' ? JSON.parse(t.event.openHours) : t.event.openHours,
+          bannerUrl: t.event.bannerUrl
+        } : null
       };
     }));
     
@@ -1260,15 +1274,16 @@ export async function getAvailableTicketsForDate(req: Request, res: Response): P
             
             dynamicPrice = computeDynamicEventPrice(Number(ticket.price), eventDate, event.openHours, { isFree: Number(ticket.price) === 0 });
             if (dynamicPrice === -1) {
-              // Event has passed grace period, mark as unavailable
-              dynamicPrice = 0;
+              // Event has passed grace period, keep base price but let frontend handle availability
+              dynamicPrice = Number(ticket.price);
             }
             dynamicPricingReason = getEventTicketDynamicPricingReason(eventDate, event.openHours);
           } else {
             // Fallback for event tickets without event relation
             dynamicPrice = computeDynamicEventPrice(Number(ticket.price), targetDate, undefined, { isFree: Number(ticket.price) === 0 });
             if (dynamicPrice === -1) {
-              dynamicPrice = 0;
+              // Event has passed grace period, keep base price but let frontend handle availability
+              dynamicPrice = Number(ticket.price);
             }
             dynamicPricingReason = getEventTicketDynamicPricingReason(targetDate);
           }

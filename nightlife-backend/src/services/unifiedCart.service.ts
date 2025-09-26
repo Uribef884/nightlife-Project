@@ -5,6 +5,7 @@ import { MenuItem } from '../entities/MenuItem';
 import { MenuItemVariant } from '../entities/MenuItemVariant';
 import { computeDynamicPrice, computeDynamicEventPrice, computeDynamicMenuEventPrice, computeDynamicMenuNormalPrice, getNormalTicketDynamicPricingReason, getMenuDynamicPricingReason, getMenuEventDynamicPricingReason, getEventTicketDynamicPricingReason, getCurrentColombiaTime } from '../utils/dynamicPricing';
 import { calculateFeeAllocation } from '../utils/feeAllocation';
+import { nowInBogota, todayInBogota } from '../utils/timezone';
 
 export interface AddTicketToCartInput {
   ticketId: string;
@@ -64,13 +65,12 @@ export class UnifiedCartService {
       throw new Error('Quantity must be greater than 0');
     }
 
-    // Validate date - use UTC for consistent validation regardless of server location
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    // Validate date - use Bogota timezone for consistent validation
+    const { isPastDateInBogota, todayInBogota } = await import('../utils/timezone');
     
-    console.log('Date validation (ticket) - Today (server):', todayStr, 'Requested date:', date);
+    console.log('Date validation (ticket) - Today (Bogota):', todayInBogota(), 'Requested date:', date);
 
-    if (date < todayStr) {
+    if (isPastDateInBogota(date)) {
       throw new Error('Cannot select a past date');
     }
 
@@ -171,20 +171,17 @@ export class UnifiedCartService {
       throw new Error('Quantity must be greater than 0');
     }
 
-    // Validate date - use UTC for consistent validation regardless of server location
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    // Validate date - use Bogota timezone for consistent validation
+    const { isPastDateInBogota, isDateSelectableInBogota, todayInBogota } = await import('../utils/timezone');
     
-    console.log('Date validation - Today (server):', todayStr, 'Requested date:', date);
+    console.log('Date validation (menu) - Today (Bogota):', todayInBogota(), 'Requested date:', date);
     
-    // Allow today's date by checking if it's not strictly in the past
-    if (date < todayStr) {
+    if (isPastDateInBogota(date)) {
       throw new Error('Cannot select a past date');
     }
 
-    // Validate date is not more than 21 days in the future
-    const maxDateStr = new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0];
-    if (date > maxDateStr) {
+    // Validate date is within selectable range (today to 21 days from today)
+    if (!isDateSelectableInBogota(date)) {
       throw new Error('Cannot select a date more than 21 days in the future');
     }
 
@@ -339,7 +336,7 @@ export class UnifiedCartService {
             }
 
             dynamicPrice = computeDynamicEventPrice(basePrice, eventDate, item.ticket.event.openHours, { isFree: basePrice === 0 });
-            if (dynamicPrice === -1) dynamicPrice = 0;
+            if (dynamicPrice === -1) dynamicPrice = basePrice; // Use base price, frontend will handle availability logic
           } else {
             dynamicPrice = computeDynamicPrice({
               basePrice,
@@ -391,7 +388,7 @@ export class UnifiedCartService {
         if (item.menuItem.hasVariants && item.variant) {
           // For items with variants, check variant's dynamic pricing
           if (item.variant.dynamicPricingEnabled && item.menuItem.club) {
-            const now = getCurrentColombiaTime();
+            const now = nowInBogota();
             console.log(`[CART-DP] Calculating dynamic pricing for menu variant:`, {
               menuItemId: item.menuItem.id,
               variantId: item.variant.id,
@@ -400,9 +397,9 @@ export class UnifiedCartService {
               basePrice,
               date: item.date,
               clubId: item.clubId,
-              currentTime: now.toISOString(),
-              currentDate: now.toISOString().split('T')[0],
-              currentTimeColombia: now.toLocaleString('en-US', { timeZone: 'America/Bogota' })
+              currentTime: now.toISO(),
+              currentDate: todayInBogota(),
+              currentTimeColombia: now.toFormat('M/d/yyyy, h:mm:ss a')
             });
 
             dynamicPrice = await this.calculateMenuDynamicPrice({
@@ -432,16 +429,16 @@ export class UnifiedCartService {
         } else {
           // For items without variants, check menu item's dynamic pricing
           if (item.menuItem.dynamicPricingEnabled && item.menuItem.club) {
-            const now = getCurrentColombiaTime();
+            const now = nowInBogota();
             console.log(`[CART-DP] Calculating dynamic pricing for menu item:`, {
               menuItemId: item.menuItem.id,
               menuItemName: item.menuItem.name,
               basePrice,
               date: item.date,
               clubId: item.clubId,
-              currentTime: now.toISOString(),
-              currentDate: now.toISOString().split('T')[0],
-              currentTimeColombia: now.toLocaleString('en-US', { timeZone: 'America/Bogota' })
+              currentTime: now.toISO(),
+              currentDate: todayInBogota(),
+              currentTimeColombia: now.toFormat('M/d/yyyy, h:mm:ss a')
             });
 
             dynamicPrice = await this.calculateMenuDynamicPrice({
@@ -909,7 +906,7 @@ export class UnifiedCartService {
 
         // Calculate dynamic pricing for tickets
         if (item.ticket.dynamicPricingEnabled && item.ticket.club) {
-          const now = getCurrentColombiaTime();
+          const now = nowInBogota();
           console.log(`[CART-DP] Calculating dynamic pricing for ticket:`, {
             ticketId: item.ticket.id,
             ticketName: item.ticket.name,
@@ -917,9 +914,9 @@ export class UnifiedCartService {
             basePrice,
             availableDate: item.ticket.event?.availableDate || item.ticket.availableDate,
             date: item.date,
-            currentTime: now.toISOString(),
-            currentDate: now.toISOString().split('T')[0],
-            currentTimeColombia: now.toLocaleString('en-US', { timeZone: 'America/Bogota' })
+            currentTime: now.toISO(),
+            currentDate: todayInBogota(),
+            currentTimeColombia: now.toFormat('M/d/yyyy, h:mm:ss a')
           });
 
           let reason: string | undefined;
@@ -940,7 +937,7 @@ export class UnifiedCartService {
             });
 
             dynamicPrice = computeDynamicEventPrice(basePrice, eventDate, item.ticket.event.openHours, { isFree: basePrice === 0 });
-            if (dynamicPrice === -1) dynamicPrice = 0;
+            if (dynamicPrice === -1) dynamicPrice = basePrice; // Use base price, frontend will handle availability logic
             
             // Get canonical reason code for event tickets
             reason = getEventTicketDynamicPricingReason(eventDate, item.ticket.event.openHours);

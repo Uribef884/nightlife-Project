@@ -4,7 +4,7 @@
 import { useMemo } from "react";
 import type { MenuVariantDTO } from "@/services/menu.service";
 
-function toNum(v: any): number | null {
+function toNum(v: unknown): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -33,8 +33,8 @@ export function VariantRow({
   onChangeQty: (cartLineId: string, nextQty: number) => void;
 }) {
   // Dynamic pricing logic - same as TicketCard
-  const basePrice = toNum((variant as any)?.price);
-  const dynamicPrice = toNum((variant as any)?.dynamicPrice);
+  const basePrice = toNum(variant.price);
+  const dynamicPrice = toNum(variant.dynamicPrice);
   
   // Only show dynamic pricing if date is selected and valid
   const showDynamicPricing = selectedDate && variant.dynamicPricingEnabled;
@@ -48,7 +48,7 @@ export function VariantRow({
   const compareAt = (showDynamicPricing && dynamicPrice != null && basePrice != null && dynamicPrice < basePrice) 
     ? basePrice 
     : null;
-  const maxPerPerson = (variant as any)?.maxPerPerson as number | null | undefined;
+  const maxPerPerson = variant.maxPerPerson as number | null | undefined;
 
   const maxAllowed = useMemo(() => {
     const fromMax = maxPerPerson == null ? Infinity : Math.max(0, maxPerPerson);
@@ -61,7 +61,7 @@ export function VariantRow({
   return (
     <div className="flex items-center gap-3 py-2 flex-wrap">
       <div className="flex-1 min-w-0">
-        <div className="text-white/90 text-sm font-medium break-words leading-tight">{(variant as any).name}</div>
+        <div className="text-white/90 text-sm font-medium break-words leading-tight">{variant.name}</div>
         <div className="mt-0.5 flex items-baseline gap-2 flex-wrap">
           {compareAt && priceNow && compareAt > priceNow ? (
             <>

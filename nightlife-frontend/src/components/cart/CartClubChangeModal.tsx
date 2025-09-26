@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { X, AlertTriangle, Building2 } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 
 interface CartClubChangeModalProps {
   isOpen: boolean;

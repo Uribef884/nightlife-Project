@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 interface CartDateChangeModalProps {
   isOpen: boolean;

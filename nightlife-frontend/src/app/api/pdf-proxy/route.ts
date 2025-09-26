@@ -70,12 +70,12 @@ export async function GET(request: Request) {
       status: 200,
       headers: cleanHeaders,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
-export async function OPTIONS(request: Request) {
+export async function OPTIONS() {
   // Handle preflight requests for CORS
   return new NextResponse(null, {
     status: 200,

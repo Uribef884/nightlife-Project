@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Plus, ShoppingCart } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useCartItem } from '@/hooks/useCartItem';
 import CartQuantityControls from './CartQuantityControls';
 import { CartClubChangeModal } from './CartClubChangeModal';
@@ -44,8 +44,6 @@ export default function UnifiedCartButton({
   const {
     quantity,
     isInCart,
-    canIncrease,
-    canDecrease,
     increaseQuantity,
     decreaseQuantity,
     showClubModal,

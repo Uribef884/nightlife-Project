@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UnifiedCartButton, TicketCartButton, MenuCartButton } from './UnifiedCartButton';
+import { TicketCartButton, MenuCartButton } from './UnifiedCartButton';
 import CartQuantityControls from './CartQuantityControls';
 
 export default function CartIntegrationExample() {

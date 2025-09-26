@@ -29,81 +29,53 @@ export async function validateClubAccess(
 }
 
 export function checkDateIsToday(createdAt: Date): boolean {
-  const today = new Date();
-  const createdDate = new Date(createdAt);
-  
-  return (
-    createdDate.getFullYear() === today.getFullYear() &&
-    createdDate.getMonth() === today.getMonth() &&
-    createdDate.getDate() === today.getDate()
-  );
+  const { isTodayInBogota, utcToBogotaDate } = require('./timezone');
+  const createdDateStr = utcToBogotaDate(createdAt);
+  return isTodayInBogota(createdDateStr);
 }
 
 export function checkTicketDateIsValid(ticketDate: Date): boolean {
-  // Get current time in Colombia timezone (UTC-5)
-  const nowUTC = new Date();
-  const colombiaOffset = -5 * 60; // Colombia is UTC-5
-  const nowColombia = new Date(nowUTC.getTime() + (colombiaOffset * 60 * 1000));
+  const { isWithinTimeWindowInBogota, utcToBogotaDate } = require('./timezone');
   
   // Handle date properly to avoid timezone conversion issues
   const eventDateValue = ticketDate as any;
-  let year: number, month: number, day: number;
+  let dateStr: string;
   
   if (typeof eventDateValue === 'string') {
     // Parse string date (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)
-    const dateStr = eventDateValue.includes('T') ? eventDateValue.split('T')[0] : eventDateValue;
-    [year, month, day] = dateStr.split('-').map(Number);
+    dateStr = eventDateValue.includes('T') ? eventDateValue.split('T')[0] : eventDateValue;
   } else if (eventDateValue instanceof Date) {
-    // Extract components from Date object
-    year = eventDateValue.getFullYear();
-    month = eventDateValue.getMonth() + 1; // getMonth() returns 0-11
-    day = eventDateValue.getDate();
+    // Convert Date object to YYYY-MM-DD string in Bogota timezone
+    dateStr = utcToBogotaDate(eventDateValue);
   } else {
     // Fallback
-    const dateStr = String(eventDateValue).split('T')[0];
-    [year, month, day] = dateStr.split('-').map(Number);
+    dateStr = String(eventDateValue).split('T')[0];
   }
   
-  // Create event start and end times in Colombia timezone
   // Event is valid from start of event day until 1 AM next day
-  const eventStartColombia = new Date(year, month - 1, day, 0, 0, 0);
-  const eventEndColombia = new Date(year, month - 1, day + 1, 1, 0, 0);
-  
-  // Current Colombia time should be between event start and event end (1 AM next day)
-  return nowColombia >= eventStartColombia && nowColombia <= eventEndColombia;
+  return isWithinTimeWindowInBogota(dateStr, 0, 1);
 }
 
 // New function to check if ticket date is in the future (for preview purposes)
 export function isTicketDateInFuture(ticketDate: Date): boolean {
-  // Get current time in Colombia timezone (UTC-5)
-  const nowUTC = new Date();
-  const colombiaOffset = -5 * 60; // Colombia is UTC-5
-  const nowColombia = new Date(nowUTC.getTime() + (colombiaOffset * 60 * 1000));
+  const { isFutureDateInBogota, utcToBogotaDate } = require('./timezone');
   
   // Handle date properly to avoid timezone conversion issues
   const eventDateValue = ticketDate as any;
-  let year: number, month: number, day: number;
+  let dateStr: string;
   
   if (typeof eventDateValue === 'string') {
     // Parse string date (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)
-    const dateStr = eventDateValue.includes('T') ? eventDateValue.split('T')[0] : eventDateValue;
-    [year, month, day] = dateStr.split('-').map(Number);
+    dateStr = eventDateValue.includes('T') ? eventDateValue.split('T')[0] : eventDateValue;
   } else if (eventDateValue instanceof Date) {
-    // Extract components from Date object
-    year = eventDateValue.getFullYear();
-    month = eventDateValue.getMonth() + 1; // getMonth() returns 0-11
-    day = eventDateValue.getDate();
+    // Convert Date object to YYYY-MM-DD string in Bogota timezone
+    dateStr = utcToBogotaDate(eventDateValue);
   } else {
     // Fallback
-    const dateStr = String(eventDateValue).split('T')[0];
-    [year, month, day] = dateStr.split('-').map(Number);
+    dateStr = String(eventDateValue).split('T')[0];
   }
   
-  // Create event start time in Colombia timezone
-  const eventStartColombia = new Date(year, month - 1, day, 0, 0, 0);
-  
-  // Check if current Colombia time is before event start
-  return nowColombia < eventStartColombia;
+  return isFutureDateInBogota(dateStr);
 }
 
 export function validateQRType(type: string, expected: "menu" | "ticket" | "menu_from_ticket"): boolean {

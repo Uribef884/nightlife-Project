@@ -11,6 +11,7 @@ import {
   getMenuParentHasVariantsReason,
   getMenuVariantDisabledReason
 } from "../config/fees";
+import { nowInBogota, todayInBogota, getWeekdayInBogota, isWithinTimeWindowInBogota } from "./timezone";
 
 /**
  * ──────────────────────────────────────────────────────────────────────────────
@@ -114,11 +115,10 @@ function buildEventStartUTC(eventDate: Date, eventOpenHours?: { open: string; cl
 
 /** Consistent "now" bundle for logs (do not use strings for math). */
 function nowForLogs() {
-  const nowUTC = new Date();
+  const now = nowInBogota();
   return {
-    now_utc: nowUTC.toISOString(),
-    now_bogota: formatBogota(nowUTC),
-    tz: BOGOTA_TZ
+    now_bogota: now.toFormat('yyyy-MM-dd, HH:mm:ss'),
+    tz: 'America/Bogota'
   };
 }
 
@@ -148,13 +148,10 @@ function isDateOpen(
   clubOpenDays: string[]
 ): { isOpen: boolean; openTime?: Date; closeTime?: Date } {
   const logs = nowForLogs();
-  const nowUTC = new Date();
-
-  // Normalize to intended Bogotá day (fixes date-only inputs)
-  const refBogotaDay = normalizeToBogotaDay(referenceDate);
-
-  // Weekday as seen in Bogotá for the intended day
-  const dayName = new Intl.DateTimeFormat("en-US", { timeZone: BOGOTA_TZ, weekday: "long" }).format(refBogotaDay);
+  
+  // Convert reference date to Bogota timezone and get the date string
+  const refDateStr = referenceDate.toISOString().split('T')[0];
+  const dayName = getWeekdayInBogota(refDateStr);
 
   if (!clubOpenDays.includes(dayName)) {
     console.log(`[IS-DATE-OPEN] Closed weekday for selected date`, {
@@ -174,21 +171,43 @@ function isDateOpen(
     return { isOpen: false };
   }
 
-  const { openUTC, closeUTC } = buildBogotaOpenCloseUTC(refBogotaDay, hours);
-
-  const isOpen = nowUTC.getTime() >= openUTC.getTime() && nowUTC.getTime() < closeUTC.getTime();
+  // Parse open and close times
+  const [openHour, openMinute] = hours.open.split(':').map(Number);
+  const [closeHour, closeMinute] = hours.close.split(':').map(Number);
+  
+  // Create the open and close times in Bogota timezone
+  const { parseBogotaDate } = require('./timezone');
+  const refDate = parseBogotaDate(refDateStr);
+  
+  // Create open time for today
+  const openTime = refDate.set({ hour: openHour, minute: openMinute, second: 0, millisecond: 0 });
+  
+  // Create close time - if close hour is less than open hour, it's next day
+  let closeTime;
+  if (closeHour < openHour) {
+    // Close time is next day
+    closeTime = refDate.plus({ days: 1 }).set({ hour: closeHour, minute: closeMinute, second: 0, millisecond: 0 });
+  } else {
+    // Close time is same day
+    closeTime = refDate.set({ hour: closeHour, minute: closeMinute, second: 0, millisecond: 0 });
+  }
+  
+  // Check if current time is within the open window
+  const isOpen = isWithinTimeWindowInBogota(refDateStr, openHour, closeHour);
 
   console.log(`[IS-DATE-OPEN] Window & now`, {
     ...logs,
     selected_bogota_day: dayName,
-    open_utc: openUTC.toISOString(),
-    open_bogota: formatBogota(openUTC),
-    close_utc: closeUTC.toISOString(),
-    close_bogota: formatBogota(closeUTC),
+    open_bogota: `${refDateStr}, ${hours.open}:00`,
+    close_bogota: `${refDateStr}, ${hours.close}:00`,
     isOpen
   });
 
-  return { isOpen, openTime: openUTC, closeTime: closeUTC };
+  return { 
+    isOpen, 
+    openTime: openTime.toUTC().toJSDate(), 
+    closeTime: closeTime.toUTC().toJSDate() 
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -477,13 +496,13 @@ export function getMenuDynamicPricingReason(input: {
  */
 export function computeDynamicMenuEventPrice(
   basePrice: number,
-  eventDate: Date,
+  eventDate: Date | string,
   eventOpenHours?: { open: string; close: string },
   options?: { isVariant?: boolean; parentHasVariants?: boolean; dynamicEnabled?: boolean } // optional
 ): number {
   const { isVariant, parentHasVariants, dynamicEnabled } = options || {};
 
-  if (!basePrice || basePrice <= 0 || isNaN(basePrice) || !(eventDate instanceof Date) || isNaN(eventDate.getTime())) {
+  if (!basePrice || basePrice <= 0 || isNaN(basePrice) || !eventDate) {
     return 0;
   }
 
@@ -491,20 +510,54 @@ export function computeDynamicMenuEventPrice(
   if (parentHasVariants && !isVariant) return basePrice;
   if (isVariant && dynamicEnabled === false) return basePrice;
 
-  const nowUTC = new Date();
-  const eventStartUTC = buildEventStartUTC(eventDate, eventOpenHours);
+  // Use Bogota timezone for consistent calculations
+  const { nowInBogota, parseBogotaDate } = require('./timezone');
+  const now = nowInBogota();
+  
+  // Convert event date to Bogota timezone
+  // eventDate might be a Date object or a string, handle both cases
+  let eventDateStr: string;
+  if (eventDate instanceof Date) {
+    // If it's a Date object, convert to ISO string and parse as Bogota date
+    eventDateStr = eventDate.toISOString().split('T')[0]; // Get YYYY-MM-DD part
+  } else {
+    // If it's already a string, use it directly
+    eventDateStr = eventDate.toString().split('T')[0]; // Get YYYY-MM-DD part
+  }
+  
+  const eventDateBogota = parseBogotaDate(eventDateStr);
+  
+  // Calculate event start time in Bogota timezone
+  let eventStartBogota;
+  if (eventOpenHours?.open) {
+    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
+    eventStartBogota = eventDateBogota.set({ hour: openHour, minute: openMinute, second: 0, millisecond: 0 });
+  } else {
+    // If no open hours, assume event starts at midnight
+    eventStartBogota = eventDateBogota.startOf('day');
+  }
 
   // If we know the open/close window for the event, treat in-window as base (explicit)
   let isOpenDuringEvent = false;
   let hasEventEnded = false;
   if (eventOpenHours?.open && eventOpenHours?.close) {
-    const { openUTC, closeUTC } = buildBogotaOpenCloseUTC(eventStartUTC, eventOpenHours);
-    isOpenDuringEvent = nowUTC >= openUTC && nowUTC < closeUTC;
-    hasEventEnded = nowUTC >= closeUTC;
+    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
+    const [closeHour, closeMinute] = eventOpenHours.close.split(':').map(Number);
+    let closeTimeBogota;
+    if (closeHour < openHour) {
+      // Close time is next day
+      closeTimeBogota = eventDateBogota.plus({ days: 1 }).set({ hour: closeHour, minute: closeMinute, second: 0, millisecond: 0 });
+    } else {
+      // Close time is same day
+      closeTimeBogota = eventDateBogota.set({ hour: closeHour, minute: closeMinute, second: 0, millisecond: 0 });
+    }
+    
+    isOpenDuringEvent = now >= eventStartBogota && now < closeTimeBogota;
+    hasEventEnded = now >= closeTimeBogota;
     if (isOpenDuringEvent) return basePrice; // explicit base during event
   }
 
-  const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+  const hoursUntilEvent = Math.floor(eventStartBogota.diff(now, 'hours').hours);
 
   let multiplier: number;
   if (hoursUntilEvent >= 48) {
@@ -522,29 +575,63 @@ export function computeDynamicMenuEventPrice(
 
 /** Reason for menu items on event days (explicit Option A reasons). */
 export function getMenuEventDynamicPricingReason(
-  eventDate: Date,
+  eventDate: Date | string,
   eventOpenHours?: { open: string; close: string },
   options?: { isVariant?: boolean; parentHasVariants?: boolean; dynamicEnabled?: boolean } // optional
 ): string | undefined {
-  if (!(eventDate instanceof Date) || isNaN(eventDate.getTime())) return undefined;
+  if (!eventDate) return undefined;
 
   const { isVariant, parentHasVariants, dynamicEnabled } = options || {};
   // Policy reasons first
   if (parentHasVariants && !isVariant) return getMenuParentHasVariantsReason();
   if (isVariant && dynamicEnabled === false) return getMenuVariantDisabledReason();
 
-  const nowUTC = new Date();
-  const eventStartUTC = buildEventStartUTC(eventDate, eventOpenHours);
+  // Use Bogota timezone for consistent calculations
+  const { nowInBogota, parseBogotaDate } = require('./timezone');
+  const now = nowInBogota();
+  
+  // Convert event date to Bogota timezone
+  // eventDate might be a Date object or a string, handle both cases
+  let eventDateStr: string;
+  if (eventDate instanceof Date) {
+    // If it's a Date object, convert to ISO string and parse as Bogota date
+    eventDateStr = eventDate.toISOString().split('T')[0]; // Get YYYY-MM-DD part
+  } else {
+    // If it's already a string, use it directly
+    eventDateStr = eventDate.toString().split('T')[0]; // Get YYYY-MM-DD part
+  }
+  
+  const eventDateBogota = parseBogotaDate(eventDateStr);
+  
+  // Calculate event start time in Bogota timezone
+  let eventStartBogota;
+  if (eventOpenHours?.open) {
+    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
+    eventStartBogota = eventDateBogota.set({ hour: openHour, minute: openMinute, second: 0, millisecond: 0 });
+  } else {
+    // If no open hours, assume event starts at midnight
+    eventStartBogota = eventDateBogota.startOf('day');
+  }
 
   let isOpenDuringEvent = false;
   let hasEventEnded = false;
   if (eventOpenHours?.open && eventOpenHours?.close) {
-    const { openUTC, closeUTC } = buildBogotaOpenCloseUTC(eventStartUTC, eventOpenHours);
-    isOpenDuringEvent = nowUTC >= openUTC && nowUTC < closeUTC;
-    hasEventEnded = nowUTC >= closeUTC;
+    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
+    const [closeHour, closeMinute] = eventOpenHours.close.split(':').map(Number);
+    let closeTimeBogota;
+    if (closeHour < openHour) {
+      // Close time is next day
+      closeTimeBogota = eventDateBogota.plus({ days: 1 }).set({ hour: closeHour, minute: closeMinute, second: 0, millisecond: 0 });
+    } else {
+      // Close time is same day
+      closeTimeBogota = eventDateBogota.set({ hour: closeHour, minute: closeMinute, second: 0, millisecond: 0 });
+    }
+    
+    isOpenDuringEvent = now >= eventStartBogota && now < closeTimeBogota;
+    hasEventEnded = now >= closeTimeBogota;
   }
 
-  const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+  const hoursUntilEvent = Math.floor(eventStartBogota.diff(now, 'hours').hours);
   return getMenuEventPricingReason(hoursUntilEvent, isOpenDuringEvent, hasEventEnded);
 }
 
@@ -562,23 +649,66 @@ export function getMenuEventDynamicPricingReason(
  */
 export function computeDynamicEventPrice(
   basePrice: number,
-  eventDate: Date,
+  eventDate: Date | string,
   eventOpenHours?: { open: string; close: string },
   options?: { dynamicEnabled?: boolean; isFree?: boolean } // optional
 ): number {
   const { dynamicEnabled, isFree } = options || {};
 
-  if (isNaN(basePrice) || !(eventDate instanceof Date) || isNaN(eventDate.getTime())) {
+  if (isNaN(basePrice) || !eventDate) {
     return 0;
   }
 
-  const nowUTC = new Date();
-  const eventStartUTC = buildEventStartUTC(eventDate, eventOpenHours);
-  const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+  // Use Bogota timezone for consistent calculations
+  const { nowInBogota, parseBogotaDate } = require('./timezone');
+  const now = nowInBogota();
+  
+  // Convert event date to Bogota timezone
+  // eventDate might be a Date object or a string, handle both cases
+  let eventDateStr: string;
+  if (eventDate instanceof Date) {
+    // If it's a Date object, convert to ISO string and parse as Bogota date
+    eventDateStr = eventDate.toISOString().split('T')[0]; // Get YYYY-MM-DD part
+  } else {
+    // If it's already a string, use it directly
+    eventDateStr = eventDate.toString().split('T')[0]; // Get YYYY-MM-DD part
+  }
+  
+  const eventDateBogota = parseBogotaDate(eventDateStr);
+  
+  // Calculate event start time in Bogota timezone
+  let eventStartBogota;
+  if (eventOpenHours?.open) {
+    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
+    eventStartBogota = eventDateBogota.set({ hour: openHour, minute: openMinute, second: 0, millisecond: 0 });
+  } else {
+    // If no open hours, assume event starts at midnight
+    eventStartBogota = eventDateBogota.startOf('day');
+  }
+  
+  // Calculate hours until event in Bogota timezone
+  const hoursUntilEvent = Math.floor(eventStartBogota.diff(now, 'hours').hours);
+
+  // Debug logging
+  console.log(`[EVENT-DP] Computing event price:`, {
+    basePrice,
+    eventDate: eventDate instanceof Date ? eventDate.toISOString() : eventDate,
+    eventDateStr,
+    eventStartBogota: eventStartBogota.toISO(),
+    now: now.toISO(),
+    hoursUntilEvent,
+    isFree,
+    dynamicEnabled,
+    eventOpenHours
+  });
 
   // Free tickets: no DP (but expiry still enforced)
   if (isFree) {
-    if (hoursUntilEvent < -1) return -1; // expired after grace
+    if (hoursUntilEvent < -1) {
+      console.log(`[EVENT-DP] Free ticket expired after grace period: hoursUntilEvent=${hoursUntilEvent}`);
+      return -1; // expired after grace
+    }
+    console.log(`[EVENT-DP] Free ticket available: hoursUntilEvent=${hoursUntilEvent}`);
     return 0; // price = 0, regardless of window
   }
 
@@ -595,39 +725,75 @@ export function computeDynamicEventPrice(
   // Normal DP
   if (hoursUntilEvent >= 48) {
     const m = getEventTicketPricingMultiplier(hoursUntilEvent);
-    return Math.round(basePrice * m * 100) / 100;
+    const result = Math.round(basePrice * m * 100) / 100;
+    console.log(`[EVENT-DP] Normal DP 48+ hours: hoursUntilEvent=${hoursUntilEvent}, multiplier=${m}, result=${result}`);
+    return result;
   }
   if (hoursUntilEvent >= 24) {
     const m = getEventTicketPricingMultiplier(hoursUntilEvent);
-    return Math.round(basePrice * m * 100) / 100;
+    const result = Math.round(basePrice * m * 100) / 100;
+    console.log(`[EVENT-DP] Normal DP 24-48 hours: hoursUntilEvent=${hoursUntilEvent}, multiplier=${m}, result=${result}`);
+    return result;
   }
   if (hoursUntilEvent >= 0) {
     const m = getEventTicketPricingMultiplier(hoursUntilEvent);
-    return Math.round(basePrice * m * 100) / 100;
+    const result = Math.round(basePrice * m * 100) / 100;
+    console.log(`[EVENT-DP] Normal DP 0-24 hours: hoursUntilEvent=${hoursUntilEvent}, multiplier=${m}, result=${result}`);
+    return result;
   }
 
   // Event started → grace or block
   const hoursSinceStart = Math.abs(hoursUntilEvent);
   if (hoursSinceStart <= 1) {
     const m = getEventTicketPricingMultiplier(hoursUntilEvent);
-    return Math.round(basePrice * m * 100) / 100;
+    const result = Math.round(basePrice * m * 100) / 100;
+    console.log(`[EVENT-DP] Event in grace period: hoursSinceStart=${hoursSinceStart}, multiplier=${m}, result=${result}`);
+    return result;
   }
 
+  console.log(`[EVENT-DP] Event blocked after grace period: hoursSinceStart=${hoursSinceStart}`);
   return -1; // After grace → blocked
 }
 
 /** Event ticket reason (with free + DP-disabled handling). */
 export function getEventTicketDynamicPricingReason(
-  eventDate: Date,
+  eventDate: Date | string,
   eventOpenHours?: { open: string; close: string },
   options?: { dynamicEnabled?: boolean; isFree?: boolean } // optional
 ): string | undefined {
-  if (!(eventDate instanceof Date) || isNaN(eventDate.getTime())) return undefined;
+  if (!eventDate) return undefined;
 
   const { dynamicEnabled, isFree } = options || {};
-  const nowUTC = new Date();
-  const eventStartUTC = buildEventStartUTC(eventDate, eventOpenHours);
-  const hoursUntilEvent = Math.floor((eventStartUTC.getTime() - nowUTC.getTime()) / (1000 * 60 * 60));
+  
+  // Use Bogota timezone for consistent calculations
+  const { nowInBogota, parseBogotaDate } = require('./timezone');
+  const now = nowInBogota();
+  
+  // Convert event date to Bogota timezone
+  // eventDate might be a Date object or a string, handle both cases
+  let eventDateStr: string;
+  if (eventDate instanceof Date) {
+    // If it's a Date object, convert to ISO string and parse as Bogota date
+    eventDateStr = eventDate.toISOString().split('T')[0]; // Get YYYY-MM-DD part
+  } else {
+    // If it's already a string, use it directly
+    eventDateStr = eventDate.toString().split('T')[0]; // Get YYYY-MM-DD part
+  }
+  
+  const eventDateBogota = parseBogotaDate(eventDateStr);
+  
+  // Calculate event start time in Bogota timezone
+  let eventStartBogota;
+  if (eventOpenHours?.open) {
+    const [openHour, openMinute] = eventOpenHours.open.split(':').map(Number);
+    eventStartBogota = eventDateBogota.set({ hour: openHour, minute: openMinute, second: 0, millisecond: 0 });
+  } else {
+    // If no open hours, assume event starts at midnight
+    eventStartBogota = eventDateBogota.startOf('day');
+  }
+  
+  // Calculate hours until event in Bogota timezone
+  const hoursUntilEvent = Math.floor(eventStartBogota.diff(now, 'hours').hours);
 
   if (isFree) {
     if (hoursUntilEvent < -1) return "event_expired";

@@ -24,7 +24,6 @@ const resetPasswordSchema = z.object({
 type ResetPasswordData = { newPassword: string; confirmPassword: string };
 
 export default function ResetPasswordPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);

@@ -522,6 +522,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
   export const getMenuForClub = async (req: Request, res: Response): Promise<void> => {
     try {
       const { clubId } = req.params;
+      const { date } = req.query; // Get selected date from query parameters
       const repo = AppDataSource.getRepository(MenuItem);
       const clubRepo = AppDataSource.getRepository(Club);
       const club = await clubRepo.findOne({ where: { id: clubId } });
@@ -560,6 +561,13 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
         }
       });
 
+      // Parse the selected date if provided
+      let selectedDate: Date | undefined;
+      if (date && typeof date === 'string') {
+        const [year, month, day] = date.split("-").map(Number);
+        selectedDate = new Date(year, month - 1, day);
+      }
+
       const itemsWithDynamic = await Promise.all(items.map(async item => {
         let dynamicPrice = null;
         if (item.dynamicPricingEnabled && !item.hasVariants && club) {
@@ -569,7 +577,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
           basePrice: Number(item.price),
           clubOpenDays: club.openDays,
           openHours: club.openHours,
-          selectedDate: undefined, // No specific date for general menu display
+          selectedDate: selectedDate, // Use the selected date for dynamic pricing
           clubId: club.id,
         });
         }
@@ -584,7 +592,7 @@ export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): 
               basePrice: Number(variant.price),
               clubOpenDays: club.openDays,
               openHours: club.openHours,
-              selectedDate: undefined, // No specific date for general menu display
+              selectedDate: selectedDate, // Use the selected date for dynamic pricing
               clubId: club.id,
             });
             }

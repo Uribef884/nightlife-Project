@@ -22,7 +22,7 @@ export function ClubGrid({ city, q }: { city?: string; q?: string }) {
       .catch((e: unknown) => {           // ✅ typed
         if (!alive) return;
         const message =
-          typeof e === "object" && e && "message" in e ? String((e as any).message) : "Error cargando clubes";
+          typeof e === "object" && e && "message" in e ? String((e as Record<string, unknown>).message) : "Error cargando clubes";
         setError(message);
       });
 

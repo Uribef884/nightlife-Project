@@ -43,9 +43,9 @@ function PerfilContent() {
 
   // OAuth detection
   const isOAuthUser = user?.isOAuthUser === true || 
-                     !!(user as any)?.googleId || 
-                     (user as any)?.provider === 'google' ||
-                     (user as any)?.oauthProvider === 'google';
+                     !!(user as Record<string, unknown>)?.googleId || 
+                     (user as Record<string, unknown>)?.provider === 'google' ||
+                     (user as Record<string, unknown>)?.oauthProvider === 'google';
 
   const handleLogout = async () => {
     try {

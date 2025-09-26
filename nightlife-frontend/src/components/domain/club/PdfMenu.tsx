@@ -320,7 +320,7 @@ export function PdfMenu({
   }
 
   // Height policy: desktop uses provided height, mobile auto
-  const computedHeight: number | string = useMemo(() => height, [height]);
+  const computedHeight: number | string = height;
   const showMobileImages = isMobile && !!manifest && !manifestError;
 
   // ---------------- Render ----------------

@@ -177,18 +177,6 @@ export default function TicketCard({
       // SIMPLE LOGIC: If current time > grace period end, then unavailable
       isUnavailableDueToGracePeriod = now > gracePeriodEnd;
       
-      // Debug logging
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[GRACE PERIOD]', {
-          ticket: ticket.name,
-          eventDateStr,
-          eventStart: eventStart.toISO(),
-          gracePeriodEnd: gracePeriodEnd.toISO(),
-          currentTime: now.toISO(),
-          isUnavailable: isUnavailableDueToGracePeriod,
-          timeLeft: gracePeriodEnd.diff(now, 'minutes').minutes
-        });
-      }
     }
   }
   
@@ -388,3 +376,4 @@ declare global {
     "div-custom": HTMLDivElement;
   }
 }
+

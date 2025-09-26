@@ -39,7 +39,7 @@ function jsTodayEn(): (typeof DAYS_EN)[number] {
   const idx = new Date().getDay(); // 0 = Sun, 6 = Sat
   return ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][
     idx
-  ] as any;
+  ] as (typeof DAYS_EN)[number];
 }
 
 function toHoursMap(items: HoursItem[] | null | undefined) {

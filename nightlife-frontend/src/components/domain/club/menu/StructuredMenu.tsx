@@ -7,13 +7,11 @@ import {
   getAvailableMenuForDate,
   type MenuItemDTO,
   type MenuVariantDTO,
-  type AvailableMenuResponse,
 } from "@/services/menu.service";
 import { useCartContext } from "@/contexts/CartContext";
 import { useClubProtection } from "@/hooks/useClubProtection";
 import { CartClubChangeModal } from "@/components/cart";
 import { MenuItemCard } from "./MenuItemCard";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 /** Sticky category pill nav + sections + animated variants */
 export function StructuredMenu({ 
@@ -49,7 +47,6 @@ export function StructuredMenu({
     updateItemQuantity,
     removeItem,
     isLoading: cartLoading,
-    error: cartError
   } = useCartContext();
 
   // Club protection
@@ -112,22 +109,22 @@ export function StructuredMenu({
               });
             }
             
-            const filteredItems = allItems.filter((it) => (it as any)?.isActive !== false);
+            const filteredItems = allItems.filter((it) => it.isActive !== false);
             setItems(filteredItems);
             setEventInfo({
               dateHasEvent: menuData?.dateHasEvent || false,
               event: menuData?.event || null
             });
-          } catch (error) {
+          } catch {
             // Fallback to basic menu loading
-            const data = await getMenuItemsForClubCSR(clubId);
+            const data = await getMenuItemsForClubCSR(clubId, selectedDate);
             if (!alive) return;
-            setItems((data ?? []).filter((it) => (it as any)?.isActive !== false));
+            setItems((data ?? []).filter((it) => it.isActive !== false));
             setEventInfo(null);
           }
         } else {
           // Fallback to old service when no date is selected
-          const data = await getMenuItemsForClubCSR(clubId);
+          const data = await getMenuItemsForClubCSR(clubId, selectedDate);
           if (!alive) return;
           setItems((data ?? []).filter((it) => (it as any)?.isActive !== false));
           setEventInfo(null);
@@ -166,8 +163,8 @@ export function StructuredMenu({
   const categories = useMemo(() => {
     const byCat: Record<string, { id: string; name: string; items: MenuItemDTO[] }> = {};
     for (const it of items) {
-      const catId = String((it as any).categoryId);
-      const catName = (it as any)?.category?.name ?? "Otros";
+      const catId = String(it.categoryId);
+      const catName = it.category?.name ?? "Otros";
       if (!byCat[catId]) byCat[catId] = { id: catId, name: catName, items: [] };
       byCat[catId].items.push(it);
     }
@@ -224,7 +221,7 @@ export function StructuredMenu({
     }
     
     const addFunction = async () => {
-      await addMenuItem(menuItemId, String((variant as any).id), selectedDate, 1);
+      await addMenuItem(menuItemId, String(variant.id), selectedDate, 1);
     };
     
     await clubProtection.handleAddWithProtection(addFunction);
@@ -415,7 +412,7 @@ export function StructuredMenu({
             {c.items.map((item) => {
               const itemId = String(item.id);
               const itemInCart = qtyByItemId.get(itemId);
-              const variants: MenuVariantDTO[] | undefined = (item as any)?.variants;
+              const variants: MenuVariantDTO[] | undefined = item.variants;
 
               const hasVariants = Array.isArray(variants) && variants.length > 0;
 

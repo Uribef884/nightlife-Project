@@ -32,7 +32,7 @@ const NL_SECONDARY_HEX = "#6B3FA0";         // for JS marker
 const NL_SECONDARY_STATIC = "0x6B3FA0";     // for Google Static Maps `color:` param
 
 /* ────────────────────────────── Debug helpers ────────────────────────────── */
-type DebugEvent = { t: number; tag: string; data?: Record<string, any> };
+type DebugEvent = { t: number; tag: string; data?: Record<string, unknown> };
 function now() { return typeof performance !== "undefined" ? performance.now() : Date.now(); }
 function mark(name: string) { try { performance.mark(name); } catch { /* no-op */ } }
 function measure(name: string, start: string, end: string) {
@@ -54,7 +54,7 @@ function useDebugEnabled(debugProp?: boolean) {
   });
 
   useEffect(() => {
-    const w = window as any;
+    const w = window as unknown as Record<string, unknown>;
     w.nlMapDebug = w.nlMapDebug || {};
     w.nlMapDebug.toggle = () => setDebug((d: boolean) => {
       try { window.localStorage.setItem("nl.mapDebug", (!d) ? "1" : "0"); } catch {}
@@ -114,7 +114,6 @@ export default function MapGoogle({
     if (!debug) return;
     const entry = { t: now() - t0Ref.current, tag, data };
     setEvents((evts) => [...evts.slice(-11), entry]);
-    // eslint-disable-next-line no-console
     console.log(`[MapDebug] ${tag}`, data || "");
   }
 
@@ -141,7 +140,7 @@ export default function MapGoogle({
     const clamped = clamp(Math.round(z), 3, 20);
     if (debug) log("zoom", { requested: initialZoom, resolved: clamped, hasCoords });
     return clamped;
-  }, [initialZoom, hasCoords, debug]);
+  }, [initialZoom, hasCoords, debug, log]);
 
   /* ── PRE-SCRIPT watchdog: if Script never loads, fall back quickly (~3.5s) ─ */
   useEffect(() => {
@@ -158,7 +157,7 @@ export default function MapGoogle({
     }, 3500);
     setTimeout(() => mark("script_wait_timeout"), 0);
     return () => clearTimeout(t);
-  }, [key, scriptReady]);
+  }, [key, scriptReady, log]);
 
   /* ── POST-SCRIPT boot: try to init google.maps; watchdog ~7s ─────────────── */
   useEffect(() => {
@@ -177,7 +176,7 @@ export default function MapGoogle({
     setTimeout(() => mark("boot_timeout"), 0);
 
     const boot = () => {
-      const g = (globalThis as any).google;
+      const g = (globalThis as unknown as Record<string, unknown>).google;
       if (!g?.maps) {
         if (tries++ < 30 && !cancelled) { setTimeout(boot, 100); }
         return;
@@ -230,8 +229,7 @@ export default function MapGoogle({
 
     boot();
     return () => { cancelled = true; clearTimeout(watchdog); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scriptReady, key, center.lat, center.lng, zoom, reloadNonce]);
+  }, [scriptReady, key, center.lat, center.lng, zoom, reloadNonce, log]);
 
   /* ── Static IMAGE fallbacks (no iframes) ─────────────────────────────────── */
   const googleStaticUrl = useMemo(() => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -11,8 +11,7 @@ import { showGlobalModal } from '@/components/ui/GlobalModal';
 
 
 function ChangePasswordContent() {
-  const router = useRouter();
-  const { user } = useAuth();
+  const { } = useAuth();
   const { changePassword } = useAuthStore();
 
   const [formData, setFormData] = useState({
@@ -61,9 +60,6 @@ function ChangePasswordContent() {
     showGlobalModal(type, title, message);
   }, []);
 
-  const hideModal = useCallback(() => {
-    // Global modal handles its own hiding
-  }, []);
 
   const validateForm = () => {
     if (!formData.oldPassword) {
@@ -120,7 +116,7 @@ function ChangePasswordContent() {
       } else {
         showModal('error', 'Error', result.message);
       }
-    } catch (error) {
+    } catch {
       showModal('error', 'Error', 'Error inesperado. Inténtalo de nuevo.');
     } finally {
       setLoading(false);

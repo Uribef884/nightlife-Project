@@ -36,7 +36,7 @@ export function ClientHome({
 
   // Debounced URL push (kept as-is)
   const debouncedReplace = useMemo(() => {
-    let t: any;
+    let t: NodeJS.Timeout;
     return (url: string) => {
       clearTimeout(t);
       t = setTimeout(() => router.replace(url, { scroll: false }), 300);

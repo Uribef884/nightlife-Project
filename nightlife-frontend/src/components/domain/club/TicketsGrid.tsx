@@ -19,8 +19,7 @@ function mergeById(ordering: TicketDTO[] | undefined, enriched: TicketDTO[]): Ti
 
 /** Define "Combo" for the UI */
 function isCombo(t: TicketDTO): boolean {
-  const anyT = t as any;
-  return anyT?.includesMenuItem === true || (Array.isArray(anyT?.includedMenuItems) && anyT.includedMenuItems.length > 0);
+  return t.includesMenuItem === true || (Array.isArray(t.includedMenuItems) && t.includedMenuItems.length > 0);
 }
 
 // Smooth-scroll helper with small offset (in case of sticky headers)
@@ -92,9 +91,9 @@ export default function TicketsGrid({
 
 
   // Category slices from enriched
-  const ticketsGeneral = useMemo(() => tickets.filter((t) => (t as any).category === "general"), [tickets]);
+  const ticketsGeneral = useMemo(() => tickets.filter((t) => t.category === "general"), [tickets]);
   const ticketsFree = useMemo(() => tickets.filter((t) => {
-    const category = (t as any).category;
+    const category = t.category;
     const price = Number(t.price || 0);
     return category === "free" || (category === "event" && price === 0);
   }), [tickets]);

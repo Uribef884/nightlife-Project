@@ -185,7 +185,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
       clubId: ad.clubId ?? null,
       resolvedDate: ad.resolvedDate ?? null,
       // in case backend attaches a plain link (not in the exported type)
-      link: (ad as any).link ?? null,
+      link: (ad as Record<string, unknown>).link as string ?? null,
     };
     setCurrent(adLike);
     setOpen(true);

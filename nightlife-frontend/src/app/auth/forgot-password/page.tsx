@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
       setError(null);
       await authService.forgotPassword(data.email);
       setIsSubmitted(true);
-    } catch (error) {
+    } catch {
       setError('Error al enviar el correo. Por favor intenta de nuevo.');
     } finally {
       setIsLoading(false);

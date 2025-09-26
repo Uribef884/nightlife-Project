@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCartStore } from '@/stores/cart.store';
 import Cart from './Cart';
@@ -13,7 +12,6 @@ interface CartDrawerProps {
 }
 
 export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerProps) {
-  const { items } = useCartStore();
   const [mounted, setMounted] = useState(false);
   const backdropRef = useRef<HTMLDivElement>(null);
 
@@ -89,7 +87,7 @@ export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerPr
     }
   };
 
-  const handleBackdropTouch = (e: React.TouchEvent) => {
+  const handleBackdropTouch = () => {
     // Close on touch end - this should work reliably
     onClose();
   };

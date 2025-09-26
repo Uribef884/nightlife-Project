@@ -25,7 +25,6 @@ interface AddMenuItemToCartButtonProps {
 
 export default function AddMenuItemToCartButton({
   menuItemId,
-  name,
   price,
   variants = [],
   hasVariants,

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useCartStore } from '@/stores/cart.store';
 import CartItem from './CartItem';
 import CartSummary from './CartSummary';
-import { ShoppingCart, AlertTriangle, Ticket, Utensils } from 'lucide-react';
+import { ShoppingCart, Ticket, Utensils } from 'lucide-react';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 interface CartProps {
@@ -21,11 +21,7 @@ export default function Cart({
   const { 
     items, 
     isLoading, 
-    error, 
     refreshCart, 
-    getTicketItems, 
-    getMenuItems, 
-    getItemsByDate,
     clearCart,
     getCartSummary
   } = useCartStore();
@@ -37,13 +33,6 @@ export default function Cart({
     refreshCart();
   }, [refreshCart]);
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(price);
-  };
 
   const getUniqueDates = () => {
     const dates = new Set(items.map(item => item.date));
@@ -101,8 +90,6 @@ export default function Cart({
   }
 
   const uniqueDates = getUniqueDates();
-  const ticketItems = getTicketItems();
-  const menuItems = getMenuItems();
 
   return (
     <div className={`space-y-6 ${className}`}>

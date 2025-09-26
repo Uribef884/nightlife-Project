@@ -27,7 +27,7 @@ export default function SSRClubGrid({ items }: { items: ClubListItem[] }) {
             name: c.name,
             address: c.address,
             profileImageUrl: c.profileImageUrl ?? undefined,
-          } as any /* matches your ClubCard: Pick<Club,'id'|'name'|'address'|'profileImageUrl'> */}
+          } as CardClub /* matches your ClubCard: Pick<Club,'id'|'name'|'address'|'profileImageUrl'> */}
         />
       ))}
     </div>
