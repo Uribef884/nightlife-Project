@@ -1,18 +1,17 @@
+// src/app/checkout/success/page.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   CheckCircle, 
   ArrowLeft, 
   ShoppingBag, 
-  Calendar,
   CreditCard,
   Mail,
   Phone,
   ExternalLink,
-  Ticket,
-  Utensils
+  Ticket
 } from 'lucide-react';
 import { useUser } from '@/stores/auth.store';
 import { useCartStore } from '@/stores/cart.store';
@@ -27,7 +26,7 @@ type TransactionDetails = {
   paymentMethod: string;
   email: string;
   purchaseDate: string;
-  items: any[];
+  items: unknown[];
   subtotal: number;
   serviceFee: number;
   discounts: number;
@@ -40,10 +39,28 @@ type TransactionDetails = {
 };
 
 export default function PaymentSuccessPage() {
+  // Wrap the content that calls useSearchParams in Suspense per Next.js requirement
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-500 mx-auto mb-4" />
+            <p className="text-slate-300">Cargando confirmación...</p>
+          </div>
+        </div>
+      }
+    >
+      <PaymentSuccessContent />
+    </Suspense>
+  );
+}
+
+function PaymentSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useUser();
-  const { clearCart, items, getCartSummary } = useCartStore();
+  const { clearCart } = useCartStore();
   
   const [transactionDetails, setTransactionDetails] = useState<TransactionDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,9 +68,6 @@ export default function PaymentSuccessPage() {
 
   const fetchTransactionDetails = useCallback(async (transactionId: string) => {
     try {
-      
-      
-      
       // Fetch transaction details from backend API
       const apiUrl = process.env.NEXT_PUBLIC_API_URL;
       const response = await fetch(`${apiUrl}/checkout/unified/status/${transactionId}`, {
@@ -64,16 +78,12 @@ export default function PaymentSuccessPage() {
         credentials: 'include',
       });
 
-      
-
       if (!response.ok) {
         throw new Error(`Failed to fetch transaction details: ${response.status}`);
       }
 
       const data = await response.json();
-      
-      
-      
+
       // Check the actual transaction status and redirect if not APPROVED
       const actualStatus = data.status || 'APPROVED';
       if (actualStatus !== 'APPROVED') {
@@ -94,7 +104,7 @@ export default function PaymentSuccessPage() {
       }
       
       // Use simple transaction details mapping
-      const transactionDetails: TransactionDetails = {
+      const mapped: TransactionDetails = {
         transactionId: data.transactionId || transactionId,
         status: data.status || 'APPROVED',
         totalPaid: data.totalPaid || data.amount || 0,
@@ -114,22 +124,17 @@ export default function PaymentSuccessPage() {
         errorMessage: data.errorMessage,
       };
       
-      setTransactionDetails(transactionDetails);
-    } catch (err) {
-      
+      setTransactionDetails(mapped);
+    } catch {
       setError('Error al cargar los detalles de la transacción');
     }
   }, [user?.email, router]);
 
   useEffect(() => {
-    
-    
     // Get transaction details from URL params, localStorage, or sessionStorage
     const transactionId = searchParams.get('transactionId');
     const storedDetails = localStorage.getItem('lastTransactionDetails') || sessionStorage.getItem('lastTransactionDetails');
-    
-    
-    
+
     // Check if stored details belong to current user/session
     if (storedDetails) {
       try {
@@ -159,12 +164,11 @@ export default function PaymentSuccessPage() {
         
         // Use checkout summary for correct pricing if available
         const checkoutSummary = getCheckoutSummary();
-        let transactionDetails = details;
+        let nextDetails = details;
         
         if (checkoutSummary) {
-          
           // Update transaction details with correct pricing from checkout summary
-          transactionDetails = {
+          nextDetails = {
             ...details,
             subtotal: checkoutSummary.total,
             serviceFee: checkoutSummary.operationalCosts,
@@ -177,23 +181,21 @@ export default function PaymentSuccessPage() {
           clearCheckoutSummary();
         }
         
-        setTransactionDetails(transactionDetails);
-      } catch (err) {
-        
+        setTransactionDetails(nextDetails);
+      } catch {
         setError('Error al cargar los detalles de la transacción');
       }
     } else if (transactionId) {
       // Only fetch from API if no stored details available
-      
       fetchTransactionDetails(transactionId);
     } else {
       // No transaction data available
-      
       setError('No se encontraron detalles de la transacción');
     }
     
     setLoading(false);
-  }, [searchParams, clearCart, fetchTransactionDetails, user]);
+     
+  }, [searchParams, clearCart, fetchTransactionDetails, user, router]);
 
   const formatPrice = (price: number | undefined | null) => {
     const validPrice = price && !isNaN(price) ? price : 0;
@@ -219,11 +221,10 @@ export default function PaymentSuccessPage() {
         hour: '2-digit',
         minute: '2-digit'
       });
-    } catch (error) {
+    } catch {
       return 'Fecha inválida';
     }
   };
-
 
   const handleViewPurchases = () => {
     router.push('/profile/orders');
@@ -434,7 +435,6 @@ export default function PaymentSuccessPage() {
             </div>
           </div>
         </div>
-
 
         {/* Action Buttons */}
         <div className={`grid gap-4 mb-8 ${user ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>

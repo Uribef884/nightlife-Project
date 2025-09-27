@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Cart } from '@/components/cart';
-import { useCart } from '@/hooks/useCart';
 import { useRouter } from 'next/navigation';
 
 export default function CartPage() {

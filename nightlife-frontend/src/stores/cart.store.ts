@@ -45,7 +45,13 @@ export interface CartItem {
   unitPrice: number;
   subtotal: number;
   dynamicPrice?: number;
-  priceBreakdown?: any;
+  priceBreakdown?: {
+    basePrice?: number;
+    dynamicAdjustment?: number;
+    discounts?: number;
+    fees?: number;
+    [key: string]: unknown;
+  };
 }
 
 export interface CartSummary {
@@ -309,61 +315,119 @@ export const useCartStore = create<CartState>()(
           
           // Store in window for CartSummary to use (exactly like test-cart.html)
           if (typeof window !== 'undefined') {
-            (window as any).cartSummaries = {
+            (window as { cartSummaries?: { unified?: unknown } }).cartSummaries = {
               unified: summary
             };
           }
           
+          // Local types for backend cart item data
+          type BackendCartItem = {
+            id: unknown;
+            itemType: unknown;
+            quantity: unknown;
+            date: unknown;
+            clubId: unknown;
+            ticketId?: unknown;
+            ticket?: {
+              id: unknown;
+              name: unknown;
+              price: unknown;
+              category: unknown;
+              description?: unknown;
+              dynamicPricingEnabled?: unknown;
+              maxPerPerson?: unknown;
+              includesMenuItem?: unknown;
+            };
+            menuItemId?: unknown;
+            variantId?: unknown;
+            menuItem?: {
+              id: unknown;
+              name: unknown;
+              price?: unknown;
+              description?: unknown;
+              imageUrl?: unknown;
+              hasVariants?: unknown;
+              maxPerPerson?: unknown;
+            };
+            variant?: {
+              id: unknown;
+              name: unknown;
+              price: unknown;
+              maxPerPerson?: unknown;
+            };
+            dynamicPrice?: unknown;
+            priceBreakdown?: {
+              basePrice?: unknown;
+              dynamicAdjustment?: unknown;
+              discounts?: unknown;
+              fees?: unknown;
+              [key: string]: unknown;
+            };
+          };
+
           // Transform server data to our format
-          const items: CartItem[] = cartData.map((item: any) => ({
-            id: item.id,
-            itemType: item.itemType,
-            quantity: item.quantity,
-            date: item.date,
-            clubId: item.clubId,
+          const items: CartItem[] = cartData.map((item: unknown) => {
+            const backendItem = item as BackendCartItem;
+            return {
+            id: String(backendItem.id),
+            itemType: String(backendItem.itemType) as 'ticket' | 'menu',
+            quantity: Number(backendItem.quantity),
+            date: String(backendItem.date),
+            clubId: String(backendItem.clubId),
             
             // Ticket data
-            ticketId: item.ticketId,
-            ticket: item.ticket ? {
-              id: item.ticket.id,
-              name: item.ticket.name,
-              price: item.ticket.price,
-              category: item.ticket.category,
-              description: item.ticket.description,
-              dynamicPricingEnabled: item.ticket.dynamicPricingEnabled,
-              maxPerPerson: item.ticket.maxPerPerson,
-              includesMenuItem: item.ticket.includesMenuItem,
+            ticketId: backendItem.ticketId ? String(backendItem.ticketId) : undefined,
+            ticket: backendItem.ticket ? {
+              id: String(backendItem.ticket.id),
+              name: String(backendItem.ticket.name),
+              price: Number(backendItem.ticket.price),
+              category: String(backendItem.ticket.category) as 'general' | 'event' | 'free',
+              description: backendItem.ticket.description ? String(backendItem.ticket.description) : undefined,
+              dynamicPricingEnabled: Boolean(backendItem.ticket.dynamicPricingEnabled),
+              maxPerPerson: Number(backendItem.ticket.maxPerPerson || 0),
+              includesMenuItem: Boolean(backendItem.ticket.includesMenuItem),
             } : undefined,
             
             // Menu data
-            menuItemId: item.menuItemId,
-            variantId: item.variantId,
-            menuItem: item.menuItem ? {
-              id: item.menuItem.id,
-              name: item.menuItem.name,
-              price: item.menuItem.price,
-              description: item.menuItem.description,
-              imageUrl: item.menuItem.imageUrl,
-              hasVariants: item.menuItem.hasVariants,
-              maxPerPerson: item.menuItem.maxPerPerson,
+            menuItemId: backendItem.menuItemId ? String(backendItem.menuItemId) : undefined,
+            variantId: backendItem.variantId ? String(backendItem.variantId) : undefined,
+            menuItem: backendItem.menuItem ? {
+              id: String(backendItem.menuItem.id),
+              name: String(backendItem.menuItem.name),
+              price: backendItem.menuItem.price ? Number(backendItem.menuItem.price) : undefined,
+              description: backendItem.menuItem.description ? String(backendItem.menuItem.description) : undefined,
+              imageUrl: backendItem.menuItem.imageUrl ? String(backendItem.menuItem.imageUrl) : undefined,
+              hasVariants: Boolean(backendItem.menuItem.hasVariants),
+              maxPerPerson: backendItem.menuItem.maxPerPerson ? Number(backendItem.menuItem.maxPerPerson) : undefined,
             } : undefined,
-            variant: item.variant ? {
-              id: item.variant.id,
-              name: item.variant.name,
-              price: item.variant.price,
-              maxPerPerson: item.variant.maxPerPerson,
+            variant: backendItem.variant ? {
+              id: String(backendItem.variant.id),
+              name: String(backendItem.variant.name),
+              price: Number(backendItem.variant.price),
+              maxPerPerson: backendItem.variant.maxPerPerson ? Number(backendItem.variant.maxPerPerson) : undefined,
             } : undefined,
             
             // Pricing
-            unitPrice: item.itemType === 'ticket' 
-              ? (item.ticket?.price || 0)
-              : (item.variant?.price || item.menuItem?.price || 0),
-            subtotal: item.quantity * (item.itemType === 'ticket' 
-              ? (item.ticket?.price || 0)
-              : (item.variant?.price || item.menuItem?.price || 0)),
-            dynamicPrice: item.dynamicPrice,
-            priceBreakdown: item.priceBreakdown,
-          }));
+            unitPrice: String(backendItem.itemType) === 'ticket' 
+              ? (backendItem.ticket ? Number(backendItem.ticket.price) : 0)
+              : (backendItem.variant ? Number(backendItem.variant.price) : (backendItem.menuItem ? Number(backendItem.menuItem.price || 0) : 0)),
+            subtotal: Number(backendItem.quantity) * (String(backendItem.itemType) === 'ticket' 
+              ? (backendItem.ticket ? Number(backendItem.ticket.price) : 0)
+              : (backendItem.variant ? Number(backendItem.variant.price) : (backendItem.menuItem ? Number(backendItem.menuItem.price || 0) : 0))),
+            dynamicPrice: backendItem.dynamicPrice ? Number(backendItem.dynamicPrice) : undefined,
+            priceBreakdown: backendItem.priceBreakdown ? {
+              basePrice: backendItem.priceBreakdown.basePrice ? Number(backendItem.priceBreakdown.basePrice) : undefined,
+              dynamicAdjustment: backendItem.priceBreakdown.dynamicAdjustment ? Number(backendItem.priceBreakdown.dynamicAdjustment) : undefined,
+              discounts: backendItem.priceBreakdown.discounts ? Number(backendItem.priceBreakdown.discounts) : undefined,
+              fees: backendItem.priceBreakdown.fees ? Number(backendItem.priceBreakdown.fees) : undefined,
+              ...Object.fromEntries(
+                Object.entries(backendItem.priceBreakdown).filter(([key]) => 
+                  !['basePrice', 'dynamicAdjustment', 'discounts', 'fees'].includes(key)
+                )
+              )
+            } : undefined,
+          };
+          });
 
           set({ 
             items,

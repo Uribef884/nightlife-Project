@@ -129,8 +129,8 @@ export async function GET(req: NextRequest) {
         "CDN-Cache-Control": "s-maxage=30, stale-while-revalidate=120",
       },
     });
-  } catch (err: any) {
-    const aborted = err?.name === "AbortError";
+  } catch (err: unknown) {
+    const aborted = err && typeof err === 'object' && 'name' in err && err.name === "AbortError";
     return NextResponse.json(
       { error: aborted ? "Upstream timeout" : "Bad gateway" },
       { status: aborted ? 504 : 502 }

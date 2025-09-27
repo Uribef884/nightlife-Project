@@ -19,11 +19,11 @@ export function useKeyboardInsets(): number {
     }
 
     const updateKeyboardInset = () => {
-      const layoutViewport = window.visualViewport;
       const visualViewport = window.visualViewport;
+      if (!visualViewport) return;
       
-      // Calculate keyboard height as the difference between layout and visual viewport
-      const keyboardHeight = Math.max(0, layoutViewport.height - visualViewport.height);
+      // Calculate keyboard height as the difference between window height and visual viewport height
+      const keyboardHeight = Math.max(0, window.innerHeight - visualViewport.height);
       setKeyboardInset(keyboardHeight);
       
       // Set CSS custom property for global use

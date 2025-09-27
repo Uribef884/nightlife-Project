@@ -22,8 +22,7 @@ export default function Cart({
     items, 
     isLoading, 
     refreshCart, 
-    clearCart,
-    getCartSummary
+    clearCart
   } = useCartStore();
 
   const [showClearModal, setShowClearModal] = useState(false);
@@ -43,9 +42,6 @@ export default function Cart({
     return items.filter(item => item.itemType === itemType && item.date === date);
   };
 
-  // Check if this is a free checkout
-  const cartSummary = getCartSummary();
-  const isFreeCheckout = cartSummary ? (cartSummary.total === 0 || cartSummary.totalSubtotal === 0) : false;
 
   const handleClearCart = () => {
     setShowClearModal(true);
@@ -145,7 +141,7 @@ export default function Cart({
       ))}
 
       {/* Summary */}
-      {showSummary && <CartSummary onCheckout={onCheckout} isFreeCheckout={isFreeCheckout} />}
+      {showSummary && <CartSummary onCheckout={onCheckout} />}
 
       {/* Clear Cart Confirmation Modal */}
       {showClearModal && (

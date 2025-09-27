@@ -38,14 +38,15 @@ interface CartProviderProps {
 
 export function CartProvider({ children }: CartProviderProps) {
   const cart = useCart();
+  const { refreshCart } = cart;
 
   // Refresh cart on mount to get any existing items and handle expiration
   useEffect(() => {
-    cart.refreshCart().catch(error => {
+    refreshCart().catch(error => {
       console.warn('Failed to refresh cart on mount:', error);
       // Don't show error to user, just log it
     });
-  }, []); // Empty dependency array means this runs only on mount
+  }, [refreshCart]); // Include refreshCart in dependencies
 
   return (
     <CartContext.Provider value={cart}>

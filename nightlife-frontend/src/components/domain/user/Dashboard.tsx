@@ -42,10 +42,7 @@ function PerfilContent() {
   const [showDelete, setShowDelete] = useState(false);
 
   // OAuth detection
-  const isOAuthUser = user?.isOAuthUser === true || 
-                     !!(user as Record<string, unknown>)?.googleId || 
-                     (user as Record<string, unknown>)?.provider === 'google' ||
-                     (user as Record<string, unknown>)?.oauthProvider === 'google';
+  const isOAuthUser = user?.isOAuthUser === true;
 
   const handleLogout = async () => {
     try {

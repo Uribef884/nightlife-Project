@@ -3,22 +3,89 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/domain/auth/ProtectedRoute';
 import { apiFetch, apiUrl } from '@/lib/apiClient';
 
-// ... your interfaces stay the same ...
+// Local type definitions for service results
+type TicketPurchase = {
+  id: string;
+  qrCodeEncrypted?: string;
+  isUsed?: boolean;
+  usedAt?: string;
+  isUsedMenu?: boolean;
+  menuQRUsedAt?: string;
+  hasIncludedItems?: boolean;
+  hasincludedItems?: boolean;
+  includedQrCodeEncrypted?: string;
+  included_qr_code_encrypted?: string;
+  includedQR?: string;
+  menuIncludedQrEncrypted?: string;
+  included?: { qrCodeEncrypted?: string };
+  ticket?: {
+    name: string;
+    event?: { name: string };
+    includesMenuItem?: boolean;
+  };
+};
+
+type MenuPurchase = {
+  id: string;
+  isUsed?: boolean;
+  usedAt?: string;
+  menuItem?: { name: string };
+  variant?: { name: string };
+  quantity: number;
+};
+
+type Purchase = {
+  id: string;
+  createdAt: string;
+  date?: string;
+  paymentStatus: string;
+  ticketSubtotal?: unknown;
+  menuSubtotal?: unknown;
+  totalPaid?: unknown;
+  qrPayload?: string;
+  menuQrPayload?: string;
+  menu_qr_payload?: string;
+  customerFullName?: string;
+  club?: {
+    name: string;
+    profileImageUrl?: string;
+  };
+  ticketPurchases?: TicketPurchase[];
+  menuPurchases?: MenuPurchase[];
+  unifiedPurchaseTransaction?: {
+    qrPayload?: string;
+  };
+};
+
+type QRCode = {
+  id: string;
+  type: 'ticket' | 'menu' | 'menu-missing';
+  itemName: string;
+  clubName: string;
+  date: string;
+  qrCode?: string;
+  isUsed?: boolean;
+  usedAt?: string;
+  expiresAt?: string;
+  reason?: string;
+  fallbackNote?: string;
+};
 
 function OrdersContent() {
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
-  const [purchases, setPurchases] = useState<any[]>([]);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedPurchase, setExpandedPurchase] = useState<string | null>(null);
-  const [selectedPurchase, setSelectedPurchase] = useState<any | null>(null);
-  const [qrCodes, setQrCodes] = useState<any[]>([]);
+  const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
+  const [qrCodes, setQrCodes] = useState<QRCode[]>([]);
   const [qrLoading, setQrLoading] = useState(false);
-  const [selectedQR, setSelectedQR] = useState<any | null>(null);
+  const [selectedQR, setSelectedQR] = useState<QRCode | null>(null);
 
   // ✅ Numeric coercion + COP formatting
   const toAmount = (v: unknown): number => {
@@ -60,7 +127,7 @@ function OrdersContent() {
       // TODO: Backend should include the following fields in the API response:
       // - ticketPurchases[].includedQrCodeEncrypted (for included menu QRs)
       // - unified_purchase_transaction.qrPayload (exposed on purchase root as qrPayload)
-      const data = await apiFetch<any[]>(apiUrl('/unified-purchases'));
+      const data = await apiFetch<Purchase[]>(apiUrl('/unified-purchases'));
       setPurchases(data);
     } catch (err) {
       setError('Error al cargar las compras');
@@ -116,21 +183,26 @@ function OrdersContent() {
   // -----------------------------
 
   /** Case-insensitive key scan for any of the provided regexes. Returns first matching value. */
-  const pickByKeyRegex = (obj: any, regexes: RegExp[]): string | undefined => {
+  const pickByKeyRegex = (obj: unknown, regexes: RegExp[]): string | undefined => {
     if (!obj || typeof obj !== 'object') return undefined;
-    const keys = Object.keys(obj);
+    const objRecord = obj as Record<string, unknown>;
+    const keys = Object.keys(objRecord);
     for (const rx of regexes) {
       const k = keys.find((key) => rx.test(key));
-      if (k && typeof obj[k] === 'string' && obj[k]) {
-        return obj[k] as string;
+      if (k && typeof objRecord[k] === 'string' && objRecord[k]) {
+        return objRecord[k] as string;
       }
     }
     return undefined;
   };
 
   /** Safely detect "has included items" across legacy/typo fields */
-  const hasIncluded = (tp: any): boolean =>
-    !!(tp?.hasIncludedItems ?? tp?.hasincludedItems ?? tp?.ticket?.includesMenuItem);
+  const hasIncluded = (tp: unknown): boolean => {
+    if (!tp || typeof tp !== 'object') return false;
+    const tpObj = tp as Record<string, unknown>;
+    const ticket = tpObj.ticket as Record<string, unknown> | undefined;
+    return !!(tpObj.hasIncludedItems ?? tpObj.hasincludedItems ?? ticket?.includesMenuItem);
+  };
 
   /**
    * Pick the included-menu QR payload for a ticket purchase.
@@ -139,16 +211,19 @@ function OrdersContent() {
    *  2) Regex scan for included QR patterns
    *  3) If nothing found: return {} (do NOT reuse ticket QR)
    */
-  const pickIncludedQR = (tp: any): { payload?: string } => {
+  const pickIncludedQR = (tp: unknown): { payload?: string } => {
     if (!hasIncluded(tp)) return {};
+    if (!tp || typeof tp !== 'object') return {};
+    const tpObj = tp as Record<string, unknown>;
+    const included = tpObj.included as Record<string, unknown> | undefined;
 
     // Try known exact fields first
     const direct =
-      tp?.includedQrCodeEncrypted ||
-      tp?.included_qr_code_encrypted ||
-      tp?.includedQR ||
-      tp?.menuIncludedQrEncrypted ||
-      tp?.included?.qrCodeEncrypted;
+      tpObj.includedQrCodeEncrypted ||
+      tpObj.included_qr_code_encrypted ||
+      tpObj.includedQR ||
+      tpObj.menuIncludedQrEncrypted ||
+      included?.qrCodeEncrypted;
 
     if (typeof direct === 'string' && direct) {
       return { payload: direct };
@@ -156,8 +231,8 @@ function OrdersContent() {
 
     // Try regex scan for any "included.*qr.*(encrypted|payload)" patterns
     const scanned =
-      pickByKeyRegex(tp, [/^included.*qr.*encrypted$/i, /^included.*qr.*payload$/i]) ||
-      pickByKeyRegex(tp?.included, [/qr.*encrypted/i, /qr.*payload/i]);
+      pickByKeyRegex(tpObj, [/^included.*qr.*encrypted$/i, /^included.*qr.*payload$/i]) ||
+      pickByKeyRegex(included, [/qr.*encrypted/i, /qr.*payload/i]);
 
     if (scanned) {
       return { payload: scanned };
@@ -165,8 +240,8 @@ function OrdersContent() {
 
     // If still nothing: return {} (do NOT fabricate or reuse the ticket QR)
     console.warn('[QR Included Missing] hasIncludedItems=true but no included QR payload found', {
-      ticketPurchaseId: tp?.id,
-      keys: Object.keys(tp || {}),
+      ticketPurchaseId: tpObj.id,
+      keys: Object.keys(tpObj || {}),
     });
     return {};
   };
@@ -180,44 +255,47 @@ function OrdersContent() {
    *  4) Any key on purchase or purchase.unifiedPurchaseTransaction matching /qr.*payload/i
    *  5) If none found: return {} (do NOT look into individual menuPurchases)
    */
-  const pickMenuTransactionQR = (purchase: any): { payload?: string } => {
-    const hasStandaloneMenu = Array.isArray(purchase?.menuPurchases) && purchase.menuPurchases.length > 0;
+  const pickMenuTransactionQR = (purchase: unknown): { payload?: string } => {
+    if (!purchase || typeof purchase !== 'object') return {};
+    const purchaseObj = purchase as Record<string, unknown>;
+    const hasStandaloneMenu = Array.isArray(purchaseObj.menuPurchases) && purchaseObj.menuPurchases.length > 0;
     if (!hasStandaloneMenu) return {};
 
     // 1) canonical qrPayload
-    if (typeof purchase?.qrPayload === 'string' && purchase.qrPayload) {
-      return { payload: purchase.qrPayload };
+    if (typeof purchaseObj.qrPayload === 'string' && purchaseObj.qrPayload) {
+      return { payload: purchaseObj.qrPayload };
     }
 
     // 2) menu-specific aliases
-    if (typeof purchase?.menuQrPayload === 'string' && purchase.menuQrPayload) {
-      return { payload: purchase.menuQrPayload };
+    if (typeof purchaseObj.menuQrPayload === 'string' && purchaseObj.menuQrPayload) {
+      return { payload: purchaseObj.menuQrPayload };
     }
-    if (typeof purchase?.menu_qr_payload === 'string' && purchase.menu_qr_payload) {
-      return { payload: purchase.menu_qr_payload };
+    if (typeof purchaseObj.menu_qr_payload === 'string' && purchaseObj.menu_qr_payload) {
+      return { payload: purchaseObj.menu_qr_payload };
     }
 
     // 3) unifiedPurchaseTransaction.qrPayload
-    if (typeof purchase?.unifiedPurchaseTransaction?.qrPayload === 'string' && purchase.unifiedPurchaseTransaction.qrPayload) {
-      return { payload: purchase.unifiedPurchaseTransaction.qrPayload };
+    const transaction = purchaseObj.unifiedPurchaseTransaction as Record<string, unknown> | undefined;
+    if (typeof transaction?.qrPayload === 'string' && transaction.qrPayload) {
+      return { payload: transaction.qrPayload };
     }
 
     // 4) regex scan on purchase and unifiedPurchaseTransaction
-    const purchaseMatch = pickByKeyRegex(purchase, [/qr.*payload/i]);
+    const purchaseMatch = pickByKeyRegex(purchaseObj, [/qr.*payload/i]);
     if (purchaseMatch) {
       return { payload: purchaseMatch };
     }
 
-    const transactionMatch = pickByKeyRegex(purchase?.unifiedPurchaseTransaction, [/qr.*payload/i]);
+    const transactionMatch = pickByKeyRegex(transaction, [/qr.*payload/i]);
     if (transactionMatch) {
       return { payload: transactionMatch };
     }
 
     // If none found: return {} (do NOT look into individual menuPurchases, and do NOT fabricate)
     console.warn('[QR Menu Tx Missing] menuPurchases present but no transaction QR payload found', {
-      purchaseId: purchase?.id,
-      keys: Object.keys(purchase || {}),
-      unifiedPurchaseTransactionKeys: purchase?.unifiedPurchaseTransaction ? Object.keys(purchase.unifiedPurchaseTransaction) : 'N/A',
+      purchaseId: purchaseObj.id,
+      keys: Object.keys(purchaseObj || {}),
+      unifiedPurchaseTransactionKeys: transaction ? Object.keys(transaction) : 'N/A',
     });
     return {};
   };
@@ -225,17 +303,18 @@ function OrdersContent() {
   /**
    * Generate QR codes for a purchase using correct sources & show missing cards when payloads not found
    */
-  const generateQRCodes = async (purchase: any) => {
-    const codes: any[] = [];
+  const generateQRCodes = async (purchase: Purchase): Promise<QRCode[]> => {
+    const codes: QRCode[] = [];
 
 
     // 1) Individual ticket QRs + included-menu per ticket
     for (const [index, tp] of (purchase.ticketPurchases || []).entries()) {
-      const ticketName = tp?.ticket?.name ?? 'Entrada';
-      const eventName  = tp?.ticket?.event?.name;
+      const ticket = tp.ticket;
+      const ticketName = ticket?.name ?? 'Entrada';
+      const eventName = ticket?.event?.name;
 
       // Ticket QR - always push if qrCodeEncrypted exists
-      if (tp?.qrCodeEncrypted) {
+      if (tp.qrCodeEncrypted) {
         try {
           const qrImage = await generateQRImageDataUrl(tp.qrCodeEncrypted);
           codes.push({
@@ -314,7 +393,7 @@ function OrdersContent() {
     }
 
     // 2) Single menu QR for the whole transaction - show missing card if no payload found
-    if (purchase.menuPurchases?.length > 0) {
+    if (purchase.menuPurchases && purchase.menuPurchases.length > 0) {
       const { payload: menuTxPayload } = pickMenuTransactionQR(purchase);
       if (menuTxPayload) {
         try {
@@ -322,12 +401,12 @@ function OrdersContent() {
           codes.push({
             id: `menu-transaction-${purchase.id}`,
             type: 'menu',
-            itemName: `Orden de menú - ${purchase.menuPurchases.length} ítem${purchase.menuPurchases.length > 1 ? 's' : ''}`,
+            itemName: `Orden de menú - ${purchase.menuPurchases?.length || 0} ítem${(purchase.menuPurchases?.length || 0) > 1 ? 's' : ''}`,
             clubName: purchase.club?.name || 'Club desconocido',
             date: purchase.date || purchase.createdAt,
             qrCode: menuQr,
-            isUsed: purchase.menuPurchases.some((mp: any) => mp.isUsed) || false,
-            usedAt: purchase.menuPurchases.find((mp: any) => mp.usedAt)?.usedAt,
+            isUsed: purchase.menuPurchases?.some((mp) => mp.isUsed) || false,
+            usedAt: purchase.menuPurchases?.find((mp) => mp.usedAt)?.usedAt,
             expiresAt: purchase.date
               ? (() => {
                   // Handle date-only strings (YYYY-MM-DD) from database
@@ -376,7 +455,7 @@ function OrdersContent() {
     }
   };
 
-  const showQRCodes = async (purchase: any) => {
+  const showQRCodes = async (purchase: Purchase) => {
     setSelectedPurchase(purchase);
     setQrLoading(true);
 
@@ -397,7 +476,7 @@ function OrdersContent() {
     setQrCodes([]);
   };
 
-  const openQRViewer = (qrCode: any) => {
+  const openQRViewer = (qrCode: QRCode) => {
     // Only open viewer for real QR items, not missing ones
     if (qrCode.type !== 'menu-missing') {
       setSelectedQR(qrCode);
@@ -447,7 +526,6 @@ function OrdersContent() {
     if (expiresAt.match(/^\d{4}-\d{2}-\d{2}$/)) {
       // This is a date-only string, parse it as local date to avoid timezone issues
       const [year, month, day] = expiresAt.split('-').map(Number);
-      const eventDate = new Date(year, month - 1, day);
       
       // Create event end time (1 AM next day in Colombia timezone)
       const eventEndDate = new Date(year, month - 1, day + 1, 1, 0, 0);
@@ -541,7 +619,7 @@ function OrdersContent() {
                   <div className="p-4 flex items-center cursor-pointer hover:border-nl-secondary/60 transition-colors" onClick={() => toggleExpanded(purchase.id)}>
                     <div className="relative w-16 h-16 shrink-0 rounded-2xl overflow-hidden ring-2 ring-nl-secondary/60 bg-black/20 mr-4">
                       {purchase.club?.profileImageUrl ? (
-                        <img src={purchase.club.profileImageUrl} alt={purchase.club.name} className="absolute inset-0 w-full h-full object-cover" />
+                        <Image src={purchase.club.profileImageUrl} alt={purchase.club.name} fill className="object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#6B3FA0]/20 to-black/60">
                           <span className="text-white/80 font-semibold text-lg">{purchase.club?.name?.charAt(0) || 'C'}</span>
@@ -573,7 +651,7 @@ function OrdersContent() {
                           <h4 className="text-sm font-semibold text-white/90 mb-3">Items comprados</h4>
                           <div className="space-y-3">
                             {/* Tickets */}
-                            {purchase.ticketPurchases?.map((tp: any, index: number) => {
+                            {purchase.ticketPurchases?.map((tp, index: number) => {
                               const includes = hasIncluded(tp);
                               return (
                                 <div key={`ticket-${index}`} className="flex items-center text-sm">
@@ -601,7 +679,7 @@ function OrdersContent() {
                             })}
 
                             {/* Menu items */}
-                            {purchase.menuPurchases?.map((mp: any, index: number) => (
+                            {purchase.menuPurchases?.map((mp, index: number) => (
                               <div key={`menu-${index}`} className="flex items-center text-sm">
                                 <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-3 bg-white/10 text-white/80">
                                   Menú
@@ -739,12 +817,16 @@ function OrdersContent() {
                         </div>
                       ) : (
                         <div className="inline-block p-3 bg-white rounded-lg cursor-pointer hover:scale-105 transition-transform" onClick={() => openQRViewer(qrCode)}>
-                          <img
-                            src={qrCode.qrCode}
-                            alt={`QR Code for ${qrCode.itemName}`}
-                            className="w-24 h-24 mx-auto"
-                            style={{ imageRendering: 'pixelated' as any }}
-                          />
+                          {qrCode.qrCode && (
+                            <Image
+                              src={qrCode.qrCode}
+                              alt={`QR Code for ${qrCode.itemName}`}
+                              width={96}
+                              height={96}
+                              className="mx-auto"
+                              style={{ imageRendering: 'pixelated' }}
+                            />
+                          )}
                         </div>
                       )}
                     </div>
@@ -765,7 +847,7 @@ function OrdersContent() {
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">No disponible</span>
                         ) : qrCode.isUsed ? (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Usado</span>
-                        ) : isExpired(qrCode.expiresAt) ? (
+                        ) : qrCode.expiresAt && isExpired(qrCode.expiresAt) ? (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Expirado</span>
                         ) : (
                           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Activo</span>
@@ -773,7 +855,7 @@ function OrdersContent() {
                       </div>
 
                       <h4 className="text-sm font-semibold text-white/90">{qrCode.itemName}</h4>
-                      <p className="text-xs text-white/70">Fecha: {formatDate(qrCode.date)}</p>
+                      <p className="text-xs text-white/70">Fecha: {formatDate(qrCode.date || '')}</p>
 
                       {/* Missing QR reason */}
                       {qrCode.type === 'menu-missing' && qrCode.reason && (
@@ -792,7 +874,7 @@ function OrdersContent() {
                       )}
 
                       {qrCode.isUsed && qrCode.usedAt && <p className="text-xs text-green-400">Usado el: {formatDate(qrCode.usedAt)}</p>}
-                      {!qrCode.isUsed && isExpired(qrCode.expiresAt) && <p className="text-xs text-red-400">Expirado el: {formatDate(qrCode.expiresAt)}</p>}
+                      {!qrCode.isUsed && qrCode.expiresAt && isExpired(qrCode.expiresAt) && <p className="text-xs text-red-400">Expirado el: {formatDate(qrCode.expiresAt)}</p>}
                     </div>
                   </div>
                 ))}
@@ -821,12 +903,16 @@ function OrdersContent() {
               <div className="text-center">
                 <div className="inline-block bg-white rounded-2xl shadow-2xl border-2 border-white p-6">
                   <div className="max-w-[min(90vw,90vh)] max-h-[90vh]">
-                    <img
-                      src={selectedQR.qrCode}
-                      alt={`QR Code for ${selectedQR.itemName}`}
-                      className="w-full h-auto object-contain"
-                      style={{ imageRendering: 'pixelated' as any }}
-                    />
+                    {selectedQR.qrCode && (
+                      <Image
+                        src={selectedQR.qrCode}
+                        alt={`QR Code for ${selectedQR.itemName}`}
+                        width={800}
+                        height={800}
+                        className="w-full h-auto object-contain"
+                        style={{ imageRendering: 'pixelated' }}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -837,7 +923,7 @@ function OrdersContent() {
                     </span>
                     {selectedQR.isUsed ? (
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-500/20 text-green-300 border border-green-500/30">Usado</span>
-                    ) : isExpired(selectedQR.expiresAt) ? (
+                    ) : selectedQR.expiresAt && isExpired(selectedQR.expiresAt) ? (
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-500/20 text-red-300 border border-red-500/30">Expirado</span>
                     ) : (
                       <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">Activo</span>
@@ -845,9 +931,9 @@ function OrdersContent() {
                   </div>
 
                   <h4 className="text-lg font-bold text-white leading-tight">{selectedQR.itemName}</h4>
-                  <p className="text-sm text-white/80">Fecha: {formatDate(selectedQR.date)}</p>
+                  <p className="text-sm text-white/80">Fecha: {formatDate(selectedQR.date || '')}</p>
                   {selectedQR.isUsed && selectedQR.usedAt && <p className="text-sm text-green-400 font-medium">Usado el: {formatDate(selectedQR.usedAt)}</p>}
-                  {!selectedQR.isUsed && isExpired(selectedQR.expiresAt) && <p className="text-sm text-red-400 font-medium">Expirado el: {formatDate(selectedQR.expiresAt)}</p>}
+                  {!selectedQR.isUsed && selectedQR.expiresAt && isExpired(selectedQR.expiresAt) && <p className="text-sm text-red-400 font-medium">Expirado el: {formatDate(selectedQR.expiresAt)}</p>}
                 </div>
               </div>
             </div>

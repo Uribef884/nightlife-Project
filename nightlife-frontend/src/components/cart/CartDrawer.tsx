@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCartStore } from '@/stores/cart.store';
 import Cart from './Cart';
 
 interface CartDrawerProps {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { resolveAdCTA } from "@/services/ads.service";
 import { createSecureExternalLink, isExternalUrl } from "@/utils/validateExternalUrl";
@@ -60,7 +61,7 @@ function goToReservasFromHref(href: string) {
 
     // For different page non-date changes, navigate normally
     return false;
-  } catch (error) {
+  } catch {
     return false;
   }
 }
@@ -168,11 +169,13 @@ export function AdLightbox({
 
         {/* Poster image */}
         <div className="w-full h-full flex items-center justify-center p-4">
-          <img
+          <Image
             src={ad.imageUrl}
             alt="Anuncio"
+            width={800}
+            height={600}
             className="max-h-full max-w-full object-contain rounded-xl shadow-2xl"
-            loading="lazy"
+            priority={false}
           />
         </div>
 

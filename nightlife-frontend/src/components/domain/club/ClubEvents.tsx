@@ -3,12 +3,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 import type { EventDTO, TicketDTO } from "@/services/clubs.service";
 import TicketCard from "./TicketCard";
 import { useCartContext } from "@/contexts/CartContext";
 import { useClubProtection } from "@/hooks/useClubProtection";
 import { CartClubChangeModal } from "@/components/cart";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 /* ---------------- small helpers ---------------- */
 type AvailableForDay = {
@@ -16,9 +16,42 @@ type AvailableForDay = {
   event: { id: string; name: string; bannerUrl: string | null; availableDate: string } | null;
   eventTickets: TicketDTO[];
 };
+
+// Local types for type safety
+type EventWithAny = {
+  id?: string | number;
+  name?: string;
+  bannerUrl?: string | null;
+  availableDate?: string;
+  date?: string;
+  eventDate?: string;
+  description?: string;
+  details?: string;
+  about?: string;
+  summary?: string;
+  openHours?: { open: string; close: string };
+  tickets?: TicketDTO[];
+  includesMenuItem?: boolean;
+  includedMenuItems?: unknown[];
+};
+
+type TicketWithAny = {
+  id?: string | number;
+  includesMenuItem?: boolean;
+  includedMenuItems?: unknown[];
+  dynamicPrice?: string | number;
+  price?: string | number;
+  dynamicPricingEnabled?: boolean;
+  event?: {
+    id?: string;
+    name?: string;
+    description?: string | null;
+    openHours?: { open: string; close: string };
+  };
+};
 const isCombo = (t: TicketDTO) => {
-  const anyT = t as any;
-  return anyT?.includesMenuItem === true || (Array.isArray(anyT?.includedMenuItems) && anyT.includedMenuItems.length > 0);
+  const ticketWithAny = t as TicketWithAny;
+  return ticketWithAny?.includesMenuItem === true || (Array.isArray(ticketWithAny?.includedMenuItems) && ticketWithAny.includedMenuItems.length > 0);
 };
 function normalizeISO(raw?: string | null): string | null {
   if (!raw) return null;
@@ -34,14 +67,18 @@ function formatDateLabel(iso: string) {
     return iso;
   }
 }
-function getEventDate(e: any): string | null {
-  const raw: unknown = e?.availableDate ?? e?.date ?? e?.eventDate ?? null;
+function getEventDate(e: unknown): string | null {
+  if (!e || typeof e !== 'object') return null;
+  const eventWithAny = e as EventWithAny;
+  const raw: unknown = eventWithAny?.availableDate ?? eventWithAny?.date ?? eventWithAny?.eventDate ?? null;
   if (!raw || typeof raw !== "string") return null;
   const m = raw.match(/^\d{4}-\d{2}-\d{2}/);
   return m ? m[0] : null;
 }
-function getEventDesc(e: any): string {
-  return e?.description ?? e?.details ?? e?.about ?? e?.summary ?? "";
+function getEventDesc(e: unknown): string {
+  if (!e || typeof e !== 'object') return "";
+  const eventWithAny = e as EventWithAny;
+  return eventWithAny?.description ?? eventWithAny?.details ?? eventWithAny?.about ?? eventWithAny?.summary ?? "";
 }
 function smoothScrollTo(el: HTMLElement, offset = 80) {
   try {
@@ -87,19 +124,18 @@ function ExpandedEventTickets({
     return price === 0;
   }), [tickets]);
 
-  const secRefs = {
-    combos: useRef<HTMLDivElement | null>(null),
-    general: useRef<HTMLDivElement | null>(null),
-    gratis: useRef<HTMLDivElement | null>(null),
-  };
+  const combosRef = useRef<HTMLDivElement | null>(null);
+  const generalRef = useRef<HTMLDivElement | null>(null);
+  const gratisRef = useRef<HTMLDivElement | null>(null);
+  
   const chips = useMemo(
     () =>
       [
-        { key: "combos" as const, label: "Combos", ref: secRefs.combos, count: combos.length, id: `event-sec-combos-${evKey}` },
-        { key: "general" as const, label: "General", ref: secRefs.general, count: general.length, id: `event-sec-general-${evKey}` },
-        { key: "gratis" as const, label: "Gratis", ref: secRefs.gratis, count: gratis.length, id: `event-sec-gratis-${evKey}` },
+        { key: "combos" as const, label: "Combos", ref: combosRef, count: combos.length, id: `event-sec-combos-${evKey}` },
+        { key: "general" as const, label: "General", ref: generalRef, count: general.length, id: `event-sec-general-${evKey}` },
+        { key: "gratis" as const, label: "Gratis", ref: gratisRef, count: gratis.length, id: `event-sec-gratis-${evKey}` },
       ].filter((c) => c.count > 0),
-    [combos.length, general.length, gratis.length, evKey]
+    [combos.length, general.length, gratis.length, evKey, combosRef, generalRef, gratisRef]
   );
 
   const [activeChip, setActiveChip] = useState<"combos" | "general" | "gratis" | null>(chips[0]?.key ?? null);
@@ -207,9 +243,10 @@ function ExpandedEventTickets({
       )}
 
       {/* Sections */}
-      <Section id={`event-sec-combos-${evKey}`} title="Combos:" count={combos.length} innerRef={secRefs.combos}>
+      <Section id={`event-sec-combos-${evKey}`} title="Combos:" count={combos.length} innerRef={combosRef}>
         {combos.map((t) => {
-          const inCart = qtyByTicketId.get((t as any).id);
+          const ticketWithAny = t as TicketWithAny;
+          const inCart = qtyByTicketId.get(String(ticketWithAny.id));
           // Attach event data to ticket for grace period logic
           const ticketWithEvent = eventData ? {
             ...t,
@@ -223,9 +260,8 @@ function ExpandedEventTickets({
           } : t;
           return (
             <TicketCard
-              key={(t as any).id}
+              key={String(ticketWithAny.id)}
               ticket={ticketWithEvent}
-              bannerUrl={null}
               qtyInCart={inCart?.qty ?? 0}
               itemId={inCart?.itemId ?? ""}
               onAdd={() => onAdd(t)}
@@ -237,9 +273,10 @@ function ExpandedEventTickets({
         })}
       </Section>
 
-      <Section id={`event-sec-general-${evKey}`} title="General:" count={general.length} innerRef={secRefs.general}>
+      <Section id={`event-sec-general-${evKey}`} title="General:" count={general.length} innerRef={generalRef}>
         {general.map((t) => {
-          const inCart = qtyByTicketId.get((t as any).id);
+          const ticketWithAny = t as TicketWithAny;
+          const inCart = qtyByTicketId.get(String(ticketWithAny.id));
           // Attach event data to ticket for grace period logic
           const ticketWithEvent = eventData ? {
             ...t,
@@ -253,9 +290,8 @@ function ExpandedEventTickets({
           } : t;
           return (
             <TicketCard
-              key={(t as any).id}
+              key={String(ticketWithAny.id)}
               ticket={ticketWithEvent}
-              bannerUrl={null}
               qtyInCart={inCart?.qty ?? 0}
               itemId={inCart?.itemId ?? ""}
               onAdd={() => onAdd(t)}
@@ -267,9 +303,10 @@ function ExpandedEventTickets({
         })}
       </Section>
 
-      <Section id={`event-sec-gratis-${evKey}`} title="Gratis:" count={gratis.length} innerRef={secRefs.gratis}>
+      <Section id={`event-sec-gratis-${evKey}`} title="Gratis:" count={gratis.length} innerRef={gratisRef}>
         {gratis.map((t) => {
-          const inCart = qtyByTicketId.get((t as any).id);
+          const ticketWithAny = t as TicketWithAny;
+          const inCart = qtyByTicketId.get(String(ticketWithAny.id));
           // Attach event data to ticket for grace period logic
           const ticketWithEvent = eventData ? {
             ...t,
@@ -283,9 +320,8 @@ function ExpandedEventTickets({
           } : t;
           return (
             <TicketCard
-              key={(t as any).id}
+              key={String(ticketWithAny.id)}
               ticket={ticketWithEvent}
-              bannerUrl={null}
               qtyInCart={inCart?.qty ?? 0}
               itemId={inCart?.itemId ?? ""}
               onAdd={() => onAdd(t)}
@@ -331,15 +367,12 @@ export function ClubEvents({
     items: cartItems,
     addTicket,
     updateItemQuantity,
-    removeItem,
-    isLoading: cartLoading,
-    error: cartError
+    removeItem
   } = useCartContext();
 
   // Club protection (only if clubId is provided)
   const clubProtection = useClubProtection({
     clubId: clubId || '',
-    clubName: clubName || "este club",
   });
 
 
@@ -353,16 +386,13 @@ export function ClubEvents({
     return map;
   }, [cartItems]);
 
-  // Check if there are menu items in cart (for clearing confirmation)
-  const hasMenuItems = useMemo(() => {
-    return cartItems.some(item => item.itemType === 'menu');
-  }, [cartItems]);
 
   // Index events by date
   const byDate = useMemo(() => {
     const m = new Map<string, EventDTO>();
     for (const e of events ?? []) {
-      const d = normalizeISO((e as any).availableDate ?? (e as any).date);
+      const eventWithAny = e as EventWithAny;
+      const d = normalizeISO(eventWithAny.availableDate ?? eventWithAny.date);
       if (d) m.set(d, e);
     }
     return m;
@@ -372,14 +402,14 @@ export function ClubEvents({
   const selectedEvent = useMemo(() => {
     if (!dayHasEvent || !selectedDate) return null;
     const eventFromAvailable = available?.event;
-    const eventFromByDate = byDate.get(selectedDate) as any;
+    const eventFromByDate = byDate.get(selectedDate) as EventWithAny;
     const event = eventFromAvailable ?? eventFromByDate ?? null;
     
     // Ensure the event has openHours from the original event data
     if (event && eventFromByDate) {
       return {
         ...event,
-        openHours: eventFromByDate.openHours || event.openHours
+        openHours: eventFromByDate.openHours || (event as EventWithAny).openHours
       };
     }
     
@@ -389,7 +419,7 @@ export function ClubEvents({
   const eventTickets: TicketDTO[] = useMemo(() => {
     if (available?.eventTickets?.length) return available.eventTickets;
     if (!selectedDate) return [];
-    const ev = byDate.get(selectedDate) as any;
+    const ev = byDate.get(selectedDate) as EventWithAny;
     return Array.isArray(ev?.tickets) ? (ev.tickets as TicketDTO[]) : [];
   }, [available, byDate, selectedDate]);
 
@@ -413,7 +443,8 @@ export function ClubEvents({
     if (!selectedDate) return;
     
     const addFunction = async () => {
-      await addTicket((ticket as any).id, selectedDate, 1);
+      const ticketWithAny = ticket as TicketWithAny;
+      await addTicket(String(ticketWithAny.id), selectedDate, 1);
     };
     
     // Use club protection if clubId is provided
@@ -443,9 +474,10 @@ export function ClubEvents({
 
       <div className="grid gap-6 lg:grid-cols-2">
         {events.map((ev) => {
-          const evId = String((ev as any).id);
+          const eventWithAny = ev as EventWithAny;
+          const evId = String(eventWithAny.id);
           const evDate = getEventDate(ev);
-          const isSelected = !!selectedEvent && evDate && getEventDate(selectedEvent as any) === evDate;
+          const isSelected = !!selectedEvent && evDate && getEventDate(selectedEvent) === evDate;
           const desc = getEventDesc(ev);
           const looksLong = (desc?.length ?? 0) > 180;
           const expanded = !!descExpanded[evId];
@@ -457,26 +489,26 @@ export function ClubEvents({
                 <div className="flex items-start gap-4">
                   <button
                     type="button"
-                    onClick={() => (ev as any).bannerUrl && setLightbox({ open: true, url: (ev as any).bannerUrl })}
+                    onClick={() => eventWithAny.bannerUrl && setLightbox({ open: true, url: eventWithAny.bannerUrl })}
                     className="relative h-28 w-28 sm:h-32 sm:w-32 overflow-hidden rounded-xl shrink-0 ring-1 ring-white/10 hover:ring-white/20 transition-all duration-200"
-                    aria-label={`Ver imagen del evento ${(ev as any).name ?? ""}`}
+                    aria-label={`Ver imagen del evento ${eventWithAny.name ?? ""}`}
                   >
-                    <img src={(ev as any).bannerUrl ?? ""} alt={(ev as any).name ?? ""} className="absolute inset-0 h-full w-full object-cover" />
+                    <Image src={eventWithAny.bannerUrl ?? ""} alt={eventWithAny.name ?? ""} fill className="object-cover" />
                   </button>
 
                   <div className="flex-1 min-w-0">
-                    <div className="text-white font-semibold text-lg leading-tight">{(ev as any).name}</div>
+                    <div className="text-white font-semibold text-lg leading-tight">{eventWithAny.name}</div>
                     {evDate && (
                       <div className="text-white/70 text-sm font-medium mt-1">
                         {formatDateLabel(evDate)}
                       </div>
                     )}
-                    {(ev as any).openHours && (
+                    {eventWithAny.openHours && (
                       <div className="mt-2 flex items-center gap-2 text-white/70 text-sm">
                         <svg className="h-4 w-4 text-white/60 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span>{(ev as any).openHours.open} - {(ev as any).openHours.close}</span>
+                        <span>{eventWithAny.openHours.open} - {eventWithAny.openHours.close}</span>
                       </div>
                     )}
 
@@ -561,7 +593,6 @@ export function ClubEvents({
                       </div>
 
                       {(() => {
-                        const combos = eventTickets.filter(isCombo);
                         const hasAny = eventTickets.length > 0;
                         return hasAny ? (
                           <ExpandedEventTickets
@@ -571,8 +602,8 @@ export function ClubEvents({
                             onAdd={handleAdd}
                             onChangeQty={handleChangeQty}
                             eventData={selectedEvent ? {
-                              availableDate: selectedEvent.availableDate,
-                              openHours: selectedEvent.openHours
+                              availableDate: selectedEvent.availableDate || '',
+                              openHours: (selectedEvent as EventWithAny).openHours
                             } : undefined}
                           />
                         ) : (
@@ -595,7 +626,7 @@ export function ClubEvents({
           onClick={() => setLightbox({ open: false, url: null })}
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center"
         >
-          <img src={lightbox.url ?? ""} alt="" className="max-h-[90vh] max-w-[90vw] object-contain" />
+          <Image src={lightbox.url ?? ""} alt="" width={800} height={600} className="max-h-[90vh] max-w-[90vw] object-contain" />
         </button>
       )}
 

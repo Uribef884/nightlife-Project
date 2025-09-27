@@ -22,15 +22,28 @@ export type AvailableTicketsResponse = {
 };
 
 /* ───────────────────────── Sorting helpers (priority ASC) ────────────────── */
+// Local type for ticket objects with priority fields
+type TicketWithPriority = {
+  priority?: unknown;
+  rank?: unknown;
+  order?: unknown;
+  ordering?: unknown;
+  sort?: unknown;
+  weight?: unknown;
+  name?: unknown;
+  id?: unknown;
+};
+
 /** Accept common aliases for priority so different backends still sort correctly. */
-function priorityOf(t: any): number | null {
+function priorityOf(t: unknown): number | null {
+  const ticket = t as TicketWithPriority;
   const candidates = [
-    t?.priority,
-    t?.rank,
-    t?.order,
-    t?.ordering,
-    t?.sort,
-    t?.weight,
+    ticket?.priority,
+    ticket?.rank,
+    ticket?.order,
+    ticket?.ordering,
+    ticket?.sort,
+    ticket?.weight,
   ];
   for (const c of candidates) {
     const n = Number(c);
@@ -46,7 +59,7 @@ const collator = new Intl.Collator(["es", "en"], {
 
 /** Sort by: priority ASC (missing = bottom), then name A→Z, then id A→Z. */
 function sortTicketsByPriorityThenName(list: TicketDTO[]) {
-  list.sort((a: any, b: any) => {
+  list.sort((a: TicketDTO, b: TicketDTO) => {
     const pa = priorityOf(a);
     const pb = priorityOf(b);
     const ap = pa === null ? Number.POSITIVE_INFINITY : pa;
@@ -54,10 +67,10 @@ function sortTicketsByPriorityThenName(list: TicketDTO[]) {
 
     if (ap !== bp) return ap - bp;
 
-    const byName = collator.compare((a.name ?? "") as string, (b.name ?? "") as string);
+    const byName = collator.compare(a.name ?? "", b.name ?? "");
     if (byName !== 0) return byName;
 
-    return String((a.id ?? "") as string).localeCompare(String((b.id ?? "") as string));
+    return String(a.id ?? "").localeCompare(String(b.id ?? ""));
   });
 }
 
@@ -93,46 +106,91 @@ export async function getAvailableTicketsForDate(
 
   const data = (await res.json()) as AvailableTicketsResponse;
 
+  // Local types for backend ticket data
+  type BackendTicket = {
+    id: unknown;
+    name: unknown;
+    description?: unknown;
+    price: unknown;
+    dynamicPricingEnabled?: unknown;
+    dynamicPrice?: unknown;
+    maxPerPerson?: unknown;
+    priority?: unknown;
+    isActive?: unknown;
+    includesMenuItem?: unknown;
+    availableDate?: unknown;
+    quantity?: unknown;
+    originalQuantity?: unknown;
+    category: unknown;
+    clubId: unknown;
+    eventId?: unknown;
+    event?: {
+      id: unknown;
+      name: unknown;
+      description?: unknown;
+      availableDate: unknown;
+      openHours?: {
+        open: unknown;
+        close: unknown;
+      };
+    };
+    includedMenuItems?: BackendIncludedMenuItem[];
+  };
+
+  type BackendIncludedMenuItem = {
+    id: unknown;
+    menuItemId: unknown;
+    menuItemName: unknown;
+    variantId?: unknown;
+    variantName?: unknown;
+    quantity?: unknown;
+  };
+
   // Normalize arrays defensively and ensure includedMenuItems are properly structured
-  const normalizeTicket = (ticket: any): TicketDTO => ({
-    id: String(ticket.id),
-    name: String(ticket.name),
-    description: ticket.description ?? null,
-    price: ticket.price,
-    dynamicPricingEnabled: !!ticket.dynamicPricingEnabled,
-    dynamicPrice: ticket.dynamicPrice,
-    maxPerPerson: Number(ticket.maxPerPerson ?? 0),
-    priority: Number(ticket.priority ?? 0),
-    isActive: !!ticket.isActive,
-    includesMenuItem: !!ticket.includesMenuItem,
-    availableDate: ticket.availableDate ?? null,
-    quantity: ticket.quantity ?? null,
-    originalQuantity: ticket.originalQuantity ?? null,
-    category: ticket.category,
-    clubId: String(ticket.clubId),
-    eventId: ticket.eventId ?? null,
-    // Add event data if available
-    event: ticket.event ? {
-      id: String(ticket.event.id),
-      name: String(ticket.event.name),
-      description: ticket.event.description ?? null,
-      availableDate: String(ticket.event.availableDate),
-      openHours: ticket.event.openHours ? {
-        open: String(ticket.event.openHours.open),
-        close: String(ticket.event.openHours.close)
-      } : undefined
-    } : null,
-    includedMenuItems: Array.isArray(ticket.includedMenuItems)
-      ? ticket.includedMenuItems.map((inc: any) => ({
-          id: String(inc.id),
-          menuItemId: String(inc.menuItemId),
-          menuItemName: String(inc.menuItemName),
-          variantId: inc.variantId ?? null,
-          variantName: inc.variantName ?? null,
-          quantity: Number(inc.quantity ?? 1),
-        }))
-      : [],
-  });
+  const normalizeTicket = (ticket: unknown): TicketDTO => {
+    const t = ticket as BackendTicket;
+    return {
+      id: String(t.id),
+      name: String(t.name),
+      description: t.description ? String(t.description) : null,
+      price: typeof t.price === 'number' ? t.price : 
+             typeof t.price === 'string' ? t.price : 0,
+      dynamicPricingEnabled: !!t.dynamicPricingEnabled,
+      dynamicPrice: typeof t.dynamicPrice === 'number' ? t.dynamicPrice :
+                   typeof t.dynamicPrice === 'string' ? t.dynamicPrice : undefined,
+      maxPerPerson: Number(t.maxPerPerson ?? 0),
+      priority: Number(t.priority ?? 0),
+      isActive: !!t.isActive,
+      includesMenuItem: !!t.includesMenuItem,
+      availableDate: t.availableDate ? String(t.availableDate) : null,
+      quantity: typeof t.quantity === 'number' ? t.quantity : null,
+      originalQuantity: typeof t.originalQuantity === 'number' ? t.originalQuantity : null,
+      category: t.category as "general" | "event" | "free",
+      clubId: String(t.clubId),
+      eventId: t.eventId ? String(t.eventId) : null,
+      // Add event data if available
+      event: t.event ? {
+        id: String(t.event.id),
+        name: String(t.event.name),
+        description: t.event.description ? String(t.event.description) : null,
+        availableDate: String(t.event.availableDate),
+        openHours: t.event.openHours ? {
+          open: String(t.event.openHours.open),
+          close: String(t.event.openHours.close)
+        } : undefined
+      } : null,
+      includedMenuItems: Array.isArray(t.includedMenuItems)
+        ? t.includedMenuItems.map((inc: BackendIncludedMenuItem) => ({
+            id: String(inc.id),
+            menuItemId: String(inc.menuItemId),
+            menuItemName: String(inc.menuItemName),
+            variantId: inc.variantId ? String(inc.variantId) : null,
+            variantName: inc.variantName ? String(inc.variantName) : null,
+            quantity: Number(inc.quantity ?? 1),
+          }))
+        : [],
+    };
+  };
 
   data.eventTickets = Array.isArray(data.eventTickets) ? data.eventTickets.map(normalizeTicket) : [];
   data.generalTickets = Array.isArray(data.generalTickets) ? data.generalTickets.map(normalizeTicket) : [];

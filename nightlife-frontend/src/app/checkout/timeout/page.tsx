@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/stores/auth.store';
 import { useCartStore } from '@/stores/cart.store';
-import { getCheckoutSummary, clearCheckoutSummary } from '@/utils/checkoutSummary';
+import { getCheckoutSummary } from '@/utils/checkoutSummary';
 
 // Simple transaction details type
 type TransactionDetails = {
@@ -25,7 +25,7 @@ type TransactionDetails = {
   paymentMethod: string;
   email: string;
   purchaseDate: string;
-  items: any[];
+  items: unknown[];
   subtotal: number;
   serviceFee: number;
   discounts: number;
@@ -41,7 +41,7 @@ export default function PaymentTimeoutPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useUser();
-  const { clearCart, items, getCartSummary } = useCartStore();
+  const { } = useCartStore();
 
   const [transactionDetails, setTransactionDetails] = useState<TransactionDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -178,7 +178,7 @@ export default function PaymentTimeoutPage() {
         hour: '2-digit',
         minute: '2-digit'
       });
-    } catch (error) {
+    } catch {
       return 'Fecha inválida';
     }
   };
@@ -191,10 +191,6 @@ export default function PaymentTimeoutPage() {
     router.push('/');
   };
 
-  const handleContactSupport = () => {
-    // This could open a support modal or redirect to support page
-    console.log('Contact support clicked');
-  };
 
   if (loading) {
     return (

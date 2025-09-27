@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { CartItem as CartItemType } from '@/services/cart.service';
 import { useCartStore } from '@/stores/cart.store';
 import { Minus, Plus, Trash2 } from 'lucide-react';
@@ -185,14 +186,15 @@ export default function CartItem({
           {item.itemType === 'menu' && (
             <div className="flex-shrink-0">
               <div className="relative w-12 h-12 rounded-lg overflow-hidden ring-1 ring-white/10">
-                <img
+                <Image
                   src={
                     getItemImage() && isValidImageUrl(getItemImage()!) && !imageError
                       ? getItemImage()!
                       : PLACEHOLDER_DATA_URL
                   }
                   alt={getItemName()}
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
                   onError={() => setImageError(true)}
                   onLoad={() => setImageError(false)}
                 />
@@ -318,14 +320,15 @@ export default function CartItem({
         <div className="flex-shrink-0">
           {item.itemType === 'menu' && (
             <div className="relative w-16 h-16 rounded-lg overflow-hidden ring-1 ring-white/10">
-              <img
+              <Image
                 src={
                   getItemImage() && isValidImageUrl(getItemImage()!) && !imageError
                     ? getItemImage()!
                     : PLACEHOLDER_DATA_URL
                 }
                 alt={getItemName()}
-                className="w-full h-full object-cover"
+                fill
+                className="object-cover"
                 onError={() => setImageError(true)}
                 onLoad={() => setImageError(false)}
               />

@@ -2,9 +2,10 @@
 
 import { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useAuthStore } from '@/stores/auth.store';
+import type { User } from '@/services/domain/auth.service';
 
 interface AuthContextType {
-  user: any;
+  user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 }

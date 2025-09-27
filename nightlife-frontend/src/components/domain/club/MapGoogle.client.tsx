@@ -1,7 +1,8 @@
 // src/components/domain/club/MapGoogle.client.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Script from "next/script";
 
 type Props = {
@@ -55,15 +56,17 @@ function useDebugEnabled(debugProp?: boolean) {
 
   useEffect(() => {
     const w = window as unknown as Record<string, unknown>;
-    w.nlMapDebug = w.nlMapDebug || {};
-    w.nlMapDebug.toggle = () => setDebug((d: boolean) => {
-      try { window.localStorage.setItem("nl.mapDebug", (!d) ? "1" : "0"); } catch {}
-      return !d;
-    });
-    w.nlMapDebug.on  = () => { try { window.localStorage.setItem("nl.mapDebug", "1"); } catch {}; setDebug(true); };
-    w.nlMapDebug.off = () => { try { window.localStorage.setItem("nl.mapDebug", "0"); } catch {}; setDebug(false); };
+    const debugObj = {
+      toggle: () => setDebug((d: boolean) => {
+        try { window.localStorage.setItem("nl.mapDebug", (!d) ? "1" : "0"); } catch {}
+        return !d;
+      }),
+      on: () => { try { window.localStorage.setItem("nl.mapDebug", "1"); } catch {}; setDebug(true); },
+      off: () => { try { window.localStorage.setItem("nl.mapDebug", "0"); } catch {}; setDebug(false); }
+    };
+    w.nlMapDebug = debugObj;
 
-    const onKey = (e: KeyboardEvent) => { if (e.altKey && (e.key === "d" || e.key === "D")) w.nlMapDebug.toggle(); };
+    const onKey = (e: KeyboardEvent) => { if (e.altKey && (e.key === "d" || e.key === "D")) debugObj.toggle(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -88,6 +91,16 @@ function sanitizeGoogleMapsUrl(u?: string | null): string | null {
   } catch { return null; }
 }
 
+/* ────────────────────── Minimal Google Maps typings (no any) ─────────────── */
+type GMapsNS = {
+  LatLng: new (lat: number, lng: number) => unknown;
+  Map: new (el: HTMLElement, opts: Record<string, unknown>) => unknown;
+  Marker: new (opts: Record<string, unknown>) => unknown;
+  Point: new (x: number, y: number) => unknown;
+  Size: new (w: number, h: number) => unknown;
+};
+type GoogleNS = { maps?: GMapsNS };
+
 /* ───────────────────────────────── Component ─────────────────────────────── */
 export default function MapGoogle({
   latitude,
@@ -110,12 +123,12 @@ export default function MapGoogle({
   const [events, setEvents] = useState<DebugEvent[]>([]);
   const [fallbackReason, setFallbackReason] = useState<string>("");
   const t0Ref = useRef<number>(now()); // mount time
-  function log(tag: string, data?: Record<string, any>) {
+  const log = useCallback((tag: string, data?: Record<string, unknown>) => {
     if (!debug) return;
     const entry = { t: now() - t0Ref.current, tag, data };
     setEvents((evts) => [...evts.slice(-11), entry]);
     console.log(`[MapDebug] ${tag}`, data || "");
-  }
+  }, [debug, t0Ref]);
 
   // ── Coords / center ────────────────────────────────────────────────────────
   const hasCoords =
@@ -176,7 +189,7 @@ export default function MapGoogle({
     setTimeout(() => mark("boot_timeout"), 0);
 
     const boot = () => {
-      const g = (globalThis as unknown as Record<string, unknown>).google;
+      const g = (globalThis as unknown as { google?: GoogleNS }).google;
       if (!g?.maps) {
         if (tries++ < 30 && !cancelled) { setTimeout(boot, 100); }
         return;
@@ -210,9 +223,9 @@ export default function MapGoogle({
           keyboardShortcuts: false,
           scrollwheel: true,
           disableDoubleClickZoom: true,
-        });
+        } as Record<string, unknown>);
 
-        new g.maps.Marker({ position: pos, map, title: center.label, icon });
+        new g.maps.Marker({ position: pos, map, title: center.label, icon } as Record<string, unknown>);
 
         mark("map_ready");
         const durScript = measure("script_download", "script_wait_start", "script_ready");
@@ -229,7 +242,7 @@ export default function MapGoogle({
 
     boot();
     return () => { cancelled = true; clearTimeout(watchdog); };
-  }, [scriptReady, key, center.lat, center.lng, zoom, reloadNonce, log]);
+  }, [scriptReady, key, center.lat, center.lng, center.label, zoom, reloadNonce, status, log]);
 
   /* ── Static IMAGE fallbacks (no iframes) ─────────────────────────────────── */
   const googleStaticUrl = useMemo(() => {
@@ -297,10 +310,11 @@ export default function MapGoogle({
 
       {/* Static image fallback (Google Static → OSM). Also used until JS boots when status === 'fallback' */}
       {status === "fallback" && (
-        <img
+        <Image
           src={useOsmImage || !googleStaticUrl ? osmStaticUrl : googleStaticUrl}
           alt={`Mapa estático: ${center.label}`}
-          className="absolute inset-0 h-full w-full object-cover rounded-xl pointer-events-none select-none ring-1 ring-white/10"
+          fill
+          className="object-cover rounded-xl pointer-events-none select-none ring-1 ring-white/10"
           referrerPolicy="no-referrer"
           draggable={false}
           onLoad={() => {

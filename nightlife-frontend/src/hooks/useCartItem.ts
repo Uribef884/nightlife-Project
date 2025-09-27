@@ -9,7 +9,6 @@ interface UseCartItemProps {
   date?: string;
   maxPerPerson?: number;
   clubId?: string;
-  clubName?: string;
 }
 
 interface CartItemInfo {
@@ -27,14 +26,12 @@ export function useCartItem({
   date,
   maxPerPerson = Infinity,
   clubId,
-  clubName,
 }: UseCartItemProps) {
   const { items, addTicket, addMenuItem, updateItemQuantity, removeItem } = useCartContext();
   
   // Club protection (only if clubId is provided)
   const clubProtection = useClubProtection({ 
-    clubId: clubId || '', 
-    clubName 
+    clubId: clubId || ''
   });
 
   // Find the cart item for this specific item

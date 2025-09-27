@@ -21,9 +21,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   // Allow external access for mobile testing
-  experimental: {
-    serverComponentsExternalPackages: [],
-  },
+  serverExternalPackages: [],
   
   images: {
     remotePatterns: [

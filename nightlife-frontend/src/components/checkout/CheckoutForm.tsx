@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { useCartStore } from '@/stores/cart.store';
 import { useUser } from '@/stores/auth.store';
 import { 
@@ -11,12 +12,60 @@ import {
   WompiAcceptanceTokens,
   PSEBank 
 } from '@/services/checkout.service';
-import { CreditCard, Smartphone, Building2, ArrowRight, AlertCircle, CheckCircle, ShoppingCart, Ticket, Utensils } from 'lucide-react';
+import { CreditCard, Smartphone, Building2, ArrowRight, ShoppingCart, Ticket, Utensils } from 'lucide-react';
 import CartItem from '@/components/cart/CartItem';
 import { storeCheckoutSummary } from '@/utils/checkoutSummary';
 
+// Local type definitions for checkout results
+type CheckoutResult = {
+  transactionId?: string;
+  wompiStatus?: string;
+  status?: string;
+  totalPaid?: number;
+  actualTotal?: number;
+  subtotal?: number;
+  serviceFee?: number;
+  discounts?: number;
+  declineReason?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  timeoutDuration?: number;
+  requiresRedirect?: boolean;
+  redirectUrl?: string;
+  error?: string;
+};
+
+type PaymentData = {
+  number?: string;
+  cvc?: string;
+  exp_month?: string;
+  exp_year?: string;
+  card_holder?: string;
+  phone_number?: string;
+  user_type?: number;
+  user_legal_id_type?: string;
+  user_legal_id?: string;
+  financial_institution_code?: string;
+  payment_description?: string;
+  full_name?: string;
+  ecommerce_url?: string;
+};
+
+type CustomerData = {
+  phone_number?: string;
+  full_name?: string;
+};
+
+type WindowCartSummaries = {
+  unified?: {
+    total?: number;
+    operationalCosts?: number;
+    actualTotal?: number;
+  };
+};
+
 interface CheckoutFormProps {
-  onSuccess?: (result: any) => void;
+  onSuccess?: (result: CheckoutResult) => void;
   onError?: (error: string) => void;
   className?: string;
 }
@@ -24,11 +73,7 @@ interface CheckoutFormProps {
 export default function CheckoutForm({ onSuccess, onError, className = '' }: CheckoutFormProps) {
   const { 
     getCartSummary, 
-    items, 
-    getTicketItems, 
-    getMenuItems, 
-    getItemsByDate,
-    clearCart
+    items
   } = useCartStore();
   const user = useUser();
   
@@ -86,10 +131,31 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   
   // Cart summary - calculate on-the-fly to prevent re-render issues
   
-  // Load initial data
-  useEffect(() => {
-    loadInitialData();
-  }, []); // Only run once on mount
+
+  // ---- FIX: memoize and declare loadPSEBanks before effects that depend on it ----
+  const loadPSEBanks = useCallback(async () => {
+    setLoadingBanks(true);
+    try {
+      const response = await getPSEBanks();
+      if (response.success && response.data) {
+        // Filter out instruction/placeholder entries
+        const validBanks = response.data.filter(bank => 
+          bank.financial_institution_name && 
+          bank.financial_institution_code &&
+          !bank.financial_institution_name.toLowerCase().includes('seleccione') &&
+          !bank.financial_institution_name.toLowerCase().includes('selecciona') &&
+          !bank.financial_institution_name.toLowerCase().includes('continuación') &&
+          !bank.financial_institution_name.toLowerCase().includes('siguiente')
+        );
+        setPseBanks(validBanks);
+      }
+    } catch (error) {
+      console.error('Error loading PSE banks:', error);
+    } finally {
+      setLoadingBanks(false);
+    }
+  }, []);
+  // -------------------------------------------------------------------------------
 
   // Load PSE banks when cart becomes available and PSE is selected
   useEffect(() => {
@@ -100,7 +166,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
         loadPSEBanks();
       }
     }
-  }, [items, paymentMethod, pseBanks.length]); // Watch for cart changes and payment method
+  }, [items, paymentMethod, pseBanks.length, getCartSummary, loadPSEBanks]); // include loadPSEBanks
   
   // Pre-fill email when user is logged in
   useEffect(() => {
@@ -128,7 +194,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
     }
   }, [paymentMethod]);
   
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       // Load acceptance tokens immediately - they're needed for the UI regardless of cart state
       if (!acceptanceTokens) {
@@ -169,45 +235,27 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
       console.error('Error loading initial data:', error);
       onError?.('Error loading checkout data');
     }
-  };
+  }, [acceptanceTokens, onError, getCartSummary, paymentMethod, loadPSEBanks]);
   
-  const loadPSEBanks = async () => {
-    setLoadingBanks(true);
-    try {
-      const response = await getPSEBanks();
-      if (response.success && response.data) {
-        // Filter out instruction/placeholder entries
-        const validBanks = response.data.filter(bank => 
-          bank.financial_institution_name && 
-          bank.financial_institution_code &&
-          !bank.financial_institution_name.toLowerCase().includes('seleccione') &&
-          !bank.financial_institution_name.toLowerCase().includes('selecciona') &&
-          !bank.financial_institution_name.toLowerCase().includes('continuación') &&
-          !bank.financial_institution_name.toLowerCase().includes('siguiente')
-        );
-        setPseBanks(validBanks);
-      }
-    } catch (error) {
-      console.error('Error loading PSE banks:', error);
-    } finally {
-      setLoadingBanks(false);
-    }
-  };
+  // Load initial data
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
   
   // Load PSE banks when PSE is selected
   useEffect(() => {
     if (paymentMethod === 'PSE' && pseBanks.length === 0) {
       loadPSEBanks();
     }
-  }, [paymentMethod]);
+  }, [paymentMethod, pseBanks.length, loadPSEBanks]); // include loadPSEBanks
   
-  const formatPrice = (price: number) => {
+  const formatPrice = useCallback((price: number) => {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
       currency: 'COP',
       minimumFractionDigits: 0,
     }).format(price);
-  };
+  }, []);
 
   const formatPhoneNumber = (value: string) => {
     // Remove all non-numeric characters
@@ -281,14 +329,14 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
     return `${limitedCardNumber.slice(0, 4)} ${limitedCardNumber.slice(4, 8)} ${limitedCardNumber.slice(8, 12)} ${limitedCardNumber.slice(12)}`;
   };
 
-  const getUniqueDates = () => {
+  const getUniqueDates = useCallback(() => {
     const dates = new Set(items.map(item => item.date));
     return Array.from(dates).sort();
-  };
+  }, [items]);
 
-  const getItemsByTypeAndDate = (itemType: 'ticket' | 'menu', date: string) => {
+  const getItemsByTypeAndDate = useCallback((itemType: 'ticket' | 'menu', date: string) => {
     return items.filter(item => item.itemType === itemType && item.date === date);
-  };
+  }, [items]);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -396,8 +444,8 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
     setIsSubmitting(true);
     
     try {
-      let paymentData: any = {};
-      let customerData: any = {};
+      let paymentData: PaymentData = {};
+      let customerData: CustomerData = {};
       
       // For free checkout, use minimal payment data
       if (isFreeCheckout) {
@@ -589,7 +637,6 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
     }
   };
   
-  const isFormValid = email && (isFreeCheckout || (acceptanceAccepted && personalDataAccepted)) && isPaymentMethodValid();
   
   // Helper functions to determine if fields should show red highlighting
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -660,7 +707,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
             <div className="space-y-2">
               {(() => {
                 // Check for unified summary in window (like CartSummary does)
-                const windowSummaries = typeof window !== 'undefined' ? (window as any).cartSummaries : null;
+                const windowSummaries = typeof window !== 'undefined' ? (window as unknown as { cartSummaries?: WindowCartSummaries }).cartSummaries : null;
                 const unifiedSummary = windowSummaries?.unified;
                 
                 if (unifiedSummary) {
@@ -696,7 +743,7 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
         )}
       </div>
     );
-  }, [items, isFreeCheckout]); // Remove currentCartSummary dependency to prevent double re-renders
+  }, [isFreeCheckout, currentCartSummary, getUniqueDates, getItemsByTypeAndDate, formatPrice]); // Add all required dependencies
   
 
   
@@ -713,12 +760,12 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
           <p className="text-slate-300 mb-6">
             No tienes artículos en tu carrito. Agrega algunos productos para continuar con la compra.
           </p>
-          <a
+          <Link
             href="/"
             className="inline-flex items-center px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-lg transition-colors"
           >
             Explorar Clubes
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -995,7 +1042,6 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
                      value={formatPhoneNumber(nequiData.phone_number)}
                      onChange={(e) => {
                        if (isSubmitting) return;
-                       const formatted = formatPhoneNumber(e.target.value);
                        const rawNumber = e.target.value.replace(/\D/g, '');
                        setNequiData({ ...nequiData, phone_number: rawNumber });
                        setHasTriedSubmit(false); // Clear validation state when user types

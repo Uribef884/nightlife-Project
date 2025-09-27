@@ -6,6 +6,27 @@ import { ArrowLeft } from 'lucide-react';
 import CheckoutForm from '@/components/checkout/CheckoutForm';
 import { useCartStore } from '@/stores/cart.store';
 
+// Type definition for checkout result
+type CheckoutResult = {
+  wompiStatus?: string;
+  status?: string;
+  transactionId?: string;
+  totalPaid?: number;
+  actualTotal?: number;
+  isFreeCheckout?: boolean;
+  paymentMethod?: string;
+  email?: string;
+  items?: unknown[];
+  subtotal?: number;
+  serviceFee?: number;
+  discounts?: number;
+  total?: number;
+  declineReason?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  timeoutDuration?: number;
+};
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { clearCart } = useCartStore();
@@ -14,9 +35,11 @@ export default function CheckoutPage() {
     router.back();
   };
 
-  const handleCheckoutSuccess = async (result: any) => {
+  const handleCheckoutSuccess = async (result: unknown) => {
+    // Type narrowing for checkout result
+    const data = result as Partial<CheckoutResult>;
     // Check the transaction status and redirect accordingly
-    const status = result.wompiStatus || result.status || 'APPROVED';
+    const status = data.wompiStatus || data.status || 'APPROVED';
     
     
     // If status is PENDING, redirect to processing page instead of success
@@ -28,21 +51,21 @@ export default function CheckoutPage() {
     switch (status.toUpperCase()) {
       case 'APPROVED':
         // Store transaction details for success page (in case they weren't already stored)
-        if (result.transactionId) {
+        if (data.transactionId) {
               const transactionDetails = {
-                transactionId: result.transactionId,
+                transactionId: data.transactionId,
                 status: 'APPROVED',
-                totalPaid: result.totalPaid || result.actualTotal || 0,
-                isFreeCheckout: result.isFreeCheckout || false,
-                paymentMethod: result.paymentMethod || (result.isFreeCheckout ? 'FREE' : 'CARD'),
-            email: result.email || '',
+                totalPaid: data.totalPaid || data.actualTotal || 0,
+                isFreeCheckout: data.isFreeCheckout || false,
+                paymentMethod: data.paymentMethod || (data.isFreeCheckout ? 'FREE' : 'CARD'),
+            email: data.email || '',
             purchaseDate: new Date().toISOString(),
-            items: result.items || [],
-            subtotal: result.subtotal || 0,
-            serviceFee: result.serviceFee || 0,
-            discounts: result.discounts || 0,
-            total: result.total || result.actualTotal || 0,
-            actualTotal: result.actualTotal || 0
+            items: data.items || [],
+            subtotal: data.subtotal || 0,
+            serviceFee: data.serviceFee || 0,
+            discounts: data.discounts || 0,
+            total: data.total || data.actualTotal || 0,
+            actualTotal: data.actualTotal || 0
           };
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
@@ -60,21 +83,21 @@ export default function CheckoutPage() {
         break;
       case 'DECLINED':
         // Store transaction details for declined page
-        if (result.transactionId) {
+        if (data.transactionId) {
           const transactionDetails = {
-            transactionId: result.transactionId,
+            transactionId: data.transactionId,
             status: 'DECLINED',
-            totalPaid: result.totalPaid || 0,
-            isFreeCheckout: result.isFreeCheckout || false,
-            paymentMethod: result.paymentMethod || (result.isFreeCheckout ? 'FREE' : 'CARD'),
-            email: result.email || '',
+            totalPaid: data.totalPaid || 0,
+            isFreeCheckout: data.isFreeCheckout || false,
+            paymentMethod: data.paymentMethod || (data.isFreeCheckout ? 'FREE' : 'CARD'),
+            email: data.email || '',
             purchaseDate: new Date().toISOString(),
-            items: result.items || [],
-            subtotal: result.subtotal || 0,
-            serviceFee: result.serviceFee || 0,
-            discounts: result.discounts || 0,
-            total: result.total || 0,
-            declineReason: result.declineReason || 'Fondos insuficientes'
+            items: data.items || [],
+            subtotal: data.subtotal || 0,
+            serviceFee: data.serviceFee || 0,
+            discounts: data.discounts || 0,
+            total: data.total || 0,
+            declineReason: data.declineReason || 'Fondos insuficientes'
           };
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
@@ -83,22 +106,22 @@ export default function CheckoutPage() {
         break;
       case 'ERROR':
         // Store transaction details for error page
-        if (result.transactionId) {
+        if (data.transactionId) {
           const transactionDetails = {
-            transactionId: result.transactionId,
+            transactionId: data.transactionId,
             status: 'ERROR',
-            totalPaid: result.totalPaid || 0,
-            isFreeCheckout: result.isFreeCheckout || false,
-            paymentMethod: result.paymentMethod || (result.isFreeCheckout ? 'FREE' : 'CARD'),
-            email: result.email || '',
+            totalPaid: data.totalPaid || 0,
+            isFreeCheckout: data.isFreeCheckout || false,
+            paymentMethod: data.paymentMethod || (data.isFreeCheckout ? 'FREE' : 'CARD'),
+            email: data.email || '',
             purchaseDate: new Date().toISOString(),
-            items: result.items || [],
-            subtotal: result.subtotal || 0,
-            serviceFee: result.serviceFee || 0,
-            discounts: result.discounts || 0,
-            total: result.total || 0,
-            errorCode: result.errorCode || 'PAYMENT_ERROR',
-            errorMessage: result.errorMessage || 'Error interno del procesador de pagos'
+            items: data.items || [],
+            subtotal: data.subtotal || 0,
+            serviceFee: data.serviceFee || 0,
+            discounts: data.discounts || 0,
+            total: data.total || 0,
+            errorCode: data.errorCode || 'PAYMENT_ERROR',
+            errorMessage: data.errorMessage || 'Error interno del procesador de pagos'
           };
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
@@ -107,21 +130,21 @@ export default function CheckoutPage() {
         break;
       case 'TIMEOUT':
         // Store transaction details for timeout page
-        if (result.transactionId) {
+        if (data.transactionId) {
           const transactionDetails = {
-            transactionId: result.transactionId,
+            transactionId: data.transactionId,
             status: 'TIMEOUT',
-            totalPaid: result.totalPaid || 0,
-            isFreeCheckout: result.isFreeCheckout || false,
-            paymentMethod: result.paymentMethod || (result.isFreeCheckout ? 'FREE' : 'CARD'),
-            email: result.email || '',
+            totalPaid: data.totalPaid || 0,
+            isFreeCheckout: data.isFreeCheckout || false,
+            paymentMethod: data.paymentMethod || (data.isFreeCheckout ? 'FREE' : 'CARD'),
+            email: data.email || '',
             purchaseDate: new Date().toISOString(),
-            items: result.items || [],
-            subtotal: result.subtotal || 0,
-            serviceFee: result.serviceFee || 0,
-            discounts: result.discounts || 0,
-            total: result.total || 0,
-            timeoutDuration: result.timeoutDuration || 30
+            items: data.items || [],
+            subtotal: data.subtotal || 0,
+            serviceFee: data.serviceFee || 0,
+            discounts: data.discounts || 0,
+            total: data.total || 0,
+            timeoutDuration: data.timeoutDuration || 30
           };
           localStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));
           sessionStorage.setItem('lastTransactionDetails', JSON.stringify(transactionDetails));

@@ -4,20 +4,29 @@ import React from 'react';
 import { useCartStore } from '@/stores/cart.store';
 import { ShoppingCart } from 'lucide-react';
 
+// Local type definitions for window cart summaries
+type UnifiedSummary = {
+  total?: number;
+  operationalCosts?: number;
+  actualTotal?: number;
+};
+
+type WindowCartSummaries = {
+  unified?: UnifiedSummary;
+};
+
 interface CartSummaryProps {
   onCheckout?: () => void;
   showCheckoutButton?: boolean;
   className?: string;
-  isFreeCheckout?: boolean;
 }
 
 export default function CartSummary({ 
   onCheckout, 
   showCheckoutButton = true,
-  className = '',
-  isFreeCheckout = false
+  className = ''
 }: CartSummaryProps) {
-  const { getCartSummary, isLoading, error } = useCartStore();
+  const { getCartSummary, isLoading } = useCartStore();
   const summary = getCartSummary();
 
   const formatPrice = (price: number) => {
@@ -61,7 +70,7 @@ export default function CartSummary({
         {/* Use unified cart summary from backend if available (exactly like test-cart.html) */}
         {(() => {
           // Check for unified summary in window (like test-cart.html does)
-          const windowSummaries = typeof window !== 'undefined' ? (window as any).cartSummaries : null;
+          const windowSummaries = typeof window !== 'undefined' ? (window as unknown as { cartSummaries?: WindowCartSummaries }).cartSummaries : null;
           const unifiedSummary = windowSummaries?.unified;
           
           if (unifiedSummary) {

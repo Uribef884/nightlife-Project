@@ -3,7 +3,6 @@ import { useCartStore } from '@/stores/cart.store';
 
 interface UseClubProtectionProps {
   clubId: string;
-  clubName?: string;
 }
 
 interface ClubProtectionResult {
@@ -15,13 +14,12 @@ interface ClubProtectionResult {
 }
 
 export function useClubProtection({ 
-  clubId, 
-  clubName = "este club" 
+  clubId
 }: UseClubProtectionProps): ClubProtectionResult {
   const [showClubModal, setShowClubModal] = useState(false);
   const [currentClubName, setCurrentClubName] = useState<string>();
   
-  const { items, checkClubConflict, clearCart, getClubName } = useCartStore();
+  const { checkClubConflict, clearCart, getClubName } = useCartStore();
 
   const handleAddWithProtection = useCallback(async (addFunction: () => Promise<void>) => {
     const { hasConflict, currentClubId } = checkClubConflict(clubId);

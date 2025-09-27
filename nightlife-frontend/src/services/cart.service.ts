@@ -68,7 +68,13 @@ export type CartItem = {
   unitPrice: number;
   subtotal: number;
   dynamicPrice?: number;
-  priceBreakdown?: any;
+  priceBreakdown?: {
+    basePrice?: number;
+    dynamicAdjustment?: number;
+    discounts?: number;
+    fees?: number;
+    [key: string]: unknown;
+  };
 };
 
 export type CartSummary = {
@@ -78,6 +84,19 @@ export type CartSummary = {
   totalSubtotal: number;
   itemCount: number;
   clubId: string;
+};
+
+// Local types for API responses
+type AddItemResponse = {
+  success: boolean;
+  item?: CartItem;
+  message?: string;
+};
+
+type UpdateQuantityResponse = {
+  success: boolean;
+  item?: CartItem;
+  message?: string;
 };
 
 const JSON_HEADERS = {
@@ -104,7 +123,7 @@ function assertOk(resp: Response, label: string) {
 }
 
 /** POST /unified-cart/add - Add ticket to cart */
-export async function addTicketToCart(body: AddTicketBody) {
+export async function addTicketToCart(body: AddTicketBody): Promise<AddItemResponse> {
   const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/add"), {
     method: "POST",
     headers: JSON_HEADERS,
@@ -112,11 +131,22 @@ export async function addTicketToCart(body: AddTicketBody) {
     body: JSON.stringify(body),
   });
   assertOk(resp, "addTicketToCart");
-  return parseJsonSafe<any>(resp);
+  const data: unknown = await parseJsonSafe<unknown>(resp);
+  
+  if (!data || typeof data !== 'object') {
+    return { success: false, message: 'Invalid response format' };
+  }
+  
+  const response = data as Partial<AddItemResponse>;
+  return {
+    success: Boolean(response.success),
+    item: response.item,
+    message: response.message
+  };
 }
 
 /** POST /unified-cart/add - Add menu item to cart */
-export async function addMenuItemToCart(body: AddMenuBody) {
+export async function addMenuItemToCart(body: AddMenuBody): Promise<AddItemResponse> {
   const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/add"), {
     method: "POST",
     headers: JSON_HEADERS,
@@ -124,11 +154,22 @@ export async function addMenuItemToCart(body: AddMenuBody) {
     body: JSON.stringify(body),
   });
   assertOk(resp, "addMenuItemToCart");
-  return parseJsonSafe<any>(resp);
+  const data: unknown = await parseJsonSafe<unknown>(resp);
+  
+  if (!data || typeof data !== 'object') {
+    return { success: false, message: 'Invalid response format' };
+  }
+  
+  const response = data as Partial<AddItemResponse>;
+  return {
+    success: Boolean(response.success),
+    item: response.item,
+    message: response.message
+  };
 }
 
 /** PATCH /unified-cart/line/:id - Update item quantity */
-export async function updateCartItemQuantity(itemId: Id, quantity: number) {
+export async function updateCartItemQuantity(itemId: Id, quantity: number): Promise<UpdateQuantityResponse> {
   const resp = await fetch(joinUrl(API_BASE_CSR, `/unified-cart/line/${encodeURIComponent(itemId)}`), {
     method: "PATCH",
     headers: JSON_HEADERS,
@@ -136,7 +177,18 @@ export async function updateCartItemQuantity(itemId: Id, quantity: number) {
     body: JSON.stringify({ quantity }),
   });
   assertOk(resp, "updateCartItemQuantity");
-  return parseJsonSafe<any>(resp);
+  const data: unknown = await parseJsonSafe<unknown>(resp);
+  
+  if (!data || typeof data !== 'object') {
+    return { success: false, message: 'Invalid response format' };
+  }
+  
+  const response = data as Partial<UpdateQuantityResponse>;
+  return {
+    success: Boolean(response.success),
+    item: response.item,
+    message: response.message
+  };
 }
 
 /** DELETE /unified-cart/line/:id - Remove item from cart */

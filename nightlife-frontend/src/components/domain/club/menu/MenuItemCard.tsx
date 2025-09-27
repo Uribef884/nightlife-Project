@@ -3,10 +3,24 @@
 
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 import type { MenuItemDTO, MenuVariantDTO } from "@/services/menu.service";
 import { VariantRow } from "./VariantRow";
 
-function toNum(v: any): number | null {
+// Local types for type safety
+type MenuItemWithAny = {
+  price?: string | number;
+  dynamicPrice?: string | number;
+  maxPerPerson?: number;
+};
+
+type MenuVariantWithAny = {
+  id?: string | number;
+  isActive?: boolean;
+};
+
+function toNum(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -80,8 +94,9 @@ export function MenuItemCard({
   const hasVariants = !!item.hasVariants && (item.variants?.length ?? 0) > 0;
 
   // Dynamic pricing logic - same as TicketCard
-  const basePrice = toNum((item as any).price);
-  const dynamicPrice = toNum((item as any)?.dynamicPrice);
+  const itemWithAny = item as MenuItemWithAny;
+  const basePrice = toNum(itemWithAny.price);
+  const dynamicPrice = toNum(itemWithAny.dynamicPrice);
   
   // Only show dynamic pricing if date is selected and valid
   const showDynamicPricing = selectedDate && item.dynamicPricingEnabled;
@@ -96,7 +111,7 @@ export function MenuItemCard({
     ? basePrice 
     : null;
 
-  const maxPerPerson = (item as any)?.maxPerPerson as number | null | undefined;
+  const maxPerPerson = itemWithAny.maxPerPerson;
   const maxAllowed = useMemo(() => {
     const fromMax = maxPerPerson == null ? Infinity : Math.max(0, maxPerPerson);
     return fromMax;
@@ -118,13 +133,11 @@ export function MenuItemCard({
       <div className="flex gap-3">
         {/* Thumbnail: always rendered; swaps to data-URL on error */}
         <div className="relative h-14 w-14 overflow-hidden rounded-md ring-1 ring-white/10 shrink-0">
-          <img
+          <Image
             src={initialImageSrc}
             alt={item.name || "Menu item"}
-            className="absolute inset-0 h-full w-full object-cover"
-            loading="lazy"
-            decoding="async"
-            draggable={false}
+            fill
+            className="object-cover"
             onError={(e) => {
               const img = e.currentTarget as HTMLImageElement;
               if (img.src !== PLACEHOLDER_DATA_URL) {
@@ -306,9 +319,13 @@ export function MenuItemCard({
           >
             <div className="border-t border-white/10 pt-2">
               {(item.variants ?? [])
-                .filter((v) => (v as any)?.isActive !== false)
+                .filter((v) => {
+                  const variantWithAny = v as MenuVariantWithAny;
+                  return variantWithAny.isActive !== false;
+                })
                 .map((variant) => {
-                  const vId = String((variant as any).id);
+                  const variantWithAny = variant as MenuVariantWithAny;
+                  const vId = String(variantWithAny.id);
                   const inCart = qtyByVariantId.get(vId);
                   return (
                     <VariantRow

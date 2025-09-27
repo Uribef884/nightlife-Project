@@ -26,7 +26,7 @@ export interface RegisterResponse {
 
 export interface AuthError {
   error: string;
-  details?: any;
+  details?: unknown;
 }
 
 // Validation schemas
@@ -67,6 +67,50 @@ export const changePasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
+// Response validation schemas
+export const userSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  role: z.enum(['user', 'clubowner', 'waiter', 'bouncer', 'admin']),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  avatar: z.string().optional(),
+  isOAuthUser: z.boolean().optional(),
+  clubId: z.string().nullable().optional(),
+  clubIds: z.array(z.string()).nullable().optional(),
+});
+
+export const loginResponseSchema = z.object({
+  message: z.string(),
+  user: userSchema,
+});
+
+export const registerResponseSchema = z.object({
+  message: z.string(),
+  token: z.string(),
+  user: userSchema,
+});
+
+export const messageResponseSchema = z.object({
+  message: z.string(),
+});
+
+export const selectClubResponseSchema = z.object({
+  token: z.string(),
+  user: userSchema,
+});
+
+export const availableClubsResponseSchema = z.object({
+  clubs: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    city: z.string().optional(),
+    profileImageUrl: z.string().optional(),
+    isActive: z.boolean(),
+  })),
+});
+
 import { ApiService } from '../shared/api.service';
 
 class AuthService extends ApiService {
@@ -76,26 +120,29 @@ class AuthService extends ApiService {
 
   // Login
   async login(email: string, password: string): Promise<LoginResponse> {
-    return this.post<LoginResponse>('/auth/login', { email, password });
+    const response = await this.post<unknown>('/auth/login', { email, password });
+    return loginResponseSchema.parse(response);
   }
 
   // Register
   async register(email: string, password: string): Promise<RegisterResponse> {
-    return this.post<RegisterResponse>('/auth/register', { email, password });
+    const response = await this.post<unknown>('/auth/register', { email, password });
+    return registerResponseSchema.parse(response);
   }
 
   // Logout
   async logout(): Promise<{ message: string }> {
-    return this.post<{ message: string }>('/auth/logout');
+    const response = await this.post<unknown>('/auth/logout');
+    return messageResponseSchema.parse(response);
   }
 
   // Forgot password
   async forgotPassword(email: string): Promise<{ message: string }> {
     console.log('📤 [AUTH_SERVICE] Calling forgot password API for:', email);
     try {
-      const response = await this.post<{ message: string }>('/auth/forgot-password', { email });
+      const response = await this.post<unknown>('/auth/forgot-password', { email });
       console.log('✅ [AUTH_SERVICE] Forgot password API call successful:', response);
-      return response;
+      return messageResponseSchema.parse(response);
     } catch (error) {
       console.error('❌ [AUTH_SERVICE] Forgot password API call failed:', error);
       throw error;
@@ -104,21 +151,24 @@ class AuthService extends ApiService {
 
   // Reset password
   async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
-    return this.post<{ message: string }>('/auth/reset-password', { token, newPassword });
+    const response = await this.post<unknown>('/auth/reset-password', { token, newPassword });
+    return messageResponseSchema.parse(response);
   }
 
   // Change password
   async changePassword(oldPassword: string, newPassword: string, confirmPassword: string): Promise<{ message: string }> {
-    return this.post<{ message: string }>('/auth/change-password', { 
+    const response = await this.post<unknown>('/auth/change-password', { 
       oldPassword, 
       newPassword, 
       confirmPassword 
     });
+    return messageResponseSchema.parse(response);
   }
 
   // Get current user
   async getCurrentUser(): Promise<User> {
-    return this.get<User>('/auth/me');
+    const response = await this.get<unknown>('/auth/me');
+    return userSchema.parse(response);
   }
 
   // Google OAuth
@@ -183,14 +233,15 @@ class AuthService extends ApiService {
   }> }> {
     const response = await this.request('/auth/available-clubs', {
       method: 'GET',
-    });
+    }) as Response;
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as { error?: string };
       throw new Error(error.error || 'Failed to fetch available clubs');
     }
 
-    return response.json();
+    const data = await response.json() as unknown;
+    return availableClubsResponseSchema.parse(data);
   }
 
   // Select a club as active
@@ -201,14 +252,15 @@ class AuthService extends ApiService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ clubId }),
-    });
+    }) as Response;
 
     if (!response.ok) {
-      const error = await response.json();
+      const error = await response.json() as { error?: string };
       throw new Error(error.error || 'Failed to select club');
     }
 
-    return response.json();
+    const data = await response.json() as unknown;
+    return selectClubResponseSchema.parse(data);
   }
 }
 

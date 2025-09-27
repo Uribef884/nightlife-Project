@@ -1,6 +1,7 @@
+// src/app/checkout/error/page.tsx
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertTriangle,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/stores/auth.store';
 import { useCartStore } from '@/stores/cart.store';
-import { getCheckoutSummary, clearCheckoutSummary } from '@/utils/checkoutSummary';
+import { getCheckoutSummary } from '@/utils/checkoutSummary';
 
 // Simple transaction details type
 type TransactionDetails = {
@@ -25,7 +26,7 @@ type TransactionDetails = {
   paymentMethod: string;
   email: string;
   purchaseDate: string;
-  items: any[];
+  items: unknown[];
   subtotal: number;
   serviceFee: number;
   discounts: number;
@@ -38,10 +39,34 @@ type TransactionDetails = {
 };
 
 export default function PaymentErrorPage() {
+  // Wrap the content that calls useSearchParams in Suspense per Next.js requirement
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+          <div className="text-center text-slate-300">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-orange-500/20 rounded-full mb-6 animate-spin">
+              <svg className="animate-spin h-10 w-10 text-orange-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Cargando detalles de la transacción...</h2>
+            <p>Por favor, espera un momento.</p>
+          </div>
+        </div>
+      }
+    >
+      <PaymentErrorContent />
+    </Suspense>
+  );
+}
+
+function PaymentErrorContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useUser();
-  const { clearCart, items, getCartSummary } = useCartStore();
+  const { } = useCartStore();
 
   const [transactionDetails, setTransactionDetails] = useState<TransactionDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,7 +91,7 @@ export default function PaymentErrorPage() {
       const data = await response.json();
       
       // Use simple transaction details mapping
-      const transactionDetails: TransactionDetails = {
+      const mapped: TransactionDetails = {
         transactionId: data.transactionId || transactionId,
         status: data.status || 'ERROR',
         totalPaid: data.totalPaid || data.amount || 0,
@@ -86,7 +111,7 @@ export default function PaymentErrorPage() {
         errorMessage: data.errorMessage,
       };
       
-      setTransactionDetails(transactionDetails);
+      setTransactionDetails(mapped);
     } catch (err) {
       console.error('Error fetching transaction details:', err);
       setError('Error al cargar los detalles de la transacción');
@@ -104,13 +129,11 @@ export default function PaymentErrorPage() {
         
         // Use checkout summary for correct pricing, fallback to stored details
         const checkoutSummary = getCheckoutSummary();
-        let transactionDetails = details;
+        let nextDetails = details;
         
         if (checkoutSummary) {
-          console.log('PaymentError: Using checkout summary for correct pricing', checkoutSummary);
-          
           // Update transaction details with correct pricing from checkout summary
-          transactionDetails = {
+          nextDetails = {
             ...details,
             subtotal: checkoutSummary.total,
             serviceFee: checkoutSummary.operationalCosts,
@@ -118,14 +141,9 @@ export default function PaymentErrorPage() {
             totalPaid: checkoutSummary.actualTotal,
             actualTotal: checkoutSummary.actualTotal,
           };
-        } else {
-          console.log('PaymentError: No checkout summary available, using stored details');
         }
         
-        // Log transaction details for debugging
-        
-        // Successfully parsed transaction details
-        setTransactionDetails(transactionDetails);
+        setTransactionDetails(nextDetails);
         // Clear the stored details after displaying (with delay to prevent race conditions)
         setTimeout(() => {
           localStorage.removeItem('lastTransactionDetails');
@@ -170,7 +188,7 @@ export default function PaymentErrorPage() {
         hour: '2-digit',
         minute: '2-digit'
       });
-    } catch (error) {
+    } catch {
       return 'Fecha inválida';
     }
   };
@@ -181,11 +199,6 @@ export default function PaymentErrorPage() {
 
   const handleViewCart = () => {
     router.push('/');
-  };
-
-  const handleContactSupport = () => {
-    // This could open a support modal or redirect to support page
-    console.log('Contact support clicked');
   };
 
   if (loading) {
@@ -324,7 +337,6 @@ export default function PaymentErrorPage() {
             <p className="text-orange-200 text-sm">
               <strong>Error:</strong> {getErrorMessage(transactionDetails.errorCode, transactionDetails.errorMessage)}
             </p>
-
           </div>
 
           {!transactionDetails.isFreeCheckout && (

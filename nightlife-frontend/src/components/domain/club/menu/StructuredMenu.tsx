@@ -46,13 +46,11 @@ export function StructuredMenu({
     addMenuItem,
     updateItemQuantity,
     removeItem,
-    isLoading: cartLoading,
   } = useCartContext();
 
   // Club protection
   const clubProtection = useClubProtection({
     clubId,
-    clubName: clubName || "este club",
   });
 
 
@@ -126,7 +124,7 @@ export function StructuredMenu({
           // Fallback to old service when no date is selected
           const data = await getMenuItemsForClubCSR(clubId, selectedDate);
           if (!alive) return;
-          setItems((data ?? []).filter((it) => (it as any)?.isActive !== false));
+          setItems((data ?? []).filter((it) => it.isActive !== false));
           setEventInfo(null);
         }
       } finally {
@@ -412,9 +410,6 @@ export function StructuredMenu({
             {c.items.map((item) => {
               const itemId = String(item.id);
               const itemInCart = qtyByItemId.get(itemId);
-              const variants: MenuVariantDTO[] | undefined = item.variants;
-
-              const hasVariants = Array.isArray(variants) && variants.length > 0;
 
               return (
                 <div key={itemId} className="rounded-2xl">

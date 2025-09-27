@@ -52,12 +52,12 @@ export default function ForgotPasswordForm() {
             Check your email
           </h3>
           <p className="mt-2 text-sm text-green-700 dark:text-green-300">
-            We've sent a password reset link to your email address. Please check your inbox and follow the instructions to reset your password.
+            We&apos;ve sent a password reset link to your email address. Please check your inbox and follow the instructions to reset your password.
           </p>
         </div>
         
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          Didn't receive the email?{' '}
+          Didn&apos;t receive the email?{' '}
           <button
             onClick={() => setIsSubmitted(false)}
             className="text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"

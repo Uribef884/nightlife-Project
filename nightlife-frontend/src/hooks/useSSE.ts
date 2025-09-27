@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface SSEEvent {
   type: 'connected' | 'status_update' | 'error' | 'ping';
@@ -6,11 +6,11 @@ interface SSEEvent {
   transactionId?: string;
   timestamp?: string;
   error?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 interface UseSSEOptions {
-  onStatusUpdate?: (status: string, data: any) => void;
+  onStatusUpdate?: (status: string, data: SSEEvent) => void;
   onError?: (error: string) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
@@ -27,7 +27,7 @@ export const useSSE = (transactionId: string | null, options: UseSSEOptions = {}
 
   const { onStatusUpdate, onError, onConnect, onDisconnect } = options;
 
-  const connect = () => {
+  const connect = useCallback(() => {
     if (!transactionId || eventSourceRef.current) return;
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -43,7 +43,7 @@ export const useSSE = (transactionId: string | null, options: UseSSEOptions = {}
       onConnect?.();
     };
 
-    eventSource.onmessage = (event) => {
+    eventSource.onmessage = (event: MessageEvent) => {
       try {
         const data: SSEEvent = JSON.parse(event.data);
         setLastEvent(data);
@@ -68,12 +68,12 @@ export const useSSE = (transactionId: string | null, options: UseSSEOptions = {}
           default:
             break;
         }
-      } catch (err) {
+      } catch {
         setError('Failed to parse server message');
       }
     };
 
-    eventSource.onerror = (event) => {
+    eventSource.onerror = () => {
       setIsConnected(false);
       
       if (eventSource.readyState === EventSource.CLOSED) {
@@ -92,9 +92,9 @@ export const useSSE = (transactionId: string | null, options: UseSSEOptions = {}
         }
       }
     };
-  };
+  }, [transactionId, onConnect, onStatusUpdate, onError, onDisconnect]);
 
-  const disconnect = () => {
+  const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
@@ -106,7 +106,7 @@ export const useSSE = (transactionId: string | null, options: UseSSEOptions = {}
       setIsConnected(false);
       onDisconnect?.();
     }
-  };
+  }, [onDisconnect]);
 
   useEffect(() => {
     if (transactionId) {
@@ -116,14 +116,14 @@ export const useSSE = (transactionId: string | null, options: UseSSEOptions = {}
     return () => {
       disconnect();
     };
-  }, [transactionId]);
+  }, [transactionId, connect, disconnect]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       disconnect();
     };
-  }, []);
+  }, [disconnect]);
 
   return {
     isConnected,

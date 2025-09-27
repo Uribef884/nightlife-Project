@@ -27,6 +27,6 @@ module.exports = {
       },
     },
   },
-  // ⬇️ NEW: enable line-clamp utilities
-  plugins: [require("@tailwindcss/line-clamp")],
+  // Line-clamp utilities are now built-in since Tailwind v3.3
+  plugins: [],
 };

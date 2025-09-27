@@ -2,6 +2,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { 
+  todayInBogota, 
+  parseBogotaDate, 
+  isPastDateInBogota, 
+  isDateSelectableInBogota, 
+  startOfDayInBogota 
+} from '@/utils/timezone';
 
 /** ---------- Small date helpers ---------- */
 function daysInMonth(year: number, monthIndex: number) {
@@ -62,7 +69,6 @@ export function ClubCalendar({
   onDateChangeBlocked?: () => void;
 }) {
   /** Stabilize "today" so we don't churn state on each render */
-  const { todayInBogota, parseBogotaDate } = require('@/utils/timezone');
   const todayISO = useMemo(() => todayInBogota(), []);
   const today = useMemo(() => parseBogotaDate(todayISO), [todayISO]);
 
@@ -119,7 +125,6 @@ export function ClubCalendar({
       const iso = toISO(date);
 
       // Disable past dates and dates more than 3 weeks in the future
-      const { isPastDateInBogota, isDateSelectableInBogota } = require('@/utils/timezone');
       const isPast = isPastDateInBogota(iso);
       const isTooFarFuture = !isDateSelectableInBogota(iso);
       const inPast = isPast || isTooFarFuture;
@@ -146,9 +151,8 @@ export function ClubCalendar({
     }
 
     return { y, m, cells };
-  }, [visibleMonthStart, eventDates, freeDates, openDays, today, todayISO]);
+  }, [visibleMonthStart, eventDates, freeDates, openDays, todayISO]);
 
-  const weeks = useMemo(() => chunkWeeks(meta.cells), [meta.cells]);
 
   /** Utilities for arrow clicks */
   function monthFirstISO(year: number, monthIndex: number) {
@@ -238,7 +242,6 @@ export function ClubCalendar({
                 const prevWeekISO = toISO(prevWeek);
                 
                 // Prevent going to past weeks (before current week)
-                const { startOfDayInBogota } = require('@/utils/timezone');
                 const todayDate = startOfDayInBogota(todayISO);
                 const currentWeekStart = new Date(todayDate.toJSDate());
                 currentWeekStart.setDate(todayDate.day - todayDate.weekday + 1); // Start of current week
@@ -261,7 +264,6 @@ export function ClubCalendar({
                 ? (() => {
                     // Week mode: disable if current week is the earliest allowed week
                     const currentDate = parseISO(focusISO);
-                    const { startOfDayInBogota } = require('@/utils/timezone');
                     const todayDate = startOfDayInBogota(todayISO);
                     const currentWeekStart = new Date(todayDate.toJSDate());
                     currentWeekStart.setDate(todayDate.day - todayDate.weekday + 1);
@@ -269,7 +271,6 @@ export function ClubCalendar({
                   })()
                 : (() => {
                     // Month mode: disable if current month is the earliest allowed month
-                    const { startOfDayInBogota } = require('@/utils/timezone');
                     const todayDate = startOfDayInBogota(todayISO);
                     const currentMonthStart = new Date(todayDate.year, todayDate.month - 1, 1);
                     return visibleMonthStart.getTime() <= currentMonthStart.getTime();
@@ -289,7 +290,6 @@ export function ClubCalendar({
                 const nextWeekISO = toISO(nextWeek);
                 
                 // Check if next week is within 3 weeks limit OR has events
-                const { isDateSelectableInBogota } = require('@/utils/timezone');
                 const isNextWeekSelectable = isDateSelectableInBogota(nextWeekISO);
                 const hasEventsInNextWeek = Array.from(eventDates).some(eventDate => {
                   const eventDateObj = parseISO(eventDate);
@@ -308,7 +308,6 @@ export function ClubCalendar({
                 const nextMonth = addMonths(visibleMonthStart, 1);
                 
                 // Check if next month would exceed 3 weeks limit OR has events
-                const { isDateSelectableInBogota } = require('@/utils/timezone');
                 const nextMonthISO = toISO(nextMonth);
                 const isNextMonthSelectable = isDateSelectableInBogota(nextMonthISO);
                 const hasEventsInNextMonth = Array.from(eventDates).some(eventDate => {
@@ -331,7 +330,6 @@ export function ClubCalendar({
                     const currentDate = parseISO(focusISO);
                     const nextWeek = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
                     const nextWeekISO = toISO(nextWeek);
-                    const { isDateSelectableInBogota } = require('@/utils/timezone');
                     const isNextWeekSelectable = isDateSelectableInBogota(nextWeekISO);
                     
                     const hasEventsInNextWeek = Array.from(eventDates).some(eventDate => {
@@ -349,7 +347,6 @@ export function ClubCalendar({
                     // Month mode: disable if next month would exceed 3 weeks limit AND has no events
                     const nextMonth = addMonths(visibleMonthStart, 1);
                     const nextMonthISO = toISO(nextMonth);
-                    const { isDateSelectableInBogota } = require('@/utils/timezone');
                     const isNextMonthSelectable = isDateSelectableInBogota(nextMonthISO);
                     
                     const hasEventsInNextMonth = Array.from(eventDates).some(eventDate => {

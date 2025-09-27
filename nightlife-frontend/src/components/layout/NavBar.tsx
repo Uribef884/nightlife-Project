@@ -2,15 +2,15 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { LogIn, ShoppingCart, User } from "lucide-react";
+import { LogIn, User } from "lucide-react";
 import { ClubTabs } from "@/components/domain/club/ClubTabs";
 import { useAuthStore } from "@/stores/auth.store";
 import { saveRedirectPath } from "@/utils/redirect";
 import { scrollToTop } from "@/utils/scrollUtils";
 import { CartButton, CartDrawer } from "@/components/cart";
-import { useCart } from "@/hooks/useCart";
 
 type TabKey = "general" | "reservas" | "carta";
 
@@ -30,7 +30,6 @@ function resolveTabFromURL(): TabKey {
 export default function NavBar() {
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const { isAuthenticated } = useAuthStore();
-  const { itemCount } = useCart();
 
   const pathname = usePathname() || "/";
   const isClubRoute = pathname.startsWith("/clubs/");
@@ -83,7 +82,7 @@ export default function NavBar() {
           className="flex items-center gap-1 sm:gap-2 hover:opacity-80 transition-opacity cursor-pointer"
           aria-label="Ir al inicio"
         >
-          <img src="/icon.svg" alt="NightLife" width={40} height={40} className="pointer-events-none" />
+          <Image src="/icon.svg" alt="NightLife" width={40} height={40} className="pointer-events-none" />
           <span className="text-xl font-semibold text-slate-100 pointer-events-none">NightLife</span>
         </Link>
 

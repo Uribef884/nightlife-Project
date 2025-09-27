@@ -2,6 +2,10 @@
 // NOTE: This is a Server Component (no "use client")
 import { ClubCard } from "./ClubCard"; // path assumes the file is src/components/domain/home/clubCard.tsx
 import type { ClubListItem } from "@/services/clubs.service";
+import type { Club as ApiClub } from "@/lib/apiClient";
+
+// Define the same type as ClubCard component
+type CardClub = ClubListItem | ApiClub;
 
 export default function SSRClubGrid({ items }: { items: ClubListItem[] }) {
   if (!items?.length) {

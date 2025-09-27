@@ -115,51 +115,103 @@ export async function getAvailableMenuForDate(
 
   const data = (await res.json()) as AvailableMenuResponse;
 
+  // Local types for backend data structures
+  type BackendMenuItem = {
+    id: unknown;
+    name: unknown;
+    description?: unknown;
+    imageUrl?: unknown;
+    imageBlurhash?: unknown;
+    price?: unknown;
+    dynamicPricingEnabled?: unknown;
+    dynamicPrice?: unknown;
+    clubId: unknown;
+    categoryId: unknown;
+    category?: {
+      id: unknown;
+      name: unknown;
+      clubId: unknown;
+      isActive?: unknown;
+    };
+    maxPerPerson?: unknown;
+    hasVariants?: unknown;
+    isActive?: unknown;
+    isDeleted?: unknown;
+    variants?: BackendMenuVariant[];
+  };
+
+  type BackendMenuVariant = {
+    id: unknown;
+    name: unknown;
+    price: unknown;
+    dynamicPricingEnabled?: unknown;
+    dynamicPrice?: unknown;
+    maxPerPerson?: unknown;
+    isActive?: unknown;
+    isDeleted?: unknown;
+  };
+
+  type BackendCategory = {
+    id: unknown;
+    name: unknown;
+    items?: BackendMenuItem[];
+  };
+
   // Normalize menu items defensively and ensure dynamic pricing is properly structured
-  const normalizeMenuItem = (item: any): MenuItemDTO => ({
-    id: String(item.id),
-    name: String(item.name),
-    description: item.description ?? null,
-    imageUrl: item.imageUrl ?? null,
-    imageBlurhash: item.imageBlurhash ?? null,
-    price: item.price ?? null,
-    dynamicPricingEnabled: !!item.dynamicPricingEnabled,
-    dynamicPrice: item.dynamicPrice ?? null,
-    clubId: String(item.clubId),
-    categoryId: String(item.categoryId),
-    category: item.category ? {
-      id: String(item.category.id),
-      name: String(item.category.name),
-      clubId: String(item.category.clubId),
-      isActive: !!item.category.isActive,
-    } : null,
-    maxPerPerson: item.maxPerPerson ? Number(item.maxPerPerson) : null,
-    hasVariants: !!item.hasVariants,
-    isActive: !!item.isActive,
-    isDeleted: !!item.isDeleted,
-    variants: Array.isArray(item.variants)
-      ? item.variants.map((variant: any) => ({
-          id: String(variant.id),
-          name: String(variant.name),
-          price: variant.price,
-          dynamicPricingEnabled: !!variant.dynamicPricingEnabled,
-          dynamicPrice: variant.dynamicPrice ?? null,
-          maxPerPerson: variant.maxPerPerson ? Number(variant.maxPerPerson) : null,
-          isActive: !!variant.isActive,
-          isDeleted: !!variant.isDeleted,
-        }))
-      : [],
-  });
+  const normalizeMenuItem = (item: unknown): MenuItemDTO => {
+    const menuItem = item as BackendMenuItem;
+    return {
+      id: String(menuItem.id),
+      name: String(menuItem.name),
+      description: menuItem.description ? String(menuItem.description) : null,
+      imageUrl: menuItem.imageUrl ? String(menuItem.imageUrl) : null,
+      imageBlurhash: menuItem.imageBlurhash ? String(menuItem.imageBlurhash) : null,
+      price: typeof menuItem.price === 'number' ? menuItem.price : 
+             typeof menuItem.price === 'string' ? Number(menuItem.price) : null,
+      dynamicPricingEnabled: !!menuItem.dynamicPricingEnabled,
+      dynamicPrice: typeof menuItem.dynamicPrice === 'number' ? menuItem.dynamicPrice :
+                   typeof menuItem.dynamicPrice === 'string' ? menuItem.dynamicPrice : undefined,
+      clubId: String(menuItem.clubId),
+      categoryId: String(menuItem.categoryId),
+      category: menuItem.category ? {
+        id: String(menuItem.category.id),
+        name: String(menuItem.category.name),
+        clubId: String(menuItem.category.clubId),
+        isActive: !!menuItem.category.isActive,
+      } : null,
+      maxPerPerson: menuItem.maxPerPerson ? Number(menuItem.maxPerPerson) : null,
+      hasVariants: !!menuItem.hasVariants,
+      isActive: !!menuItem.isActive,
+      isDeleted: !!menuItem.isDeleted,
+      variants: Array.isArray(menuItem.variants)
+        ? menuItem.variants.map((variant: BackendMenuVariant) => ({
+            id: String(variant.id),
+            name: String(variant.name),
+            price: typeof variant.price === 'number' ? variant.price :
+                   typeof variant.price === 'string' ? variant.price : 0,
+            dynamicPricingEnabled: !!variant.dynamicPricingEnabled,
+            dynamicPrice: typeof variant.dynamicPrice === 'number' ? variant.dynamicPrice :
+                         typeof variant.dynamicPrice === 'string' ? variant.dynamicPrice : undefined,
+            maxPerPerson: variant.maxPerPerson ? Number(variant.maxPerPerson) : null,
+            isActive: !!variant.isActive,
+            isDeleted: !!variant.isDeleted,
+          }))
+        : [],
+    };
+  };
 
   // Normalize categories and their items
   data.categories = Array.isArray(data.categories) 
-    ? data.categories.map((category: any) => ({
-        id: String(category.id),
-        name: String(category.name),
-        items: Array.isArray(category.items) 
-          ? category.items.map(normalizeMenuItem)
-          : [],
-      }))
+    ? data.categories.map((category: unknown) => {
+        const cat = category as BackendCategory;
+        return {
+          id: String(cat.id),
+          name: String(cat.name),
+          items: Array.isArray(cat.items) 
+            ? cat.items.map(normalizeMenuItem)
+            : [],
+        };
+      })
     : [];
 
   return data;

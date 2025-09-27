@@ -2,7 +2,6 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
 
 interface RequireNonOAuthProps {
   children: React.ReactNode;
@@ -39,7 +38,7 @@ export default function RequireNonOAuth({ children, fallback }: RequireNonOAuthP
   }
 
   // Check if user is OAuth user
-  const isOAuthUser = user.isOAuthUser === true || !!(user as any)?.googleId;
+  const isOAuthUser = user.isOAuthUser === true;
   
   if (isOAuthUser) {
     // Show fallback or redirect

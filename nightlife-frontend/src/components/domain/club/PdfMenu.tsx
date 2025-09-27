@@ -102,6 +102,17 @@ export function PdfMenu({
     return () => window.removeEventListener("resize", fn);
   }, []);
 
+  // ---------- Helpers ----------
+  const preloadNeighbors = useCallback((index: number, man: MenuManifest = manifest!) => {
+    const urls: string[] = [];
+    if (index + 1 < man.pageCount) urls.push(man.pages[index + 1].url);
+    if (index - 1 >= 0) urls.push(man.pages[index - 1].url);
+    urls.forEach((u) => {
+      const img = new Image();
+      img.src = u;
+    });
+  }, [manifest]);
+
   // ---------- Load manifest ONLY on mobile ----------
   useEffect(() => {
     let cancelled = false;
@@ -157,7 +168,7 @@ export function PdfMenu({
     return () => {
       cancelled = true;
     };
-  }, [isMobile, clubId, menuId]);
+  }, [isMobile, clubId, menuId, preloadNeighbors]);
 
   // ---------- Desktop: Ctrl/Cmd + wheel zoom (updates iframe hash) ----------
   useEffect(() => {
@@ -228,17 +239,6 @@ export function PdfMenu({
     },
   };
 
-  // ---------- Helpers ----------
-  function preloadNeighbors(index: number, man: MenuManifest = manifest!) {
-    const urls: string[] = [];
-    if (index + 1 < man.pageCount) urls.push(man.pages[index + 1].url);
-    if (index - 1 >= 0) urls.push(man.pages[index - 1].url);
-    urls.forEach((u) => {
-      const img = new Image();
-      img.src = u;
-    });
-  }
-
   const goTo = useCallback(
     (nextIndex: number, dir: "left" | "right" | null = null) => {
       if (!manifest) return;
@@ -259,7 +259,7 @@ export function PdfMenu({
       resetSwipe();
       resetPinch();
     },
-    [manifest, resetSwipe, resetPinch]
+    [manifest, resetSwipe, resetPinch, preloadNeighbors]
   );
 
   const goNext = useCallback(
@@ -542,6 +542,7 @@ function AnimatedMobilePage({
   }, [slideDir]);
 
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src}
       alt={alt}

@@ -27,7 +27,8 @@ function joinSources(...parts: Array<string | string[] | undefined | null>): str
   return Array.from(set).join(" ");
 }
 
-export function middleware(req: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function middleware(_req: NextRequest) {
   const res = NextResponse.next();
 
   const isDev = process.env.NODE_ENV !== "production";

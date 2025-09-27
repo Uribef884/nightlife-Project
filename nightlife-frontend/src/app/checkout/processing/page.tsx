@@ -1,19 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Clock,
   ArrowLeft,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
   RefreshCw
 } from 'lucide-react';
 import { useUser } from '@/stores/auth.store';
 import { useCartStore } from '@/stores/cart.store';
 import { useSSE } from '@/hooks/useSSE';
-import { getCheckoutSummary, clearCheckoutSummary } from '@/utils/checkoutSummary';
+import { getCheckoutSummary } from '@/utils/checkoutSummary';
 
 // Simple transaction details type
 type TransactionDetails = {
@@ -24,7 +21,7 @@ type TransactionDetails = {
   paymentMethod: string;
   email: string;
   purchaseDate: string;
-  items: any[];
+  items: unknown[];
   subtotal: number;
   serviceFee: number;
   discounts: number;
@@ -38,7 +35,6 @@ type TransactionDetails = {
 
 export default function PaymentProcessingPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const user = useUser();
   const { clearCart } = useCartStore();
 
@@ -49,14 +45,16 @@ export default function PaymentProcessingPage() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   // Handle status updates from SSE
-  const handleStatusUpdate = useCallback(async (status: string, data: any) => {
+  const handleStatusUpdate = useCallback(async (status: string, data: unknown) => {
+    // Type narrowing for data
+    const dataObj = data as Record<string, unknown>;
     setStatusUpdateCount(prev => prev + 1);
     
     
     if (status !== 'PENDING') {
       // Get the current stored details to preserve all transaction data
       const currentStoredDetails = localStorage.getItem('lastTransactionDetails') || sessionStorage.getItem('lastTransactionDetails');
-      let baseDetails: any = {};
+      let baseDetails: Record<string, unknown> = {};
       
       if (currentStoredDetails) {
         try {
@@ -69,10 +67,24 @@ export default function PaymentProcessingPage() {
       // Status has changed, use simple mapping
       const updatedDetails: TransactionDetails = {
         ...baseDetails,
-        ...data,
+        ...dataObj,
         status: status,
-        transactionId: baseDetails.transactionId || data.transactionId || 'unknown',
-        email: baseDetails.email || data.customerEmail || user?.email || 'usuario@ejemplo.com',
+        transactionId: (baseDetails.transactionId as string) || (dataObj.transactionId as string) || 'unknown',
+        email: (baseDetails.email as string) || (dataObj.customerEmail as string) || user?.email || 'usuario@ejemplo.com',
+        totalPaid: (baseDetails.totalPaid as number) || (dataObj.totalPaid as number) || 0,
+        isFreeCheckout: Boolean(baseDetails.isFreeCheckout || dataObj.isFreeCheckout),
+        paymentMethod: (baseDetails.paymentMethod as string) || (dataObj.paymentMethod as string) || 'CARD',
+        purchaseDate: (baseDetails.purchaseDate as string) || (dataObj.purchaseDate as string) || new Date().toISOString(),
+        items: (baseDetails.items as unknown[]) || (dataObj.items as unknown[]) || [],
+        subtotal: (baseDetails.subtotal as number) || (dataObj.subtotal as number) || 0,
+        serviceFee: (baseDetails.serviceFee as number) || (dataObj.serviceFee as number) || 0,
+        discounts: (baseDetails.discounts as number) || (dataObj.discounts as number) || 0,
+        total: (baseDetails.total as number) || (dataObj.total as number) || 0,
+        actualTotal: (baseDetails.actualTotal as number) || (dataObj.actualTotal as number),
+        declineReason: (baseDetails.declineReason as string) || (dataObj.declineReason as string),
+        timeoutDuration: (baseDetails.timeoutDuration as number) || (dataObj.timeoutDuration as number),
+        errorCode: (baseDetails.errorCode as string) || (dataObj.errorCode as string),
+        errorMessage: (baseDetails.errorMessage as string) || (dataObj.errorMessage as string),
       };
       
       
@@ -94,7 +106,7 @@ export default function PaymentProcessingPage() {
         router.push('/checkout/declined');
       } else if (status === 'ERROR') {
         // Check if this was originally a timeout
-        if (data.originalStatus === 'TIMEOUT') {
+        if (dataObj.originalStatus === 'TIMEOUT') {
           router.push('/checkout/timeout');
         } else {
           router.push('/checkout/error');
@@ -105,7 +117,7 @@ export default function PaymentProcessingPage() {
         router.push('/checkout/success');
       }
     }
-  }, [router]);
+  }, [clearCart, user?.email, router]);
 
   const handleSSEError = useCallback((error: string) => {
     setError(error);
@@ -188,10 +200,10 @@ export default function PaymentProcessingPage() {
       setError('No se encontraron detalles de la transacción');
       setLoading(false);
     }
-  }, [router]);
+  }, [handleStatusUpdate, isCheckingStatus, router]);
 
   // Use SSE for real-time status updates - only after we have transaction details
-  const { isConnected, lastEvent, error: sseError } = useSSE(transactionDetails?.transactionId || null, {
+  const { isConnected, error: sseError } = useSSE(transactionDetails?.transactionId || null, {
     onStatusUpdate: handleStatusUpdate,
     onError: handleSSEError
   });

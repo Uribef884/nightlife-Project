@@ -15,10 +15,32 @@ export interface WompiAcceptanceTokens {
   };
 }
 
+// Payment data types for different payment methods
+export interface CardPaymentData {
+  number: string;
+  cvc: string;
+  exp_month: string;
+  exp_year: string;
+  card_holder: string;
+  phone_number?: string;
+  user_type?: number;
+  user_legal_id_type?: string;
+  user_legal_id?: string;
+}
+
+export interface PSEPaymentData {
+  financial_institution_code: string;
+  payment_description?: string;
+  full_name?: string;
+  ecommerce_url?: string;
+}
+
+export type PaymentData = CardPaymentData | PSEPaymentData | Record<string, unknown>;
+
 export interface CheckoutInitiateRequest {
   email: string;
   paymentMethod: string;
-  paymentData: any;
+  paymentData: PaymentData;
   installments?: number;
   redirect_url?: string;
   customer_data?: {
@@ -83,6 +105,25 @@ export interface PSEBanksResponse {
   success: boolean;
   data?: PSEBank[];
   error?: string;
+}
+
+// Cart summary type for checkout
+export interface CartSummaryResponse {
+  items: Array<{
+    id: string;
+    itemType: 'ticket' | 'menu';
+    quantity: number;
+    date: string;
+    clubId: string;
+    unitPrice: number;
+    subtotal: number;
+    [key: string]: unknown;
+  }>;
+  ticketSubtotal: number;
+  menuSubtotal: number;
+  totalSubtotal: number;
+  itemCount: number;
+  clubId: string;
 }
 
 const JSON_HEADERS = {
@@ -178,12 +219,38 @@ export async function checkTransactionStatus(transactionId: string): Promise<Che
 /**
  * Get cart summary for checkout
  */
-export async function getCartSummary() {
+export async function getCartSummary(): Promise<CartSummaryResponse | null> {
   const resp = await fetch(joinUrl(API_BASE_CSR, "/unified-cart/summary"), {
     method: "GET",
     headers: { Accept: "application/json" },
     credentials: "include",
   });
   assertOk(resp, "getCartSummary");
-  return parseJsonSafe<any>(resp);
+  
+  const data: unknown = await parseJsonSafe<unknown>(resp);
+  
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+  
+  const response = data as Partial<CartSummaryResponse>;
+  
+  // Validate required fields
+  if (!Array.isArray(response.items) || 
+      typeof response.ticketSubtotal !== 'number' ||
+      typeof response.menuSubtotal !== 'number' ||
+      typeof response.totalSubtotal !== 'number' ||
+      typeof response.itemCount !== 'number' ||
+      typeof response.clubId !== 'string') {
+    return null;
+  }
+  
+  return {
+    items: response.items,
+    ticketSubtotal: response.ticketSubtotal,
+    menuSubtotal: response.menuSubtotal,
+    totalSubtotal: response.totalSubtotal,
+    itemCount: response.itemCount,
+    clubId: response.clubId
+  };
 }

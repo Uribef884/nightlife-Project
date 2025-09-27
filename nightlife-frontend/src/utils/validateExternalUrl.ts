@@ -124,7 +124,7 @@ export function validateExternalUrl(url: string): UrlValidationResult {
       sanitizedUrl
     };
     
-  } catch (error) {
+  } catch {
     return {
       isValid: false,
       error: "Invalid URL format"

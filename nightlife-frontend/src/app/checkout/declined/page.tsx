@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/stores/auth.store';
 import { useCartStore } from '@/stores/cart.store';
-import { getCheckoutSummary, clearCheckoutSummary } from '@/utils/checkoutSummary';
+import { getCheckoutSummary } from '@/utils/checkoutSummary';
 
 // Simple transaction details type
 type TransactionDetails = {
@@ -25,7 +25,7 @@ type TransactionDetails = {
   paymentMethod: string;
   email: string;
   purchaseDate: string;
-  items: any[];
+  items: unknown[];
   subtotal: number;
   serviceFee: number;
   discounts: number;
@@ -41,7 +41,7 @@ export default function PaymentDeclinedPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const user = useUser();
-  const { clearCart, items, getCartSummary } = useCartStore();
+  const { } = useCartStore();
 
   const [transactionDetails, setTransactionDetails] = useState<TransactionDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,7 +93,7 @@ export default function PaymentDeclinedPage() {
       console.error('Error fetching transaction details:', err);
       setError('Error al cargar los detalles de la transacción');
     }
-  }, [user?.email, searchParams]);
+  }, [user?.email]);
 
   useEffect(() => {
     // Get transaction details from URL params, localStorage, or sessionStorage
@@ -171,7 +171,7 @@ export default function PaymentDeclinedPage() {
         hour: '2-digit',
         minute: '2-digit'
       });
-    } catch (error) {
+    } catch {
       return 'Fecha inválida';
     }
   };
@@ -184,10 +184,6 @@ export default function PaymentDeclinedPage() {
     router.push('/');
   };
 
-  const handleContactSupport = () => {
-    // This could open a support modal or redirect to support page
-    console.log('Contact support clicked');
-  };
 
   if (loading) {
     return (
@@ -272,22 +268,6 @@ export default function PaymentDeclinedPage() {
     }
   };
 
-  const getDeclineReasonMessage = (reason?: string) => {
-    switch (reason) {
-      case 'Fondos insuficientes':
-        return 'No hay suficientes fondos en tu cuenta';
-      case 'Tarjeta expirada':
-        return 'Tu tarjeta ha expirado';
-      case 'Tarjeta bloqueada':
-        return 'Tu tarjeta está bloqueada';
-      case 'Límite excedido':
-        return 'Has excedido el límite de tu tarjeta';
-      case 'Transacción rechazada':
-        return 'Tu banco rechazó la transacción';
-      default:
-        return 'Tu pago fue rechazado por el banco';
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">

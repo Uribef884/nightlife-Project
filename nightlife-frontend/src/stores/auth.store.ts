@@ -43,7 +43,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       // Initial state
       user: null,
       isAuthenticated: false,
@@ -51,7 +51,7 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       // Login action
-      login: async (email: string, password: string) => {
+      login: async (email: string, password: string): Promise<void> => {
         set({ isLoading: true, error: null });
         try {
           const response = await authService.login(email, password);
@@ -79,7 +79,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // Register action
-      register: async (email: string, password: string) => {
+      register: async (email: string, password: string): Promise<void> => {
         set({ isLoading: true, error: null });
         try {
           const response = await authService.register(email, password);
@@ -107,7 +107,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // Logout action
-      logout: async () => {
+      logout: async (): Promise<void> => {
         set({ isLoading: true });
         try {
           await authService.logout();
@@ -126,6 +126,7 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
         } catch (error) {
+          console.warn('Logout failed on backend:', error);
           // Even if logout fails on backend, clear local state and cart
           try {
             await useCartStore.getState().clearCart();
@@ -143,7 +144,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // Forgot password action
-      forgotPassword: async (email: string) => {
+      forgotPassword: async (email: string): Promise<void> => {
         set({ isLoading: true, error: null });
         try {
           await authService.forgotPassword(email);
@@ -158,7 +159,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // Reset password action
-      resetPassword: async (token: string, newPassword: string) => {
+      resetPassword: async (token: string, newPassword: string): Promise<void> => {
         set({ isLoading: true, error: null });
         try {
           await authService.resetPassword(token, newPassword);
@@ -239,7 +240,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // Check authentication status
-      checkAuth: async () => {
+      checkAuth: async (): Promise<void> => {
         set({ isLoading: true });
         try {
           const user = await authService.getCurrentUser();
@@ -250,6 +251,7 @@ export const useAuthStore = create<AuthState>()(
             error: null,
           });
         } catch (error) {
+          console.warn('Failed to check authentication status:', error);
           set({
             user: null,
             isAuthenticated: false,
@@ -260,19 +262,17 @@ export const useAuthStore = create<AuthState>()(
       },
 
       // Clear error
-      clearError: () => {
+      clearError: (): void => {
         set({ error: null });
       },
 
       // Set user directly (for OAuth callbacks)
-      setUser: async (user: User | null) => {
+      setUser: (user: User | null): void => {
         // Clear cart when setting user (OAuth login)
         if (user) {
-          try {
-            await useCartStore.getState().clearCart();
-          } catch (cartError) {
+          useCartStore.getState().clearCart().catch((cartError) => {
             console.warn('Failed to clear cart on OAuth login:', cartError);
-          }
+          });
         }
         
         set({

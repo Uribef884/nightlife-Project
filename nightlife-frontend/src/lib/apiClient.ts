@@ -9,6 +9,17 @@ export type ApiError = {
   details?: unknown;
 };
 
+// Type guard for API error responses
+function isApiError(x: unknown): x is ApiError {
+  return typeof x === 'object' && x !== null && ('message' in x || 'status' in x);
+}
+
+// Extended Error type for API errors
+interface ApiErrorWithDetails extends Error {
+  status?: number;
+  details?: unknown;
+}
+
 type HttpMethod = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 type BodyInitish = BodyInit | Record<string, unknown> | undefined;
 
@@ -62,7 +73,7 @@ export async function apiFetch<T = unknown>(url: string, opts: ApiOptions = {}):
       const { cookies } = await import("next/headers");
 
       // Next 15: cookies() is async; in older versions await is harmless
-      const store = await (cookies as unknown as () => Promise<any>)();
+      const store = await (cookies as unknown as () => Promise<{ getAll: () => Array<{ name: string; value: string }> }>)();
 
       const all =
         store && typeof store.getAll === "function"
@@ -97,7 +108,10 @@ export async function apiFetch<T = unknown>(url: string, opts: ApiOptions = {}):
     let details: unknown;
     if (isJson) {
       const data = await res.json().catch(() => ({}));
-      message = (data as any)?.message ?? message;
+      // Use type guard to safely access message property
+      if (isApiError(data)) {
+        message = data.message ?? message;
+      }
       details = data;
     } else {
       const text = await res.text().catch(() => "");
@@ -105,10 +119,10 @@ export async function apiFetch<T = unknown>(url: string, opts: ApiOptions = {}):
     }
     
     // Throw a regular Error object instead of ApiError to prevent page reconstruction
-    const error = new Error(message);
+    const error = new Error(message) as ApiErrorWithDetails;
     // Attach additional properties for debugging if needed
-    (error as any).status = res.status;
-    (error as any).details = details;
+    error.status = res.status;
+    error.details = details;
     throw error;
   }
 

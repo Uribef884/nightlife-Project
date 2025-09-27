@@ -9,5 +9,5 @@ export function SafeImage(props: ImageProps) {
   if (!ok) {
     return <div className="bg-white/10 text-white/50 grid place-items-center" style={{ width: props.width, height: props.height }}>img</div>;
   }
-  return <Image {...props} />;
+  return <Image {...props} alt={props.alt ?? ''} />;
 }

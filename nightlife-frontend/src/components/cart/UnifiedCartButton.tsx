@@ -57,7 +57,6 @@ export default function UnifiedCartButton({
     date,
     maxPerPerson,
     clubId,
-    clubName,
   });
 
   const handleAdd = async () => {

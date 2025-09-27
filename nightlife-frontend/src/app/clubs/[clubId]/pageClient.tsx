@@ -15,7 +15,7 @@ import TicketsGrid from "@/components/domain/club/TicketsGrid";
 import { PdfMenu } from "@/components/domain/club/PdfMenu";
 import { StructuredMenu } from "@/components/domain/club/menu/StructuredMenu";
 import GlobalCalendarPortal from "@/components/domain/club/GlobalCalendarPortal";
-import { CartDateChangeModal, CartClubChangeModal } from "@/components/cart";
+import { CartDateChangeModal } from "@/components/cart";
 import { useCartContext } from "@/contexts/CartContext";
 
 import {
@@ -39,8 +39,10 @@ type Props = { clubId: string; clubSSR: ClubDTO };
 type TabKey = "general" | "reservas" | "carta";
 
 /** Normalize event date fields into YYYY-MM-DD */
-function pickEventDate(e: any): string | null {
-  const raw: unknown = e?.availableDate ?? e?.date ?? e?.eventDate ?? null;
+function pickEventDate(e: unknown): string | null {
+  if (!e || typeof e !== 'object') return null;
+  const eventObj = e as Record<string, unknown>;
+  const raw: unknown = eventObj?.availableDate ?? eventObj?.date ?? eventObj?.eventDate ?? null;
   if (!raw || typeof raw !== "string") return null;
   const m = raw.match(/^\d{4}-\d{2}-\d{2}/);
   return m ? m[0] : null;
@@ -56,21 +58,21 @@ function todayLocal(): string {
 /** Merge CSR club into SSR club, but do NOT clobber defined SSR menu fields with null/undefined. */
 function safeMergeClub(prev: ClubDTO, next?: Partial<ClubDTO> | null): ClubDTO {
   if (!next) return prev;
-  const merged: ClubDTO = { ...(prev as any), ...(next as any) };
+  const merged: ClubDTO = { ...prev, ...next };
 
   // Protect SSR menu meta if CSR omitted or nullish
-  const nMenuType = (next as any)?.menuType ?? undefined;
-  const nPdfUrl = (next as any)?.pdfMenuUrl ?? undefined;
-  const nPdfName = (next as any)?.pdfMenuName ?? undefined;
+  const nMenuType = next?.menuType ?? undefined;
+  const nPdfUrl = next?.pdfMenuUrl ?? undefined;
+  const nPdfName = next?.pdfMenuName ?? undefined;
 
-  if (nMenuType === undefined || nMenuType === null || nMenuType === "") {
-    (merged as any).menuType = (prev as any).menuType;
+  if (nMenuType === undefined || nMenuType === null || nMenuType === "none") {
+    merged.menuType = prev.menuType;
   }
   if (nPdfUrl === undefined || nPdfUrl === null || nPdfUrl === "") {
-    (merged as any).pdfMenuUrl = (prev as any).pdfMenuUrl;
+    merged.pdfMenuUrl = prev.pdfMenuUrl;
   }
   if (nPdfName === undefined || nPdfName === null || nPdfName === "") {
-    (merged as any).pdfMenuName = (prev as any).pdfMenuName;
+    merged.pdfMenuName = prev.pdfMenuName;
   }
 
   return merged;
@@ -82,14 +84,14 @@ function normalizeMenuMeta(
   clubSSR: Partial<ClubDTO> | null | undefined
 ) {
   // Pull raw values from both sources (CSR wins if defined)
-  const csr = (club as any) ?? {};
-  const ssr = (clubSSR as any) ?? {};
+  const csr = club ?? {};
+  const ssr = clubSSR ?? {};
 
   // Raw values and source tracking
-  let rawType: string | null | undefined = csr.menuType ?? ssr.menuType;
-  let typeSource: "csr" | "ssr" | "inferred" | "none" = rawType ? (csr.menuType !== undefined ? "csr" : "ssr") : "none";
+  const rawType: string | null | undefined = csr.menuType ?? ssr.menuType;
+  const typeSource: "csr" | "ssr" | "inferred" | "none" = rawType ? (csr.menuType !== undefined ? "csr" : "ssr") : "none";
 
-  let rawPdf: string | null | undefined = csr.pdfMenuUrl ?? ssr.pdfMenuUrl;
+  const rawPdf: string | null | undefined = csr.pdfMenuUrl ?? ssr.pdfMenuUrl;
   const pdfSource: "csr" | "ssr" | "none" = rawPdf ? (csr.pdfMenuUrl !== undefined ? "csr" : "ssr") : "none";
 
   // Canonicalize type
@@ -101,7 +103,6 @@ function normalizeMenuMeta(
   // If type unknown but we have a PDF URL, infer pdf
   if (!type && rawPdf) {
     type = "pdf";
-    typeSource = "inferred";
   }
 
   // If still unknown, assume none
@@ -237,7 +238,6 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
   // Start with SSR club; CSR will MERGE into this (not overwrite)
   const [club, setClub] = useState<ClubDTO>(clubSSR);
-  const [clubFetchDone, setClubFetchDone] = useState(false);
 
   const [ads, setAds] = useState<ClubAdDTO[]>([]);
   const [events, setEvents] = useState<EventDTO[]>([]);
@@ -286,7 +286,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   }, [menuMeta?.type, clubId]);
 
   /** Parse current URL and sync tab + date (non-destructive for date). */
-  const syncFromLocation = () => {
+  const syncFromLocation = useCallback(() => {
     const url = new URL(window.location.href);
     const sp = url.searchParams;
 
@@ -373,13 +373,13 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       
       return prev;
     });
-  };
+  }, [cartItems, isLoading, setTab, setSelectedDate, setAvailable, setAvailError, setDateCache]);
 
   useEffect(() => {
     syncFromLocation();
     const off = installLocationObserver(syncFromLocation);
     return () => off();
-  }, [clubId, clubSSR, cartItems]); // include cartItems to re-sync when cart changes
+  }, [clubId, clubSSR, cartItems, syncFromLocation]); // include cartItems to re-sync when cart changes
 
   // Test scroll function on mount when coming from ad
   useEffect(() => {
@@ -409,7 +409,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
         if (c) setClub((prev) => safeMergeClub(prev, c as Partial<ClubDTO>));
       })
       .catch(() => {})
-      .finally(() => setClubFetchDone(true));
+      .finally(() => {});
 
     getClubAdsCSR(clubId)
       .then((data) => setAds(data ?? []))
@@ -457,43 +457,46 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     })();
   }, [clubId]);
 
-  // Safety: coerce arrays
-  const safeEvents: EventDTO[] = Array.isArray(events) ? events : [];
-  const safeCalendarTickets: TicketDTO[] = Array.isArray(calendarTickets) ? calendarTickets : [];
-
   // Calendar colors: Event dates
   const eventDates = useMemo(() => {
+    const safeEvents: EventDTO[] = Array.isArray(events) ? events : [];
     const filtered = safeEvents.filter((e) => {
-      const evClub = (e as any)?.clubId;
+      const eventObj = e as Record<string, unknown>;
+      const evClub = eventObj?.clubId;
       return !evClub || evClub === clubId;
     });
     const dates = filtered.map((e) => pickEventDate(e)).filter((d): d is string => !!d);
     return new Set<string>(dates);
-  }, [safeEvents, clubId]);
+  }, [events, clubId]);
 
   // Calendar colors: Free ticket dates (with availability + cache)
   const freeDates = useMemo(() => {
     const s = new Set<string>();
+    const safeCalendarTickets: TicketDTO[] = Array.isArray(calendarTickets) ? calendarTickets : [];
 
     for (const t of safeCalendarTickets) {
-      const tClub = (t as any)?.clubId;
+      const ticketObj = t as Record<string, unknown>;
+      const tClub = ticketObj?.clubId;
       if (tClub && tClub !== clubId) continue;
-      if ((t as any)?.isActive === false) continue;
+      if (ticketObj?.isActive === false) continue;
 
-      const date = (t as any)?.availableDate;
-      if (!date) continue;
+      const date = ticketObj?.availableDate;
+      if (!date || typeof date !== 'string') continue;
 
       // Include tickets with quantity = 0 so they show as "AGOTADO" in calendar
-      // const qty = (t as any)?.quantity;
+      // const qty = ticketObj?.quantity;
       // if (qty != null && Number(qty) <= 0) continue;
 
-      if ((t as any).category !== "free") continue; // strict free category
+      if (ticketObj.category !== "free") continue; // strict free category
       s.add(date);
     }
 
     if (available?.freeTickets?.length) {
       for (const ticket of available.freeTickets) {
-        if ((ticket as any)?.availableDate) s.add((ticket as any).availableDate.split("T")[0]);
+        const ticketObj = ticket as Record<string, unknown>;
+        if (ticketObj?.availableDate && typeof ticketObj.availableDate === 'string') {
+          s.add(ticketObj.availableDate.split("T")[0]);
+        }
       }
     }
 
@@ -504,7 +507,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     for (const d of eventDates) s.delete(d);
 
     return s;
-  }, [safeCalendarTickets, clubId, eventDates, available, dateCache]);
+  }, [calendarTickets, clubId, eventDates, available, dateCache]);
 
   const openDays = useMemo(
     () => new Set((club.openDays || []).map((d: string) => d.toLowerCase())),
@@ -516,18 +519,13 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
   // Auto-select date for first event when on reservas tab (fallback)
   useEffect(() => {
+    const safeEvents: EventDTO[] = Array.isArray(events) ? events : [];
     if (!isLoading && !selectedDate && tab === "reservas" && safeEvents.length > 0) {
       const first = pickEventDate(safeEvents[0]);
       setSelectedDate(first);
     }
-  }, [tab, selectedDate, safeEvents, isLoading]);
+  }, [tab, selectedDate, events, isLoading]);
 
-  // Tickets embedded in the selected event (if provided by backend)
-  const selectedEventTickets = useMemo<TicketDTO[] | undefined>(() => {
-    if (!selectedDate) return undefined;
-    const ev = safeEvents.find((e) => pickEventDate(e) === selectedDate);
-    return ev?.tickets && Array.isArray(ev?.tickets) ? ev.tickets : undefined;
-  }, [safeEvents, selectedDate]);
 
   // Availability buckets (debounced + cached per date)
   useEffect(() => {
@@ -635,7 +633,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
               {/* Events list; expands the selected event card on event days */}
               <div id="events-section">
                 <ClubEvents
-                  events={safeEvents}
+                  events={Array.isArray(events) ? events : []}
                   selectedDate={selectedDate}
                   available={
                     available
@@ -661,7 +659,6 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                   <TicketsGrid
                     club={club}
                     selectedDate={selectedDate}
-                    events={safeEvents}
                     tickets={[]}
                     available={
                       available
@@ -669,8 +666,8 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                             dateHasEvent: available.dateHasEvent,
                             event: available.event,
                             eventTickets: available.eventTickets,
-                            generalTickets: (available as any).generalTickets,
-                            freeTickets: (available as any).freeTickets,
+                            generalTickets: (available as Record<string, unknown>).generalTickets as TicketDTO[],
+                            freeTickets: (available as Record<string, unknown>).freeTickets as TicketDTO[],
                           }
                         : undefined
                     }
@@ -687,14 +684,16 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
                 if (hasPdf) {
                   // Generate a fallback menuId if the new field doesn't exist yet
-                  let fallbackMenuId = (club as any)?.pdfMenuId ?? (clubSSR as any)?.pdfMenuId;
+                  const clubObj = club as Record<string, unknown>;
+                  const clubSSRObj = clubSSR as Record<string, unknown>;
+                  let fallbackMenuId = clubObj?.pdfMenuId ?? clubSSRObj?.pdfMenuId;
                   if (!fallbackMenuId) {
                     const pdfUrl = menuMeta.pdf as string;
-                    const pdfName = (club as any)?.pdfMenuName ?? (clubSSR as any)?.pdfMenuName;
+                    const pdfName = clubObj?.pdfMenuName ?? clubSSRObj?.pdfMenuName;
                     if (pdfUrl && pdfUrl.includes("/menu/")) {
                       const urlMatch = pdfUrl.match(/\/menu\/([^\/]+)\.pdf/);
                       if (urlMatch) fallbackMenuId = urlMatch[1];
-                    } else if (pdfName && pdfName.startsWith("menu-")) {
+                    } else if (pdfName && typeof pdfName === 'string' && pdfName.startsWith("menu-")) {
                       fallbackMenuId = pdfName.replace(".pdf", "");
                     } else {
                       fallbackMenuId = `menu-${Date.now()}`;
@@ -703,10 +702,10 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                   return (
                     <PdfMenu
                       url={menuMeta.pdf as string}
-                      filename={(club as any)?.pdfMenuName ?? (clubSSR as any)?.pdfMenuName ?? "Menú"}
+                      filename={typeof (clubObj?.pdfMenuName ?? clubSSRObj?.pdfMenuName) === 'string' ? (clubObj?.pdfMenuName ?? clubSSRObj?.pdfMenuName) as string : "Menú"}
                       height="70vh"
                       clubId={clubId}
-                      menuId={fallbackMenuId}
+                      menuId={typeof fallbackMenuId === 'string' ? fallbackMenuId : `menu-${Date.now()}`}
                     />
                   );
                 }
@@ -721,7 +720,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
                       </div>
 
                       <StructuredMenu
-                        clubId={String((club as any).id)}
+                        clubId={String(club.id)}
                         clubName={club.name}
                         selectedDate={selectedDate || undefined}
                         openDays={openDays}

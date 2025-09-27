@@ -2,11 +2,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { useCartContext } from "@/contexts/CartContext";
 import { useClubProtection } from "@/hooks/useClubProtection";
 import { CartClubChangeModal } from "@/components/cart";
-import type { ClubDTO, EventDTO, TicketDTO } from "@/services/clubs.service";
+import type { ClubDTO, TicketDTO } from "@/services/clubs.service";
 import type { AvailableTicketsResponse } from "@/services/tickets.service";
 import TicketCard from "./TicketCard";
 
@@ -35,13 +34,11 @@ function smoothScrollTo(el: HTMLElement, offset = 80) {
 export default function TicketsGrid({
   club,
   selectedDate,
-  events,
   tickets,
   available,
 }: {
   club: ClubDTO;
   selectedDate: string | null;
-  events?: EventDTO[];
   tickets: TicketDTO[];
   available?: Pick<
     AvailableTicketsResponse,
@@ -53,30 +50,32 @@ export default function TicketsGrid({
     addTicket,
     updateItemQuantity,
     removeItem,
-    isLoading: cartLoading,
-    error: cartError
   } = useCartContext();
 
   // Club protection
   const clubProtection = useClubProtection({
     clubId: club.id,
-    clubName: club.name,
   });
   
   if (process.env.NODE_ENV !== "production") {
     console.assert(typeof TicketCard === "function", "[TicketsGrid] TicketCard import invalid");
   }
 
+  /* -------------------- FIX START: stable section refs -------------------- */
+  // ❌ Before: useRef(...) was called inside useMemo (illegal for hooks).
+  // ✅ After: create refs at top-level (hooks zone) and memoize the object wrapper.
+  const combosRef = useRef<HTMLDivElement | null>(null);
+  const generalRef = useRef<HTMLDivElement | null>(null);
+  const gratisRef  = useRef<HTMLDivElement | null>(null);
 
+  const secRefs = useMemo(() => ({
+    combos: combosRef,
+    general: generalRef,
+    gratis:  gratisRef,
+  }), [combosRef, generalRef, gratisRef]);
+  /* --------------------- FIX END: stable section refs --------------------- */
 
-  // Section refs for scroll/highlight
-  const secRefs = {
-    combos: useRef<HTMLDivElement | null>(null),
-    general: useRef<HTMLDivElement | null>(null),
-    gratis: useRef<HTMLDivElement | null>(null),
-  };
   const [activeChip, setActiveChip] = useState<"combos" | "general" | "gratis" | null>(null);
-
 
   // qty map - get ticket quantities from unified cart
   const qtyByTicketId = useMemo(() => {
@@ -88,7 +87,6 @@ export default function TicketsGrid({
     }
     return map;
   }, [cartItems]);
-
 
   // Category slices from enriched
   const ticketsGeneral = useMemo(() => tickets.filter((t) => t.category === "general"), [tickets]);
@@ -122,7 +120,7 @@ export default function TicketsGrid({
         { key: "general" as const, label: "General", ref: secRefs.general, count: general.length },
         { key: "gratis" as const, label: "Gratis", ref: secRefs.gratis, count: gratis.length },
       ].filter((c) => c.count > 0),
-    [combos.length, general.length, gratis.length]
+    [combos.length, general.length, gratis.length, secRefs]
   );
 
   // Initialize active chip to the first available

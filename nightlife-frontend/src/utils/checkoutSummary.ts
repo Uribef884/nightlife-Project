@@ -5,7 +5,7 @@ export interface CheckoutSummary {
   total: number;           // Subtotal (costo de productos)
   operationalCosts: number; // Service fee (tarifa de servicio)
   actualTotal: number;     // Total amount
-  items?: any[];           // Optional items array
+  items?: unknown[];       // Optional items array
   timestamp: number;       // When this was captured
 }
 
@@ -19,16 +19,17 @@ export function storeCheckoutSummary(): void {
   if (typeof window === 'undefined') return;
   
   // Get the unified summary from window (set by cart store)
-  const windowSummaries = (window as any).cartSummaries;
+  const windowSummaries = (window as { cartSummaries?: { unified?: unknown } }).cartSummaries;
   const unifiedSummary = windowSummaries?.unified;
   
   
-  if (unifiedSummary) {
+  if (unifiedSummary && typeof unifiedSummary === 'object') {
+    const summaryObj = unifiedSummary as Record<string, unknown>;
     const checkoutSummary: CheckoutSummary = {
-      total: unifiedSummary.total || 0,
-      operationalCosts: unifiedSummary.operationalCosts || 0,
-      actualTotal: unifiedSummary.actualTotal || 0,
-      items: unifiedSummary.items || [],
+      total: typeof summaryObj.total === 'number' ? summaryObj.total : 0,
+      operationalCosts: typeof summaryObj.operationalCosts === 'number' ? summaryObj.operationalCosts : 0,
+      actualTotal: typeof summaryObj.actualTotal === 'number' ? summaryObj.actualTotal : 0,
+      items: Array.isArray(summaryObj.items) ? summaryObj.items : [],
       timestamp: Date.now()
     };
     

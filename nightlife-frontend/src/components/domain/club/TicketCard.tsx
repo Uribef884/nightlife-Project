@@ -1,14 +1,62 @@
 // nightlife-frontend/src/components/domain/club/TicketCard.tsx
 "use client";
 
-/* eslint-disable no-console */
-
 import { useMemo, useState } from "react";
 import type { TicketDTO } from "@/services/clubs.service";
+import { nowInBogota, parseBogotaDate } from '@/utils/timezone';
+
+// Local types for type safety
+type TicketWithAny = {
+  name?: string;
+  title?: string;
+  description?: string;
+  details?: string;
+  about?: string;
+  currency?: string;
+  dynamicPrice?: string | number;
+  price?: string | number;
+  dynamicPricingEnabled?: boolean;
+  available?: number;
+  remaining?: number;
+  availableQty?: number;
+  availableQuantity?: number;
+  quantity?: number;
+  maxPerPerson?: number;
+  maxPerUser?: number;
+  max?: number;
+  includesMenuItem?: boolean;
+  includedMenuItems?: unknown[];
+  includedItems?: unknown[];
+  includes?: unknown[];
+  menuItems?: unknown[];
+  category?: string;
+  event?: {
+    availableDate?: string;
+    openHours?: {
+      open?: string;
+    };
+  };
+  availableDate?: string;
+};
+
+type IncludedItem = {
+  menuItemName?: string;
+  name?: string;
+  title?: string;
+  itemName?: string;
+  menuItem?: {
+    name?: string;
+  };
+  quantity?: string | number;
+  qty?: string | number;
+  variantName?: string;
+  variant?: {
+    name?: string;
+  };
+};
 
 export type TicketCardProps = {
   ticket: TicketDTO;
-  bannerUrl?: string | null;
   qtyInCart?: number;
   itemId?: string;
   onAdd: () => void;
@@ -20,25 +68,32 @@ export type TicketCardProps = {
 
 /* ---------------- helpers ---------------- */
 function toNum(v: unknown): number | null {
-  const n = Number(v as any);
+  if (v === null || v === undefined) return null;
+  const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
 function isNum(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
-function getTitle(t: any): string {
-  return t?.name ?? t?.title ?? "Ticket";
+function getTitle(t: unknown): string {
+  if (!t || typeof t !== 'object') return "Ticket";
+  const ticketWithAny = t as TicketWithAny;
+  return ticketWithAny.name ?? ticketWithAny.title ?? "Ticket";
 }
-function getDescription(t: any): string {
-  return t?.description ?? t?.details ?? t?.about ?? "";
+function getDescription(t: unknown): string {
+  if (!t || typeof t !== 'object') return "";
+  const ticketWithAny = t as TicketWithAny;
+  return ticketWithAny.description ?? ticketWithAny.details ?? ticketWithAny.about ?? "";
 }
-function getPrice(t: any): { price: number | null; compareAt: number | null; currency: string } {
-  const currency: string = (t?.currency as string) || "COP";
-  const dynamic = toNum(t?.dynamicPrice);
-  const base = toNum(t?.price);
+function getPrice(t: unknown): { price: number | null; compareAt: number | null; currency: string } {
+  if (!t || typeof t !== 'object') return { price: null, compareAt: null, currency: "COP" };
+  const ticketWithAny = t as TicketWithAny;
+  const currency: string = ticketWithAny.currency || "COP";
+  const dynamic = toNum(ticketWithAny.dynamicPrice);
+  const base = toNum(ticketWithAny.price);
   
   // Only use dynamic pricing if it's enabled and available
-  if (t?.dynamicPricingEnabled && dynamic != null && !isNaN(dynamic) && base != null) {
+  if (ticketWithAny.dynamicPricingEnabled && dynamic != null && !isNaN(dynamic) && base != null) {
     // Only show strike-through if there's a significant discount (more than 1% difference)
     // This prevents showing strike-through when prices are equal or very close
     const discountThreshold = 0.01; // 1% threshold
@@ -52,18 +107,22 @@ function getPrice(t: any): { price: number | null; compareAt: number | null; cur
   // Fall back to base price
   return { price: base, compareAt: null, currency };
 }
-function getAvailable(t: any): number | null {
-  if (isNum(t?.available)) return t.available;
-  if (isNum(t?.remaining)) return t.remaining;
-  if (isNum(t?.availableQty)) return t.availableQty;
-  if (isNum(t?.availableQuantity)) return t.availableQuantity;
-  if (isNum(t?.quantity)) return t.quantity;
+function getAvailable(t: unknown): number | null {
+  if (!t || typeof t !== 'object') return null;
+  const ticketWithAny = t as TicketWithAny;
+  if (isNum(ticketWithAny.available)) return ticketWithAny.available;
+  if (isNum(ticketWithAny.remaining)) return ticketWithAny.remaining;
+  if (isNum(ticketWithAny.availableQty)) return ticketWithAny.availableQty;
+  if (isNum(ticketWithAny.availableQuantity)) return ticketWithAny.availableQuantity;
+  if (isNum(ticketWithAny.quantity)) return ticketWithAny.quantity;
   return null;
 }
-function getMaxPerUser(t: any): number | null {
-  if (isNum(t?.maxPerPerson)) return t.maxPerPerson;
-  if (isNum(t?.maxPerUser)) return t.maxPerUser;
-  if (isNum(t?.max)) return t.max;
+function getMaxPerUser(t: unknown): number | null {
+  if (!t || typeof t !== 'object') return null;
+  const ticketWithAny = t as TicketWithAny;
+  if (isNum(ticketWithAny.maxPerPerson)) return ticketWithAny.maxPerPerson;
+  if (isNum(ticketWithAny.maxPerUser)) return ticketWithAny.maxPerUser;
+  if (isNum(ticketWithAny.max)) return ticketWithAny.max;
   return null;
 }
 function fmtMoney(n: number | null, currency = "COP"): string {
@@ -75,18 +134,23 @@ function fmtMoney(n: number | null, currency = "COP"): string {
   }
 }
 /** Decide if ticket is a COMBO in the UI (always show includes). */
-function isCombo(t: any): boolean {
-  if (t?.includesMenuItem === true) return true;
-  const arr = t?.includedMenuItems;
+function isCombo(t: unknown): boolean {
+  if (!t || typeof t !== 'object') return false;
+  const ticketWithAny = t as TicketWithAny;
+  if (ticketWithAny.includesMenuItem === true) return true;
+  const arr = ticketWithAny.includedMenuItems;
   return Array.isArray(arr) && arr.length > 0;
 }
 /** Convert `includedMenuItems` (or fallbacks) into "Q× Name (Variant)" lines. */
-function getIncludedLines(t: any): string[] {
+function getIncludedLines(t: unknown): string[] {
+  if (!t || typeof t !== 'object') return [];
+  const ticketWithAny = t as TicketWithAny;
+  
   const raw =
-    (Array.isArray(t?.includedMenuItems) && t.includedMenuItems) ||
-    (Array.isArray(t?.includedItems) && t.includedItems) ||
-    (Array.isArray(t?.includes) && t.includes) ||
-    (Array.isArray(t?.menuItems) && t.menuItems) ||
+    (Array.isArray(ticketWithAny.includedMenuItems) && ticketWithAny.includedMenuItems) ||
+    (Array.isArray(ticketWithAny.includedItems) && ticketWithAny.includedItems) ||
+    (Array.isArray(ticketWithAny.includes) && ticketWithAny.includes) ||
+    (Array.isArray(ticketWithAny.menuItems) && ticketWithAny.menuItems) ||
     [];
 
   if (!Array.isArray(raw) || raw.length === 0) {
@@ -95,15 +159,18 @@ function getIncludedLines(t: any): string[] {
 
   const lines: string[] = [];
   for (const it of raw) {
+    if (!it || typeof it !== 'object') continue;
+    const includedItem = it as IncludedItem;
+    
     const baseName =
-      it?.menuItemName ?? it?.name ?? it?.title ?? it?.itemName ?? it?.menuItem?.name ?? "";
+      includedItem.menuItemName ?? includedItem.name ?? includedItem.title ?? includedItem.itemName ?? includedItem.menuItem?.name ?? "";
     
     if (!baseName) {
       continue;
     }
 
-    const qty = toNum(it?.quantity) ?? toNum(it?.qty) ?? 1;
-    const variant = it?.variantName ?? it?.variant?.name ?? null;
+    const qty = toNum(includedItem.quantity) ?? toNum(includedItem.qty) ?? 1;
+    const variant = includedItem.variantName ?? includedItem.variant?.name ?? null;
     const label = variant ? `${String(baseName)} (${String(variant)})` : String(baseName);
     const line = `${qty ?? 1}× ${label}`;
     lines.push(line);
@@ -115,7 +182,6 @@ function getIncludedLines(t: any): string[] {
 /* ---------------- component ---------------- */
 export default function TicketCard({
   ticket,
-  bannerUrl = null,
   qtyInCart = 0,
   itemId = "",
   onAdd,
@@ -140,24 +206,24 @@ export default function TicketCard({
   // Simple grace period logic: if currentTime > eventStart + 1 hour, then unavailable
   let isUnavailableDueToGracePeriod = false;
   
-  if (ticket?.category === "event") {
-    const { nowInBogota, parseBogotaDate, utcToBogotaDate } = require('@/utils/timezone');
+  const ticketWithAny = ticket as TicketWithAny;
+  if (ticketWithAny.category === "event") {
     
     // Get event date and open hours
-    const eventDate = ticket.event?.availableDate ? new Date(ticket.event.availableDate) : 
-                     ticket.availableDate ? new Date(ticket.availableDate) : null;
-    const openHours = ticket.event?.openHours;
+    const eventDate = ticketWithAny.event?.availableDate ? new Date(ticketWithAny.event.availableDate) : 
+                     ticketWithAny.availableDate ? new Date(ticketWithAny.availableDate) : null;
+    const openHours = ticketWithAny.event?.openHours;
     
     if (eventDate && openHours?.open) {
       // Parse event date correctly as a local Bogota date
       let eventDateStr: string;
       
-      if (ticket.event?.availableDate) {
+      if (ticketWithAny.event?.availableDate) {
         // Use the event date string directly - it should be in YYYY-MM-DD format
-        eventDateStr = ticket.event.availableDate;
-      } else if (ticket.availableDate) {
+        eventDateStr = ticketWithAny.event.availableDate;
+      } else if (ticketWithAny.availableDate) {
         // Fallback to ticket's available date
-        eventDateStr = ticket.availableDate;
+        eventDateStr = ticketWithAny.availableDate;
       } else {
         // Convert Date object to YYYY-MM-DD string in Bogota timezone for parsing
         eventDateStr = parseBogotaDate(eventDate.toISOString().split('T')[0]).toISODate()!;

@@ -1,5 +1,6 @@
 // src/services/ads.service.ts
 import { API_BASE_CSR, API_BASE_SSR, joinUrl } from "@/lib/env";
+import { getClubByIdCSR, getClubByIdSSR, type ClubDTO } from "./clubs.service";
 
 export type AdLike = {
   id: string;
@@ -64,6 +65,42 @@ function isDateInPast(dateYMD: string | null): boolean {
   return dateYMD < today;
 }
 
+/**
+ * Find the next open day for a club starting from today
+ * @param club - Club data with openDays
+ * @returns YYYY-MM-DD string of the next open day, or null if no open days found
+ */
+function findNextOpenDay(club: ClubDTO | null): string | null {
+  if (!club?.openDays || club.openDays.length === 0) {
+    return null;
+  }
+
+  const openDaysSet = new Set(club.openDays.map(day => day.toLowerCase()));
+  const today = new Date();
+  
+  // Check up to 14 days in the future
+  for (let i = 0; i < 14; i++) {
+    const checkDate = new Date(today);
+    checkDate.setDate(today.getDate() + i);
+    
+    const weekdayFull = [
+      "sunday",
+      "monday", 
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday"
+    ][checkDate.getDay()];
+    
+    if (openDaysSet.has(weekdayFull)) {
+      return checkDate.toISOString().slice(0, 10); // YYYY-MM-DD
+    }
+  }
+  
+  return null;
+}
+
 // --- API fetchers (env-based; no hard-coding) ---
 export async function fetchTicketById(id: string): Promise<TicketDTO> {
   if (!isIdLike(id)) throw new Error("bad ticket id");
@@ -112,9 +149,27 @@ export async function resolveAdCTA(
       const t = await fetchTicketById(ad.targetId);
       // Don't show CTA if ticket is inactive or deleted
       if (!t.isActive || t.isDeleted) return null;
-      const ymd = toYMD(t.availableDate ?? new Date().toISOString());
-      // Don't show CTA if ticket date is in the past
-      if (isDateInPast(ymd)) return null;
+      
+      let ymd: string;
+      if (t.availableDate) {
+        // Ticket has a specific date
+        ymd = toYMD(t.availableDate);
+        // Don't show CTA if ticket date is in the past
+        if (isDateInPast(ymd)) return null;
+      } else {
+        // Ticket has no specific date - find next open day for the club
+        const club = typeof window === "undefined" 
+          ? await getClubByIdSSR(t.clubId)
+          : await getClubByIdCSR(t.clubId);
+        
+        const nextOpenDay = findNextOpenDay(club);
+        if (!nextOpenDay) {
+          // No open days found - don't show CTA
+          return null;
+        }
+        ymd = nextOpenDay;
+      }
+      
       return { label: `Ir a Reservas – ${ymd}`, href: reservasHref(t.clubId, ymd, t.id) };
     }
     if (ad.targetType === "event" && ad.targetId) {
@@ -143,9 +198,27 @@ export async function resolveAdCTA(
       const t = await fetchTicketById(inferred.id);
       // Don't show CTA if ticket is inactive or deleted
       if (!t.isActive || t.isDeleted) return null;
-      const ymd = toYMD(t.availableDate ?? new Date().toISOString());
-      // Don't show CTA if ticket date is in the past
-      if (isDateInPast(ymd)) return null;
+      
+      let ymd: string;
+      if (t.availableDate) {
+        // Ticket has a specific date
+        ymd = toYMD(t.availableDate);
+        // Don't show CTA if ticket date is in the past
+        if (isDateInPast(ymd)) return null;
+      } else {
+        // Ticket has no specific date - find next open day for the club
+        const club = typeof window === "undefined" 
+          ? await getClubByIdSSR(t.clubId)
+          : await getClubByIdCSR(t.clubId);
+        
+        const nextOpenDay = findNextOpenDay(club);
+        if (!nextOpenDay) {
+          // No open days found - don't show CTA
+          return null;
+        }
+        ymd = nextOpenDay;
+      }
+      
       return { label: `Ir a Reservas – ${ymd}`, href: reservasHref(t.clubId, ymd, t.id) };
     }
     if (inferred?.type === "event") {
@@ -159,7 +232,7 @@ export async function resolveAdCTA(
         // Don't show CTA if event date is in the past
         if (isDateInPast(ymd)) return null;
         return { label: `Ir a Reservas – ${ymd}`, href: reservasHref(e.clubId, ymd) };
-      } catch (error) {
+      } catch {
         return null;
       }
     }

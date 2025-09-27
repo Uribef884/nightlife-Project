@@ -166,11 +166,53 @@ function safePriority(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Local types for backend record mapping
+type BackendRecord = Record<string, unknown> & {
+  id?: unknown;
+  _id?: unknown;
+  uuid?: unknown;
+  clubId?: unknown;
+  club_id?: unknown;
+  identifier?: unknown;
+  name?: unknown;
+  title?: unknown;
+  clubName?: unknown;
+  club_name?: unknown;
+  address?: unknown;
+  addressLine?: unknown;
+  address_line?: unknown;
+  city?: unknown;
+  town?: unknown;
+  locality?: unknown;
+  profileImageUrl?: unknown;
+  profile_image_url?: unknown;
+  imageUrl?: unknown;
+  image_url?: unknown;
+  logoUrl?: unknown;
+  logo_url?: unknown;
+  priority?: unknown;
+  rank?: unknown;
+  order?: unknown;
+  ordering?: unknown;
+  sort?: unknown;
+  weight?: unknown;
+  location?: {
+    address?: unknown;
+    addressLine?: unknown;
+    address_line?: unknown;
+    city?: unknown;
+  };
+  images?: {
+    profile?: unknown;
+    logo?: unknown;
+  };
+};
+
 // Map a single backend record to the list item we need.
 // Accepts multiple possible field names and simple nesting (location.*).
 function mapBackendRecord(rec: unknown): ClubListItem | null {
   if (!rec || typeof rec !== "object") return null;
-  const r = rec as Record<string, any>;
+  const r = rec as BackendRecord;
 
   const idRaw =
     r.id ?? r._id ?? r.uuid ?? r.clubId ?? r.club_id ?? r.identifier ?? null;
@@ -225,16 +267,39 @@ function mapBackendRecord(rec: unknown): ClubListItem | null {
   };
 }
 
-// Accept common server shapes: array, {items}, {data}, {results}, {clubs}, {rows}
-function coerceClubListResponse(raw: any): ClubListResponse {
-  let rows: any[] = [];
+// Local type for raw server response
+type RawServerResponse = {
+  items?: unknown[];
+  data?: unknown[];
+  results?: unknown[];
+  clubs?: unknown[];
+  rows?: unknown[];
+  page?: unknown;
+  page_size?: unknown;
+  pagination?: {
+    page?: unknown;
+    pageSize?: unknown;
+    per_page?: unknown;
+    total?: unknown;
+  };
+  total?: unknown;
+  count?: unknown;
+};
 
-  if (Array.isArray(raw)) rows = raw;
-  else if (Array.isArray(raw?.items)) rows = raw.items;
-  else if (Array.isArray(raw?.data)) rows = raw.data;
-  else if (Array.isArray(raw?.results)) rows = raw.results;
-  else if (Array.isArray(raw?.clubs)) rows = raw.clubs;
-  else if (Array.isArray(raw?.rows)) rows = raw.rows;
+// Accept common server shapes: array, {items}, {data}, {results}, {clubs}, {rows}
+function coerceClubListResponse(raw: unknown): ClubListResponse {
+  let rows: unknown[] = [];
+
+  if (Array.isArray(raw)) {
+    rows = raw;
+  } else if (raw && typeof raw === 'object') {
+    const response = raw as RawServerResponse;
+    if (Array.isArray(response.items)) rows = response.items;
+    else if (Array.isArray(response.data)) rows = response.data;
+    else if (Array.isArray(response.results)) rows = response.results;
+    else if (Array.isArray(response.clubs)) rows = response.clubs;
+    else if (Array.isArray(response.rows)) rows = response.rows;
+  }
 
   const items = rows
     .map((r) => mapBackendRecord(r))
@@ -264,18 +329,16 @@ function coerceClubListResponse(raw: any): ClubListResponse {
     return String(a.id).localeCompare(String(b.id));
   });
 
-  const page =
-    toInt(raw?.page ?? raw?.pagination?.page, 1);
-  const pageSize =
-    toInt(
-      raw?.pageSize ??
-        raw?.page_size ??
-        raw?.pagination?.pageSize ??
-        raw?.pagination?.per_page,
-      items.length || 20
-    );
-  const total =
-    toInt(raw?.total ?? raw?.count ?? raw?.pagination?.total, items.length);
+  const response = raw && typeof raw === 'object' ? raw as RawServerResponse : {};
+  
+  const page = toInt(response.page ?? response.pagination?.page, 1);
+  const pageSize = toInt(
+    response.page_size ??
+      response.pagination?.pageSize ??
+      response.pagination?.per_page,
+    items.length || 20
+  );
+  const total = toInt(response.total ?? response.count ?? response.pagination?.total, items.length);
 
   return { items, page, pageSize, total };
 }
@@ -378,7 +441,7 @@ function getClientId(): string {
     if (existing) return existing;
     // Prefer crypto.randomUUID(); fallback if not available.
     const id = (window.crypto && "randomUUID" in window.crypto)
-      ? (window.crypto as any).randomUUID()
+      ? (window.crypto as { randomUUID: () => string }).randomUUID()
       : `cid_${Math.random().toString(36).slice(2, 10)}`;
     window.sessionStorage.setItem(k, id);
     return id;
@@ -478,9 +541,10 @@ export async function searchClubsCSR(raw: ClubQuery): Promise<ClubListResponse> 
       // Cache success
       lruSet(key, normalized);
       return normalized;
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(timeout);
-      if (err?.name === "AbortError" || String(err).includes("AbortError")) {
+      const error = err as Error;
+      if (error?.name === "AbortError" || String(err).includes("AbortError")) {
         // Let callers ignore silently; do not set backoff on abort
         throw err;
       }
@@ -617,7 +681,7 @@ export async function getClubAdsCSR(clubId: string): Promise<ClubAdDTO[]> {
 
     const json = await resp.json();
 
-    const rows: any[] = Array.isArray(json)
+    const rows: unknown[] = Array.isArray(json)
       ? json
       : Array.isArray(json?.items) ? json.items
       : Array.isArray(json?.data) ? json.data
@@ -625,26 +689,73 @@ export async function getClubAdsCSR(clubId: string): Promise<ClubAdDTO[]> {
       : [];
 
     const filtered = rows.filter((a) => {
-      if (!a) return false;
-      const label = (a.label ?? a.scope ?? a.type ?? "").toString().toLowerCase();
+      if (!a || typeof a !== 'object') return false;
+      const ad = a as Record<string, unknown>;
+      const label = (ad.label ?? ad.scope ?? ad.type ?? "").toString().toLowerCase();
       if (label === "global") return false;
-      if (a.isGlobal === true) return false;
-      if (a.clubId && String(a.clubId) !== String(clubId)) return false;
-      const img = a.imageUrl ?? a.image_url ?? null;
+      if (ad.isGlobal === true) return false;
+      if (ad.clubId && String(ad.clubId) !== String(clubId)) return false;
+      const img = ad.imageUrl ?? ad.image_url ?? null;
       if (!img || String(img).trim() === "") return false;
       return true;
     });
 
-    return filtered.map((a) => ({
-      id: String(a.id ?? a._id ?? a.uuid),
-      imageUrl: String(a.imageUrl ?? a.image_url),
-      priority: Number(a.priority ?? 0),
-      link: a.link ?? a.href ?? null,
-    })) as ClubAdDTO[];
+    return filtered.map((a) => {
+      const ad = a as Record<string, unknown>;
+      return {
+        id: String(ad.id ?? ad._id ?? ad.uuid),
+        imageUrl: String(ad.imageUrl ?? ad.image_url),
+        priority: Number(ad.priority ?? 0),
+        link: ad.link ?? ad.href ?? null,
+      };
+    }) as ClubAdDTO[];
   } catch {
     return [];
   }
 }
+
+// Local types for event and ticket data from backend
+type BackendEvent = {
+  id: unknown;
+  name: unknown;
+  description?: unknown;
+  bannerUrl?: unknown;
+  availableDate: unknown;
+  openHours?: {
+    open: unknown;
+    close: unknown;
+  };
+  tickets?: BackendTicket[];
+};
+
+type BackendTicket = {
+  id: unknown;
+  name: unknown;
+  description?: unknown;
+  price: unknown;
+  dynamicPricingEnabled?: unknown;
+  dynamicPrice?: unknown;
+  maxPerPerson?: unknown;
+  priority?: unknown;
+  isActive?: unknown;
+  includesMenuItem?: unknown;
+  availableDate?: unknown;
+  quantity?: unknown;
+  originalQuantity?: unknown;
+  category: unknown;
+  clubId: unknown;
+  eventId?: unknown;
+  includedMenuItems?: BackendIncludedMenuItem[];
+};
+
+type BackendIncludedMenuItem = {
+  id: unknown;
+  menuItemId: unknown;
+  menuItemName: unknown;
+  variantId?: unknown;
+  variantName?: unknown;
+  quantity?: unknown;
+};
 
 // Always return an array for events
 export async function getEventsForClubCSR(clubId: string): Promise<EventDTO[]> {
@@ -659,54 +770,119 @@ export async function getEventsForClubCSR(clubId: string): Promise<EventDTO[]> {
     if (!resp.ok) return [];
     const json = await resp.json();
         return Array.isArray(json)
-      ? json.map((e: any) => ({
-          id: String(e.id),
-          name: String(e.name),
-          description: e.description ?? null,
-          bannerUrl: e.bannerUrl ?? null,
-          availableDate: String(e.availableDate),
-          openHours: e.openHours ? {
-            open: String(e.openHours.open),
-            close: String(e.openHours.close)
-          } : null,
-          tickets: Array.isArray(e.tickets)
-            ? e.tickets.map((t: any) => ({
-                id: String(t.id),
-                name: String(t.name),
-                description: t.description ?? null,
-                price: t.price,
-                dynamicPricingEnabled: !!t.dynamicPricingEnabled,
-                dynamicPrice: t.dynamicPrice,
-                maxPerPerson: Number(t.maxPerPerson ?? 0),
-                priority: Number(t.priority ?? 0),
-                isActive: !!t.isActive,
-                includesMenuItem: !!t.includesMenuItem,
-                availableDate: t.availableDate ?? null,
-                quantity: t.quantity ?? null,
-                originalQuantity: t.originalQuantity ?? null,
-                category: t.category,
-                clubId: String(t.clubId),
-                eventId: t.eventId ?? null,
-                includedMenuItems: Array.isArray(t.includedMenuItems)
-                  ? t.includedMenuItems.map((inc: any) => ({
-                      id: String(inc.id),
-                      menuItemId: String(inc.menuItemId),
-                      menuItemName: String(inc.menuItemName),
-                      variantId: inc.variantId ?? null,
-                      variantName: inc.variantName ?? null,
-                      quantity: Number(inc.quantity ?? 1),
-                    }))
-                  : [],
-              }))
-            : undefined,
-        }))
+      ? json.map((e: unknown) => {
+          const event = e as BackendEvent;
+          return {
+            id: String(event.id),
+            name: String(event.name),
+            description: event.description ? String(event.description) : null,
+            bannerUrl: event.bannerUrl ? String(event.bannerUrl) : null,
+            availableDate: String(event.availableDate),
+            openHours: event.openHours ? {
+              open: String(event.openHours.open),
+              close: String(event.openHours.close)
+            } : null,
+            tickets: Array.isArray(event.tickets)
+              ? event.tickets.map((t: BackendTicket) => ({
+                  id: String(t.id),
+                  name: String(t.name),
+                  description: t.description ? String(t.description) : null,
+                  price: typeof t.price === 'string' || typeof t.price === 'number' ? t.price : String(t.price),
+                  dynamicPricingEnabled: !!t.dynamicPricingEnabled,
+                  dynamicPrice: typeof t.dynamicPrice === 'string' || typeof t.dynamicPrice === 'number' ? t.dynamicPrice : undefined,
+                  maxPerPerson: Number(t.maxPerPerson ?? 0),
+                  priority: Number(t.priority ?? 0),
+                  isActive: !!t.isActive,
+                  includesMenuItem: !!t.includesMenuItem,
+                  availableDate: t.availableDate ? String(t.availableDate) : null,
+                  quantity: typeof t.quantity === 'number' ? t.quantity : null,
+                  originalQuantity: typeof t.originalQuantity === 'number' ? t.originalQuantity : null,
+                  category: t.category as "general" | "event" | "free",
+                  clubId: String(t.clubId),
+                  eventId: t.eventId ? String(t.eventId) : null,
+                  includedMenuItems: Array.isArray(t.includedMenuItems)
+                    ? t.includedMenuItems.map((inc: BackendIncludedMenuItem) => ({
+                        id: String(inc.id),
+                        menuItemId: String(inc.menuItemId),
+                        menuItemName: String(inc.menuItemName),
+                        variantId: inc.variantId ? String(inc.variantId) : null,
+                        variantName: inc.variantName ? String(inc.variantName) : null,
+                        quantity: Number(inc.quantity ?? 1),
+                      }))
+                    : [],
+                }))
+              : undefined,
+          };
+        })
       : [];
   } catch {
     return [];
   }
 }
 
-// Always return an array for tickets
+// Local types for ticket data from backend
+type BackendTicketData = {
+  id: unknown;
+  name: unknown;
+  description?: unknown;
+  price: unknown;
+  dynamicPricingEnabled?: unknown;
+  dynamicPrice?: unknown;
+  maxPerPerson?: unknown;
+  priority?: unknown;
+  isActive?: unknown;
+  includesMenuItem?: unknown;
+  availableDate?: unknown;
+  quantity?: unknown;
+  originalQuantity?: unknown;
+  category: unknown;
+  clubId: unknown;
+  eventId?: unknown;
+  openHours?: {
+    open?: unknown;
+    openTime?: unknown;
+    open_local?: unknown;
+    open_time?: unknown;
+    close?: unknown;
+    closeTime?: unknown;
+    close_local?: unknown;
+    close_time?: unknown;
+  };
+  event?: {
+    id?: unknown;
+    eventId?: unknown;
+    event_id?: unknown;
+    name?: unknown;
+    description?: unknown;
+    availableDate?: unknown;
+    date?: unknown;
+    available_date?: unknown;
+    openHours?: {
+      open?: unknown;
+      openTime?: unknown;
+      open_local?: unknown;
+      open_time?: unknown;
+      close?: unknown;
+      closeTime?: unknown;
+      close_local?: unknown;
+      close_time?: unknown;
+    };
+    open_hours?: {
+      open?: unknown;
+      openTime?: unknown;
+      open_local?: unknown;
+      open_time?: unknown;
+      close?: unknown;
+      closeTime?: unknown;
+      close_local?: unknown;
+      close_time?: unknown;
+    };
+  };
+  eventDetails?: unknown;
+  eventObj?: unknown;
+  includedMenuItems?: BackendIncludedMenuItem[];
+};
+
 // Always return an array for tickets
 export async function getTicketsForClubCSR(clubId: string): Promise<TicketDTO[]> {
   const url = joinUrl(API_BASE_CSR, `/tickets/club/${encodeURIComponent(clubId)}`);
@@ -729,32 +905,35 @@ export async function getTicketsForClubCSR(clubId: string): Promise<TicketDTO[]>
       : [];
 
     // Local helper: normalize various possible shapes for openHours
-    const normalizeOpenHours = (oh: any): { open: string; close: string } | undefined => {
+    const normalizeOpenHours = (oh: unknown): { open: string; close: string } | undefined => {
       if (!oh || typeof oh !== "object") return undefined;
+      const hours = oh as Record<string, unknown>;
       // Accept common aliases (openTime/closeTime, snake_case, etc.)
-      const openRaw = oh.open ?? oh.openTime ?? oh.open_local ?? oh.open_time ?? null;
-      const closeRaw = oh.close ?? oh.closeTime ?? oh.close_local ?? oh.close_time ?? null;
+      const openRaw = hours.open ?? hours.openTime ?? hours.open_local ?? hours.open_time ?? null;
+      const closeRaw = hours.close ?? hours.closeTime ?? hours.close_local ?? hours.close_time ?? null;
       if (!openRaw || !closeRaw) return undefined;
       return { open: String(openRaw), close: String(closeRaw) };
     };
 
-    return rows.map((t: any) => {
+    return rows.map((t: unknown) => {
+      const ticket = t as BackendTicketData;
       // Robust event extraction
       const rawEvent =
-        t.event ??
-        t.eventDetails ??   // tolerate a couple of common alias keys
-        t.eventObj ??
+        ticket.event ??
+        ticket.eventDetails ??   // tolerate a couple of common alias keys
+        ticket.eventObj ??
         null;
 
       let event: TicketDTO["event"] = null;
 
       if (rawEvent && typeof rawEvent === "object") {
         // Backend provided a proper event object — pass it through (shape-normalized)
-        const evId = rawEvent.id ?? rawEvent.eventId ?? rawEvent.event_id;
-        const evName = rawEvent.name ?? "";
-        const evDesc = rawEvent.description ?? null;
-        const evDate = rawEvent.availableDate ?? rawEvent.date ?? rawEvent.available_date;
-        const evOH = normalizeOpenHours(rawEvent.openHours ?? rawEvent.open_hours);
+        const eventData = rawEvent as Record<string, unknown>;
+        const evId = eventData.id ?? eventData.eventId ?? eventData.event_id;
+        const evName = eventData.name ?? "";
+        const evDesc = eventData.description ?? null;
+        const evDate = eventData.availableDate ?? eventData.date ?? eventData.available_date;
+        const evOH = normalizeOpenHours(eventData.openHours ?? eventData.open_hours);
 
         if (evId && evDate) {
           event = {
@@ -767,59 +946,59 @@ export async function getTicketsForClubCSR(clubId: string): Promise<TicketDTO[]>
         } else if (process.env.NODE_ENV !== "production") {
           // Event object exists but missing essentials — log once for diagnosis
           console.warn("[tickets] event present but missing id/availableDate", {
-            ticketId: t.id, rawEvent
+            ticketId: ticket.id, rawEvent
           });
         }
-      } else if (t?.category === "event" && (t?.eventId || t?.availableDate)) {
+      } else if (ticket?.category === "event" && (ticket?.eventId || ticket?.availableDate)) {
         // Fallback path: construct a minimal event so grace period logic works
         // NOTE: this is a safety net if the backend omitted `event` for event tickets.
         if (process.env.NODE_ENV !== "production") {
           console.warn("[tickets] backend omitted `event` object; constructing minimal event", {
-            ticketId: t.id, eventId: t.eventId, availableDate: t.availableDate
+            ticketId: ticket.id, eventId: ticket.eventId, availableDate: ticket.availableDate
           });
         }
-        const evId = t.eventId ?? t.id; // prefer eventId; fall back to ticket id
-        const evDate = t.availableDate ?? null;
+        const evId = ticket.eventId ?? ticket.id; // prefer eventId; fall back to ticket id
+        const evDate = ticket.availableDate ?? null;
         if (evId && evDate) {
           event = {
             id: String(evId),
-            name: t.name ? String(t.name) : "",          // keep non-empty to match DTO
-            description: t.description ?? null,
+            name: ticket.name ? String(ticket.name) : "",          // keep non-empty to match DTO
+            description: ticket.description ? String(ticket.description) : null,
             availableDate: String(evDate),               // YYYY-MM-DD
-            openHours: normalizeOpenHours(t.openHours),  // if ticket carries it
+            openHours: normalizeOpenHours(ticket.openHours),  // if ticket carries it
           };
         }
       }
 
       // Final mapped ticket (keep event as resolved above)
       return {
-        id: String(t.id),
-        name: String(t.name),
-        description: t.description ?? null,
-        price: t.price,
-        dynamicPricingEnabled: !!t.dynamicPricingEnabled,
-        dynamicPrice: t.dynamicPrice,
-        maxPerPerson: Number(t.maxPerPerson ?? 0),
-        priority: Number(t.priority ?? 0),
-        isActive: !!t.isActive,
-        includesMenuItem: !!t.includesMenuItem,
-        availableDate: t.availableDate ?? null, // for non-event categories
-        quantity: t.quantity ?? null,
-        originalQuantity: t.originalQuantity ?? null,
-        category: t.category,
-        clubId: String(t.clubId),
-        eventId: t.eventId ?? null,
+        id: String(ticket.id),
+        name: String(ticket.name),
+        description: ticket.description ? String(ticket.description) : null,
+        price: typeof ticket.price === 'string' || typeof ticket.price === 'number' ? ticket.price : String(ticket.price),
+        dynamicPricingEnabled: !!ticket.dynamicPricingEnabled,
+        dynamicPrice: typeof ticket.dynamicPrice === 'string' || typeof ticket.dynamicPrice === 'number' ? ticket.dynamicPrice : undefined,
+        maxPerPerson: Number(ticket.maxPerPerson ?? 0),
+        priority: Number(ticket.priority ?? 0),
+        isActive: !!ticket.isActive,
+        includesMenuItem: !!ticket.includesMenuItem,
+        availableDate: ticket.availableDate ? String(ticket.availableDate) : null, // for non-event categories
+        quantity: typeof ticket.quantity === 'number' ? ticket.quantity : null,
+        originalQuantity: typeof ticket.originalQuantity === 'number' ? ticket.originalQuantity : null,
+        category: ticket.category as "general" | "event" | "free",
+        clubId: String(ticket.clubId),
+        eventId: ticket.eventId ? String(ticket.eventId) : null,
 
         // ✅ The actual fix: ensure `event` is carried through consistently
         event,
 
-        includedMenuItems: Array.isArray(t.includedMenuItems)
-          ? t.includedMenuItems.map((inc: any) => ({
+        includedMenuItems: Array.isArray(ticket.includedMenuItems)
+          ? ticket.includedMenuItems.map((inc: BackendIncludedMenuItem) => ({
               id: String(inc.id),
               menuItemId: String(inc.menuItemId),
               menuItemName: String(inc.menuItemName),
-              variantId: inc.variantId ?? null,
-              variantName: inc.variantName ?? null,
+              variantId: inc.variantId ? String(inc.variantId) : null,
+              variantName: inc.variantName ? String(inc.variantName) : null,
               quantity: Number(inc.quantity ?? 1),
             }))
           : [],

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
 import { Eye, EyeOff } from 'lucide-react';
 import { loginSchema } from '@/services/domain/auth.service';
 import { useAuthStore } from '@/stores/auth.store';
@@ -19,6 +18,13 @@ export default function LoginForm() {
   const { login, clearError, isLoading, error, isAuthenticated } = useAuthStore();
   const redirectAfterAuth = useAuthRedirect('/');
 
+  // Move useForm hook to top level - never inside conditional logic
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({ resolver: zodResolver(loginSchema) });
+
   useEffect(() => {
     if (isAuthenticated) {
       redirectAfterAuth();
@@ -32,12 +38,6 @@ export default function LoginForm() {
       </div>
     );
   }
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormData>({ resolver: zodResolver(loginSchema) });
 
   const onSubmit = async (data: LoginFormData) => {
     try {
