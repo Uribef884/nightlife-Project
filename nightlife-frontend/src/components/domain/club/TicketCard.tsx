@@ -7,6 +7,7 @@ import { nowInBogota, parseBogotaDate } from '@/utils/timezone';
 
 // Local types for type safety
 type TicketWithAny = {
+  id?: string | number;
   name?: string;
   title?: string;
   description?: string;
@@ -92,8 +93,13 @@ function getPrice(t: unknown): { price: number | null; compareAt: number | null;
   const dynamic = toNum(ticketWithAny.dynamicPrice);
   const base = toNum(ticketWithAny.price);
   
-  // Only use dynamic pricing if it's enabled and available
-  if (ticketWithAny.dynamicPricingEnabled && dynamic != null && !isNaN(dynamic) && base != null) {
+  // For event tickets, always use dynamic price if available (includes grace period pricing)
+  // For other tickets, only use dynamic pricing if it's enabled
+  const shouldUseDynamic = ticketWithAny.category === "event" 
+    ? (dynamic != null && !isNaN(dynamic) && base != null)
+    : (ticketWithAny.dynamicPricingEnabled && dynamic != null && !isNaN(dynamic) && base != null);
+  
+  if (shouldUseDynamic && dynamic != null && base != null) {
     // Only show strike-through if there's a significant discount (more than 1% difference)
     // This prevents showing strike-through when prices are equal or very close
     const discountThreshold = 0.01; // 1% threshold
@@ -104,7 +110,6 @@ function getPrice(t: unknown): { price: number | null; compareAt: number | null;
     return { price: dynamic, compareAt: null, currency };
   }
   
-  // Fall back to base price
   return { price: base, compareAt: null, currency };
 }
 function getAvailable(t: unknown): number | null {

@@ -106,6 +106,7 @@ export async function getAvailableTicketsForDate(
 
   const data = (await res.json()) as AvailableTicketsResponse;
 
+
   // Local types for backend ticket data
   type BackendTicket = {
     id: unknown;
@@ -149,6 +150,8 @@ export async function getAvailableTicketsForDate(
   // Normalize arrays defensively and ensure includedMenuItems are properly structured
   const normalizeTicket = (ticket: unknown): TicketDTO => {
     const t = ticket as BackendTicket;
+    
+    
     return {
       id: String(t.id),
       name: String(t.name),

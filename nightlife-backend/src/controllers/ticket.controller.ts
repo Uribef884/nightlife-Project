@@ -1263,31 +1263,41 @@ export async function getAvailableTicketsForDate(req: Request, res: Response): P
       let dynamicPrice = Number(ticket.price);
       let dynamicPricingReason: string | undefined = undefined;
       
-      if (ticket.dynamicPricingEnabled) {
-        if (ticket.category === TicketCategory.EVENT) {
-          // Event ticket dynamic pricing
-          if (event) {
-            // Ensure we have a proper Date object for the event
-            const eventDate = event.availableDate instanceof Date 
-              ? event.availableDate 
-              : new Date(event.availableDate);
-            
-            dynamicPrice = computeDynamicEventPrice(Number(ticket.price), eventDate, event.openHours, { isFree: Number(ticket.price) === 0 });
-            if (dynamicPrice === -1) {
-              // Event has passed grace period, keep base price but let frontend handle availability
-              dynamicPrice = Number(ticket.price);
-            }
-            dynamicPricingReason = getEventTicketDynamicPricingReason(eventDate, event.openHours);
-          } else {
-            // Fallback for event tickets without event relation
-            dynamicPrice = computeDynamicEventPrice(Number(ticket.price), targetDate, undefined, { isFree: Number(ticket.price) === 0 });
-            if (dynamicPrice === -1) {
-              // Event has passed grace period, keep base price but let frontend handle availability
-              dynamicPrice = Number(ticket.price);
-            }
-            dynamicPricingReason = getEventTicketDynamicPricingReason(targetDate);
+      if (ticket.category === TicketCategory.EVENT) {
+        // Event tickets: Always apply grace period pricing regardless of dynamicPricingEnabled
+        if (event) {
+          // Ensure we have a proper Date object for the event
+          const eventDate = event.availableDate instanceof Date 
+            ? event.availableDate 
+            : new Date(event.availableDate);
+          
+          dynamicPrice = computeDynamicEventPrice(Number(ticket.price), eventDate, event.openHours, { 
+            isFree: Number(ticket.price) === 0,
+            dynamicEnabled: ticket.dynamicPricingEnabled 
+          });
+          if (dynamicPrice === -1) {
+            // Event has passed grace period, keep base price but let frontend handle availability
+            dynamicPrice = Number(ticket.price);
           }
-        } else if (ticket.category === TicketCategory.GENERAL) {
+          dynamicPricingReason = getEventTicketDynamicPricingReason(eventDate, event.openHours, { 
+            dynamicEnabled: ticket.dynamicPricingEnabled 
+          });
+        } else {
+          // Fallback for event tickets without event relation
+          dynamicPrice = computeDynamicEventPrice(Number(ticket.price), targetDate, undefined, { 
+            isFree: Number(ticket.price) === 0,
+            dynamicEnabled: ticket.dynamicPricingEnabled 
+          });
+          if (dynamicPrice === -1) {
+            // Event has passed grace period, keep base price but let frontend handle availability
+            dynamicPrice = Number(ticket.price);
+          }
+          dynamicPricingReason = getEventTicketDynamicPricingReason(targetDate, undefined, { 
+            dynamicEnabled: ticket.dynamicPricingEnabled 
+          });
+        }
+      } else if (ticket.dynamicPricingEnabled) {
+        if (ticket.category === TicketCategory.GENERAL) {
           // General ticket dynamic pricing
           dynamicPrice = computeDynamicPrice({
             basePrice: Number(ticket.price),

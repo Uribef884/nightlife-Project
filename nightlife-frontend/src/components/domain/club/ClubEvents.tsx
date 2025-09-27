@@ -112,7 +112,14 @@ function ExpandedEventTickets({
     // Use the same price logic as getPrice function
     const dynamic = Number(t.dynamicPrice);
     const base = Number(t.price);
-    const price = (t.dynamicPricingEnabled && !isNaN(dynamic) ? dynamic : base);
+    // For event tickets, always use dynamic price if available (includes grace period pricing)
+    // For other tickets, only use dynamic pricing if it's enabled
+    const shouldUseDynamic = t.category === "event" 
+      ? (!isNaN(dynamic) && !isNaN(base))
+      : (t.dynamicPricingEnabled && !isNaN(dynamic) && !isNaN(base));
+    const price = shouldUseDynamic ? dynamic : base;
+    
+    
     return price > 0;
   }), [tickets]);
   const gratis = useMemo(() => tickets.filter((t) => {
@@ -120,7 +127,12 @@ function ExpandedEventTickets({
     // Use the same price logic as getPrice function
     const dynamic = Number(t.dynamicPrice);
     const base = Number(t.price);
-    const price = (t.dynamicPricingEnabled && !isNaN(dynamic) ? dynamic : base);
+    // For event tickets, always use dynamic price if available (includes grace period pricing)
+    // For other tickets, only use dynamic pricing if it's enabled
+    const shouldUseDynamic = t.category === "event" 
+      ? (!isNaN(dynamic) && !isNaN(base))
+      : (t.dynamicPricingEnabled && !isNaN(dynamic) && !isNaN(base));
+    const price = shouldUseDynamic ? dynamic : base;
     return price === 0;
   }), [tickets]);
 
