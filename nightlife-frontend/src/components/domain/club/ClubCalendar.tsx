@@ -2,13 +2,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { 
-  todayInBogota, 
-  parseBogotaDate, 
-  isPastDateInBogota, 
-  isDateSelectableInBogota, 
-  startOfDayInBogota 
-} from '@/utils/timezone';
+import {
+  todayInBogota,
+  parseBogotaDate,
+  isPastDateInBogota,
+  isDateSelectableInBogota,
+  startOfDayInBogota,
+} from "@/utils/timezone";
 
 /** ---------- Small date helpers ---------- */
 function daysInMonth(year: number, monthIndex: number) {
@@ -27,27 +27,120 @@ function parseISO(iso: string): Date {
 function addMonths(d: Date, delta: number) {
   return new Date(d.getFullYear(), d.getMonth() + delta, 1);
 }
-function chunkWeeks<T>(cells: T[]): T[][] {
-  const rows: T[][] = [];
-  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
-  return rows;
-}
-function findWeekIndex(weeks: DayCell[][], focusISO: string): number {
-  if (!focusISO) return 0;
-  return Math.max(
-    0,
-    weeks.findIndex((row) => row.some((c) => !!c.iso && c.iso === focusISO))
-  );
-}
+// Removed unused functions: chunkWeeks and findWeekIndex
 
+/** NOTE: We use Sunday-start weeks visually */
 const WEEK_ES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 type DayCell = {
-  iso: string; // "" for leading blanks
+  iso: string; // "" for leading blanks (month grid only)
   disabled: boolean; // past days and dates more than 3 weeks in the future
   kind: "event" | "open" | "free" | null; // status badge
   isToday: boolean;
 };
+
+/* ===================== BOGOTÁ-AWARE HELPERS (INLINE) ===================== */
+/**
+ * Returns the 7 ISO dates (Sunday → Saturday) for the week that contains the given anchor date,
+ * computed in BOGOTÁ time using Luxon (via our helpers).
+ *
+ * Luxon weekday: Monday=1 ... Sunday=7  → daysBack = weekday % 7 makes Sun(7)→0, Mon(1)→1, etc.
+ */
+function getWeekDatesISOInBogota(anchorISO: string): string[] {
+  const anchorDt = parseBogotaDate(anchorISO); // Luxon DateTime in America/Bogota at start of day
+  const daysBack = anchorDt.weekday % 7;
+  const weekStart = anchorDt.minus({ days: daysBack });
+
+  const out: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    out.push(weekStart.plus({ days: i }).toISODate()!); // YYYY-MM-DD
+  }
+  return out;
+}
+
+/** True if any day in the week is selectable OR an event is on any day in the list. */
+function weekHasSelectableOrEvent(weekISOList: string[], eventDates: Set<string>): boolean {
+  for (const dayISO of weekISOList) {
+    if (isDateSelectableInBogota(dayISO)) return true;
+    if (eventDates.has(dayISO)) return true;
+  }
+  return false;
+}
+
+/**
+ * Checks a month and returns true if ANY day is selectable or there is at least one event in that month.
+ * `anyISOInMonth` should be any ISO inside the target month (usually the 1st).
+ */
+function monthHasSelectableOrEvent(anyISOInMonth: string, eventDates: Set<string>): boolean {
+  const anyDate = parseISO(anyISOInMonth);
+  const y = anyDate.getFullYear();
+  const m = anyDate.getMonth();
+  const total = daysInMonth(y, m);
+
+  const monthPrefix = `${y}-${pad(m + 1)}-`;
+  for (const e of eventDates) {
+    if (e.startsWith(monthPrefix)) return true;
+  }
+
+  for (let d = 1; d <= total; d++) {
+    const iso = `${y}-${pad(m + 1)}-${pad(d)}`;
+    if (isDateSelectableInBogota(iso)) return true;
+  }
+  return false;
+}
+
+/** Build a DayCell for a specific ISO date (used in collapsed/week mode rendering). */
+function buildDayCellForISO(
+  iso: string,
+  opts: {
+    todayISO: string;
+    eventDates: Set<string>;
+    freeDates: Set<string>;
+    openDays: Set<string>; // sunday..saturday
+  }
+): DayCell {
+  const { todayISO, eventDates, freeDates, openDays } = opts;
+  const d = parseISO(iso);
+
+  const isPast = isPastDateInBogota(iso);
+  const isTooFarFuture = !isDateSelectableInBogota(iso);
+  const disabled = isPast || isTooFarFuture;
+  const isToday = iso === todayISO;
+
+  const weekdayFull = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ][d.getDay()];
+
+  let kind: "event" | "open" | "free" | null = null;
+  if (eventDates.has(iso)) kind = "event";
+  else if (freeDates.has(iso)) kind = "free";
+  else if (openDays.has(weekdayFull)) kind = "open";
+
+  return { iso, disabled, kind, isToday };
+}
+
+/** Format week header like "28 sep – 4 oct 2025" when collapsed=true */
+function formatWeekHeaderES(weekISOs: string[]): string {
+  const start = parseISO(weekISOs[0]);
+  const end = parseISO(weekISOs[6]);
+
+  const monthNames = [
+    "ene", "feb", "mar", "abr", "may", "jun",
+    "jul", "ago", "sep", "oct", "nov", "dic",
+  ];
+
+  const startStr = `${start.getDate()} ${monthNames[start.getMonth()]}`;
+  const endStr = `${end.getDate()} ${monthNames[end.getMonth()]} ${end.getFullYear()}`;
+
+  return `${startStr} – ${endStr}`;
+}
+/* ============================================================================ */
 
 export function ClubCalendar({
   monthOffset = 0,
@@ -66,7 +159,7 @@ export function ClubCalendar({
   selectedDate: string | null;
   onSelect: (iso: string) => void;
   hasCartItems?: boolean;
-  onDateChangeBlocked?: () => void;
+  onDateChangeBlocked?: (desiredDate?: string) => void;
 }) {
   /** Stabilize "today" so we don't churn state on each render */
   const todayISO = useMemo(() => todayInBogota(), []);
@@ -79,7 +172,7 @@ export function ClubCalendar({
     focusRef.current = focusISO;
   }, [focusISO]);
 
-  /** Only remaining effect: parent selectedDate → focusISO (guarded, single dep) */
+  /** Parent selectedDate → focusISO */
   useEffect(() => {
     if (selectedDate && selectedDate !== focusRef.current) {
       setFocusISO(selectedDate);
@@ -89,22 +182,19 @@ export function ClubCalendar({
   /** Collapsed = single-line week view (default) */
   const [collapsed, setCollapsed] = useState<boolean>(true);
 
-  /** ===== Derived month (no `cursor` state at all) =====
-   * We derive the *visible month start* from focusISO + monthOffset.
-   * That means there is no cursor↔focus ping-pong anymore.
+  /** ===== Derived month (for MONTH GRID ONLY) =====
    * Never allow navigation to past months.
    */
   const visibleMonthStart = useMemo(() => {
     const base = parseISO(focusISO || todayISO);
     const v = addMonths(new Date(base.getFullYear(), base.getMonth(), 1), monthOffset);
     const requestedMonth = new Date(v.getFullYear(), v.getMonth(), 1);
-    
-    // Never allow showing past months - always show at least the current month
+
     const currentMonth = new Date(today.year, today.month - 1, 1); // Luxon months are 1-based
     return requestedMonth < currentMonth ? currentMonth : requestedMonth;
   }, [focusISO, monthOffset, todayISO, today]);
-  
-  /** Build month cells (with leading blanks) */
+
+  /** Build month cells (with leading blanks) — used ONLY in month (expanded) view */
   const meta = useMemo(() => {
     const y = visibleMonthStart.getFullYear();
     const m = visibleMonthStart.getMonth();
@@ -124,13 +214,11 @@ export function ClubCalendar({
       const date = new Date(y, m, d);
       const iso = toISO(date);
 
-      // Disable past dates and dates more than 3 weeks in the future
       const isPast = isPastDateInBogota(iso);
       const isTooFarFuture = !isDateSelectableInBogota(iso);
       const inPast = isPast || isTooFarFuture;
       const isToday = iso === todayISO;
 
-      // openDays contains full weekday names in lowercase
       const weekdayFull = [
         "sunday",
         "monday",
@@ -141,30 +229,24 @@ export function ClubCalendar({
         "saturday",
       ][date.getDay()];
 
-      // Priority: event > free > open (selection handled later)
       let kind: "event" | "open" | "free" | null = null;
       if (eventDates.has(iso)) kind = "event";
       else if (freeDates.has(iso)) kind = "free";
       else if (openDays.has(weekdayFull)) kind = "open";
 
-      cells.push({ iso, disabled: inPast, kind, isToday }); // disabled for past dates or dates > 3 weeks
+      cells.push({ iso, disabled: inPast, kind, isToday });
     }
 
     return { y, m, cells };
   }, [visibleMonthStart, eventDates, freeDates, openDays, todayISO]);
-
 
   /** Utilities for arrow clicks */
   function monthFirstISO(year: number, monthIndex: number) {
     return `${year}-${pad(monthIndex + 1)}-01`;
   }
   function computeAnchoredFocus(target: Date) {
-    // Prefer selectedDate if it falls into target month; otherwise first of month
-    // But never allow going to past months
-    const currentMonth = new Date(today.year, today.month - 1, 1); // Luxon months are 1-based
+    const currentMonth = new Date(today.year, today.month - 1, 1);
     const targetMonth = new Date(target.getFullYear(), target.getMonth(), 1);
-    
-    // If target is in the past, use current month instead
     const actualTarget = targetMonth < currentMonth ? currentMonth : target;
     const y = actualTarget.getFullYear();
     const m = actualTarget.getMonth();
@@ -184,9 +266,9 @@ export function ClubCalendar({
     // Background priority
     let bg = "bg-white/10";
     if (c.disabled) {
-      bg = "bg-white/5"; // past -> dim
+      bg = "bg-white/5"; // past or too far -> dim
     } else if (isSelected) {
-      bg = "bg-[#7A48D3]"; // selection always wins
+      bg = "bg-[#7A48D3]";
     } else if (c.kind === "event") {
       bg = "bg-red-500/20";
     } else if (c.kind === "free") {
@@ -194,7 +276,6 @@ export function ClubCalendar({
     } else if (c.kind === "open") {
       bg = "bg-blue-500/20";
     } else if (isToday) {
-      // Only apply "today" tint if no other status matched
       bg = "bg-[#7A48D3]/50";
     }
 
@@ -207,15 +288,14 @@ export function ClubCalendar({
         disabled={!c.iso || c.disabled}
         onClick={() => {
           if (!c.iso) return;
-          
-          // Check if user is trying to change date while having cart items
+
           if (hasCartItems && c.iso !== selectedDate) {
-            onDateChangeBlocked?.();
+            onDateChangeBlocked?.(c.iso);
             return;
           }
-          
+
           onSelect(c.iso);
-          if (c.iso !== focusRef.current) setFocusISO(c.iso); // keep the strip anchored to the chosen day
+          if (c.iso !== focusRef.current) setFocusISO(c.iso);
         }}
         className={`${
           collapsed ? "min-h-[44px] h-11" : "aspect-square"
@@ -228,51 +308,48 @@ export function ClubCalendar({
   }
 
   /** -------- Render -------- */
+  const collapsedWeekISOs = collapsed ? getWeekDatesISOInBogota(focusISO) : null;
+  const collapsedWeekHeader = collapsed && collapsedWeekISOs
+    ? formatWeekHeaderES(collapsedWeekISOs)
+    : null;
+
   return (
     <div className="w-full">
-      {/* Header: month arrows + label + Semana/Mes toggle */}
+      {/* Header: arrows + dynamic label + Semana/Mes toggle */}
       <div className="flex items-center justify-between mb-2 gap-2">
         <div className="flex items-center gap-2">
+          {/* PREVIOUS (WEEK / MONTH) */}
           <button
             onClick={() => {
               if (collapsed) {
-                // Week mode: navigate by weeks
-                const currentDate = parseISO(focusISO);
-                const prevWeek = new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000);
-                const prevWeekISO = toISO(prevWeek);
-                
-                // Prevent going to past weeks (before current week)
-                const todayDate = startOfDayInBogota(todayISO);
-                const currentWeekStart = new Date(todayDate.toJSDate());
-                currentWeekStart.setDate(todayDate.day - todayDate.weekday + 1); // Start of current week
-                
-                if (prevWeek >= currentWeekStart) {
-                  setFocusISO(prevWeekISO);
+                const focusWeekStartISO = getWeekDatesISOInBogota(focusISO)[0];
+                const todayWeekStartISO = getWeekDatesISOInBogota(todayISO)[0];
+                if (focusWeekStartISO > todayWeekStartISO) {
+                  const prevAnchorISO = parseBogotaDate(focusISO).minus({ days: 7 }).toISODate()!;
+                  setFocusISO(prevAnchorISO);
                 }
               } else {
-                // Month mode: navigate by months
-                const currentMonth = new Date(today.year, today.month - 1, 1); // Luxon months are 1-based
+                const currentMonth = new Date(today.year, today.month - 1, 1);
                 if (visibleMonthStart.getTime() <= currentMonth.getTime()) return;
-                
                 const prevMonth = addMonths(visibleMonthStart, -1);
                 const desired = computeAnchoredFocus(prevMonth);
                 if (desired !== focusRef.current) setFocusISO(desired);
               }
             }}
             disabled={
-              collapsed 
+              collapsed
                 ? (() => {
-                    // Week mode: disable if current week is the earliest allowed week
-                    const currentDate = parseISO(focusISO);
-                    const todayDate = startOfDayInBogota(todayISO);
-                    const currentWeekStart = new Date(todayDate.toJSDate());
-                    currentWeekStart.setDate(todayDate.day - todayDate.weekday + 1);
-                    return currentDate.getTime() <= currentWeekStart.getTime();
+                    const focusWeekStartISO = getWeekDatesISOInBogota(focusISO)[0];
+                    const todayWeekStartISO = getWeekDatesISOInBogota(todayISO)[0];
+                    return focusWeekStartISO <= todayWeekStartISO;
                   })()
                 : (() => {
-                    // Month mode: disable if current month is the earliest allowed month
                     const todayDate = startOfDayInBogota(todayISO);
-                    const currentMonthStart = new Date(todayDate.year, todayDate.month - 1, 1);
+                    const currentMonthStart = new Date(
+                      todayDate.year,
+                      todayDate.month - 1,
+                      1
+                    );
                     return visibleMonthStart.getTime() <= currentMonthStart.getTime();
                   })()
             }
@@ -281,43 +358,20 @@ export function ClubCalendar({
           >
             ‹
           </button>
+
+          {/* NEXT (WEEK / MONTH) */}
           <button
             onClick={() => {
               if (collapsed) {
-                // Week mode: navigate by weeks
-                const currentDate = parseISO(focusISO);
-                const nextWeek = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-                const nextWeekISO = toISO(nextWeek);
-                
-                // Check if next week is within 3 weeks limit OR has events
-                const isNextWeekSelectable = isDateSelectableInBogota(nextWeekISO);
-                const hasEventsInNextWeek = Array.from(eventDates).some(eventDate => {
-                  const eventDateObj = parseISO(eventDate);
-                  const weekStart = new Date(nextWeek);
-                  weekStart.setDate(nextWeek.getDate() - nextWeek.getDay());
-                  const weekEnd = new Date(weekStart);
-                  weekEnd.setDate(weekStart.getDate() + 6);
-                  return eventDateObj >= weekStart && eventDateObj <= weekEnd;
-                });
-                
-                if (isNextWeekSelectable || hasEventsInNextWeek) {
-                  setFocusISO(nextWeekISO);
+                const nextAnchorISO = parseBogotaDate(focusISO).plus({ days: 7 }).toISODate()!;
+                const nextWeekDates = getWeekDatesISOInBogota(nextAnchorISO);
+                if (weekHasSelectableOrEvent(nextWeekDates, eventDates)) {
+                  setFocusISO(nextAnchorISO);
                 }
               } else {
-                // Month mode: navigate by months
                 const nextMonth = addMonths(visibleMonthStart, 1);
-                
-                // Check if next month would exceed 3 weeks limit OR has events
                 const nextMonthISO = toISO(nextMonth);
-                const isNextMonthSelectable = isDateSelectableInBogota(nextMonthISO);
-                const hasEventsInNextMonth = Array.from(eventDates).some(eventDate => {
-                  const eventDateObj = parseISO(eventDate);
-                  const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
-                  const nextMonthEnd = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0);
-                  return eventDateObj >= nextMonthStart && eventDateObj <= nextMonthEnd;
-                });
-                
-                if (isNextMonthSelectable || hasEventsInNextMonth) {
+                if (monthHasSelectableOrEvent(nextMonthISO, eventDates)) {
                   const desired = computeAnchoredFocus(nextMonth);
                   if (desired !== focusRef.current) setFocusISO(desired);
                 }
@@ -326,37 +380,14 @@ export function ClubCalendar({
             disabled={
               collapsed
                 ? (() => {
-                    // Week mode: disable if next week would exceed 3 weeks limit AND has no events
-                    const currentDate = parseISO(focusISO);
-                    const nextWeek = new Date(currentDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-                    const nextWeekISO = toISO(nextWeek);
-                    const isNextWeekSelectable = isDateSelectableInBogota(nextWeekISO);
-                    
-                    const hasEventsInNextWeek = Array.from(eventDates).some(eventDate => {
-                      const eventDateObj = parseISO(eventDate);
-                      const weekStart = new Date(nextWeek);
-                      weekStart.setDate(nextWeek.getDate() - nextWeek.getDay());
-                      const weekEnd = new Date(weekStart);
-                      weekEnd.setDate(weekStart.getDate() + 6);
-                      return eventDateObj >= weekStart && eventDateObj <= weekEnd;
-                    });
-                    
-                    return !isNextWeekSelectable && !hasEventsInNextWeek;
+                    const nextAnchorISO = parseBogotaDate(focusISO).plus({ days: 7 }).toISODate()!;
+                    const nextWeekDates = getWeekDatesISOInBogota(nextAnchorISO);
+                    return !weekHasSelectableOrEvent(nextWeekDates, eventDates);
                   })()
                 : (() => {
-                    // Month mode: disable if next month would exceed 3 weeks limit AND has no events
                     const nextMonth = addMonths(visibleMonthStart, 1);
                     const nextMonthISO = toISO(nextMonth);
-                    const isNextMonthSelectable = isDateSelectableInBogota(nextMonthISO);
-                    
-                    const hasEventsInNextMonth = Array.from(eventDates).some(eventDate => {
-                      const eventDateObj = parseISO(eventDate);
-                      const nextMonthStart = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1);
-                      const nextMonthEnd = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0);
-                      return eventDateObj >= nextMonthStart && eventDateObj <= nextMonthEnd;
-                    });
-                    
-                    return !isNextMonthSelectable && !hasEventsInNextMonth;
+                    return !monthHasSelectableOrEvent(nextMonthISO, eventDates);
                   })()
             }
             className="rounded-md bg-white/10 hover:bg-white/15 disabled:bg-white/5 disabled:cursor-not-allowed px-2 py-1 text-white disabled:text-white/50"
@@ -366,11 +397,17 @@ export function ClubCalendar({
           </button>
         </div>
 
+        {/* Header label:
+            - Collapsed: show week range (e.g., "28 sep – 4 oct 2025")
+            - Month: show "octubre de 2025" as before
+        */}
         <div className="text-white font-semibold select-none">
-          {visibleMonthStart.toLocaleString("es-CO", {
-            month: "long",
-            year: "numeric",
-          })}
+          {collapsed && collapsedWeekHeader
+            ? collapsedWeekHeader
+            : visibleMonthStart.toLocaleString("es-CO", {
+                month: "long",
+                year: "numeric",
+              })}
         </div>
 
         <div className="flex items-center gap-2">
@@ -395,18 +432,19 @@ export function ClubCalendar({
         ))}
       </div>
 
-      {/* Body: either full month grid or single-week strip */}
+      {/* Body */}
       {!collapsed ? (
-        // Full month grid for the derived month
+        // FULL MONTH GRID (unchanged behavior)
         <div className="grid grid-cols-7 gap-1">
           {meta.cells.map((c, i) => renderDay(c, i))}
         </div>
       ) : (
-        // Collapsed: show the week containing focusISO
+        // COLLAPSED: RENDER THE ACTUAL WEEK (Sun→Sat) EVEN IF IT CROSSES MONTHS
         (() => {
-          const weeks = chunkWeeks(meta.cells);
-          const idx = findWeekIndex(weeks as DayCell[][], focusISO);
-          const row = (weeks[idx] ?? weeks[0] ?? []) as DayCell[];
+          const weekISOs = getWeekDatesISOInBogota(focusISO);
+          const row: DayCell[] = weekISOs.map((iso) =>
+            buildDayCellForISO(iso, { todayISO, eventDates, freeDates, openDays })
+          );
           return (
             <div className="grid grid-cols-7 gap-1">
               {row.map((c, i) => renderDay(c, i))}
@@ -415,7 +453,7 @@ export function ClubCalendar({
         })()
       )}
 
-      {/* Legend: always visible */}
+      {/* Legend */}
       <div className="mt-3 flex flex-wrap gap-3 text-xs text-white/70">
         <Legend color="bg-red-500/50" label="Eventos" />
         <Legend color="bg-blue-500/50" label="Días abiertos" />

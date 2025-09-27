@@ -42,7 +42,6 @@ export default function PaymentProcessingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusUpdateCount, setStatusUpdateCount] = useState(0);
-  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
 
   // Handle status updates from SSE
   const handleStatusUpdate = useCallback(async (status: string, data: unknown) => {
@@ -152,31 +151,7 @@ export default function PaymentProcessingPage() {
           setTransactionDetails(transactionDetails);
           setLoading(false);
           
-          // Check current status immediately since transaction might already be processed
-          const checkInitialStatus = async () => {
-            if (isCheckingStatus) {
-              return;
-            }
-            
-            setIsCheckingStatus(true);
-            try {
-              const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-              const response = await fetch(`${apiUrl}/checkout/unified/status/${details.transactionId}`);
-              if (response.ok) {
-                const statusData = await response.json();
-                if (statusData.status && statusData.status !== 'PENDING') {
-                  // Transaction status already updated
-                  handleStatusUpdate(statusData.status, statusData);
-                }
-              }
-            } catch (err) {
-              console.error('PaymentProcessing - Error checking initial status:', err);
-            } finally {
-              setIsCheckingStatus(false);
-            }
-          };
-          
-          checkInitialStatus();
+          // SSE will handle status updates, no need for initial polling
         } else {
           // Not a pending transaction, redirect to appropriate page
           if (details.status === 'APPROVED') {
@@ -200,7 +175,7 @@ export default function PaymentProcessingPage() {
       setError('No se encontraron detalles de la transacción');
       setLoading(false);
     }
-  }, [handleStatusUpdate, isCheckingStatus, router]);
+  }, [handleStatusUpdate, router]);
 
   // Use SSE for real-time status updates - only after we have transaction details
   const { isConnected, error: sseError } = useSSE(transactionDetails?.transactionId || null, {

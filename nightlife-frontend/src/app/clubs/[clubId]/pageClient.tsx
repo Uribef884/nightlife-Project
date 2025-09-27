@@ -176,35 +176,46 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   
   // Modal state for date change warning
   const [showDateChangeModal, setShowDateChangeModal] = useState(false);
-  const [pendingNavigation, setPendingNavigation] = useState<{ date: string; href?: string } | null>(null);
+  const [tempDesiredDate, setTempDesiredDate] = useState<string | null>(null);
+  const [isSettingDateFromModal, setIsSettingDateFromModal] = useState(false);
   const [tab, setTab] = useState<TabKey>("general");
   
   // Modal handlers
-  const handleDateChangeBlocked = () => {
+  const handleDateChangeBlocked = (desiredDate?: string) => {
+    if (desiredDate) {
+      setTempDesiredDate(desiredDate);
+    }
     setShowDateChangeModal(true);
   };
   
   const handleClearCartAndClose = async () => {
+    setIsSettingDateFromModal(true); // Flag to prevent syncFromLocation from interfering
     await clearCart();
     setShowDateChangeModal(false);
-    // If there's a pending navigation, execute it and switch to reservas tab
-    if (pendingNavigation) {
-      setSelectedDate(pendingNavigation.date);
+    
+    // Use the temp desired date to change the date after cart is cleared
+    if (tempDesiredDate) {
+      setSelectedDate(tempDesiredDate);
       setTab("reservas");
-      setPendingNavigation(null);
+      setTempDesiredDate(null);
     }
+    
+    // Reset flag after a delay
+    setTimeout(() => {
+      setIsSettingDateFromModal(false);
+    }, 200);
   };
 
   const handleCancelNavigation = () => {
     setShowDateChangeModal(false);
-    setPendingNavigation(null);
+    setTempDesiredDate(null);
   };
 
   // Safe date change handler that checks for cart items
   const handleDateChange = useCallback((newDate: string) => {
     if (cartItems.length > 0) {
-      // Store the pending navigation and show modal
-      setPendingNavigation({ date: newDate });
+      // Store the desired date in temp variable and show modal
+      setTempDesiredDate(newDate);
       setShowDateChangeModal(true);
     } else {
       // Safe to change date
@@ -215,11 +226,11 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
   // Handle ad date change requests
   useEffect(() => {
     const handleAdDateChangeRequest = (event: CustomEvent) => {
-      const { date, href } = event.detail;
+      const { date } = event.detail;
       
       if (cartItems.length > 0) {
-        // Store the pending navigation and show modal (don't switch tabs yet)
-        setPendingNavigation({ date, href });
+        // Store the desired date in temp variable and show modal
+        setTempDesiredDate(date);
         setShowDateChangeModal(true);
       } else {
         // Safe to change date immediately and switch to reservas tab
@@ -325,6 +336,11 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     const urlDate = qdate && /^\d{4}-\d{2}-\d{2}$/.test(qdate) ? qdate : null;
 
     setSelectedDate((prev) => {
+      // Don't change date if we're setting it from the modal
+      if (isSettingDateFromModal) {
+        return prev;
+      }
+      
       if (urlDate && prev !== urlDate) {
         // Reset caches only when date actually changes to avoid noise
         setAvailable(null);
@@ -339,8 +355,8 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       }
       
       // Check if there are items in cart first, use most common date
-      // This applies both when prev is null AND when switching to reservas tab
-      if (cartItems.length > 0) {
+      // This applies only when prev is null (initial load), NOT when switching tabs
+      if (cartItems.length > 0 && prev == null) {
         const dateCounts = new Map<string, number>();
         cartItems.forEach(item => {
           if (item.date) {
@@ -352,8 +368,8 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
           const mostCommonDate = Array.from(dateCounts.entries())
             .sort(([,a], [,b]) => b - a)[0][0];
           
-          // Only change date if it's different from current or if switching to reservas tab
-          if (prev !== mostCommonDate && (prev == null || t === "reservas")) {
+          // Only change date if it's different from current
+          if (prev !== mostCommonDate) {
             setAvailable(null);
             setAvailError(null);
             setDateCache({});
@@ -373,13 +389,13 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       
       return prev;
     });
-  }, [cartItems, isLoading, setTab, setSelectedDate, setAvailable, setAvailError, setDateCache]);
+  }, [cartItems, isLoading, isSettingDateFromModal, setTab, setSelectedDate, setAvailable, setAvailError, setDateCache]);
 
   useEffect(() => {
     syncFromLocation();
     const off = installLocationObserver(syncFromLocation);
     return () => off();
-  }, [clubId, clubSSR, cartItems, syncFromLocation]); // include cartItems to re-sync when cart changes
+  }, [clubId, clubSSR, syncFromLocation]); // removed cartItems to prevent reload on cart changes
 
   // Test scroll function on mount when coming from ad
   useEffect(() => {

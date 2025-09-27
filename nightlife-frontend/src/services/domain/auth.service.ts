@@ -5,9 +5,9 @@ export interface User {
   id: string;
   email: string;
   role: 'user' | 'clubowner' | 'waiter' | 'bouncer' | 'admin';
-  firstName?: string;
-  lastName?: string;
-  avatar?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatar?: string | null;
   isOAuthUser?: boolean;
   clubId?: string | null;
   clubIds?: string[] | null;
@@ -72,9 +72,9 @@ export const userSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   role: z.enum(['user', 'clubowner', 'waiter', 'bouncer', 'admin']),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  avatar: z.string().optional(),
+  firstName: z.string().nullable().optional(),
+  lastName: z.string().nullable().optional(),
+  avatar: z.string().nullable().optional(),
   isOAuthUser: z.boolean().optional(),
   clubId: z.string().nullable().optional(),
   clubIds: z.array(z.string()).nullable().optional(),

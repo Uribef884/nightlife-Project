@@ -170,10 +170,10 @@ export default function CheckoutForm({ onSuccess, onError, className = '' }: Che
   
   // Pre-fill email when user is logged in
   useEffect(() => {
-    if (user?.email && !email) {
+    if (user?.email) {
       setEmail(user.email);
     }
-  }, [user?.email, email]);
+  }, [user?.email]);
 
   // Get base URL dynamically
   const getBaseUrl = () => {

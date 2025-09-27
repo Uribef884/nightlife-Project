@@ -33,6 +33,23 @@ const transactionStore = new Map<string, {
   };
 }>();
 
+// Cache for transaction status responses to prevent excessive polling
+const statusCache = new Map<string, {
+  data: any;
+  timestamp: number;
+  expiresAt: number;
+}>();
+
+// Cleanup expired cache entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of statusCache.entries()) {
+    if (now > value.expiresAt) {
+      statusCache.delete(key);
+    }
+  }
+}, 5 * 60 * 1000); // 5 minutes
+
 export class UnifiedCheckoutController {
   private checkoutService = new UnifiedCheckoutService();
 
@@ -362,6 +379,14 @@ export class UnifiedCheckoutController {
         return;
       }
 
+      // Check cache first to prevent excessive polling
+      const cached = statusCache.get(transactionId);
+      if (cached && Date.now() < cached.expiresAt) {
+        console.log(`[UNIFIED-CHECKOUT-STATUS] Returning cached status for transaction: ${transactionId}`);
+        res.json(cached.data);
+        return;
+      }
+
       console.log(`[UNIFIED-CHECKOUT-STATUS] Checking status for transaction ID: ${transactionId}`);
 
       // First check our database for the transaction
@@ -399,7 +424,7 @@ export class UnifiedCheckoutController {
           gatewayIVARaw: existingTransaction.gatewayIVA
         });
         
-        res.json({
+        const responseData = {
           transactionId: existingTransaction.id,
           status: existingTransaction.paymentStatus,
           amount: existingTransaction.totalPaid,
@@ -417,7 +442,17 @@ export class UnifiedCheckoutController {
           total: existingTransaction.totalPaid,
           actualTotal: existingTransaction.totalPaid,
           lineItemsCount: (existingTransaction.ticketPurchases?.length || 0) + (existingTransaction.menuPurchases?.length || 0)
+        };
+
+        // Cache the response based on status
+        const cacheDuration = this.getCacheDuration(existingTransaction.paymentStatus);
+        statusCache.set(transactionId, {
+          data: responseData,
+          timestamp: Date.now(),
+          expiresAt: Date.now() + cacheDuration
         });
+        
+        res.json(responseData);
         return;
       }
 
@@ -425,7 +460,7 @@ export class UnifiedCheckoutController {
       console.log(`[UNIFIED-CHECKOUT-STATUS] Transaction not found in database, checking Wompi: ${transactionId}`);
       const transactionStatus = await wompiService().getTransactionStatus(transactionId);
       
-      res.json({
+      const responseData = {
         transactionId,
         status: transactionStatus.data.status,
         amount: transactionStatus.data.amount_in_cents / 100,
@@ -434,7 +469,16 @@ export class UnifiedCheckoutController {
         customerEmail: transactionStatus.data.customer_email,
         createdAt: transactionStatus.data.created_at,
         finalizedAt: transactionStatus.data.finalized_at,
+      };
+
+      // Cache Wompi responses for shorter duration
+      statusCache.set(transactionId, {
+        data: responseData,
+        timestamp: Date.now(),
+        expiresAt: Date.now() + (10 * 1000) // 10 seconds for Wompi responses
       });
+      
+      res.json(responseData);
       return;
 
     } catch (error: any) {
@@ -719,6 +763,24 @@ export class UnifiedCheckoutController {
   }
 
   /**
+   * Helper function to get cache duration based on transaction status
+   */
+  private getCacheDuration(status: string): number {
+    switch (status) {
+      case 'APPROVED':
+      case 'DECLINED':
+      case 'ERROR':
+        // Final statuses can be cached longer
+        return 5 * 60 * 1000; // 5 minutes
+      case 'PENDING':
+        // Pending status should be cached for shorter duration
+        return 15 * 1000; // 15 seconds
+      default:
+        return 10 * 1000; // 10 seconds default
+    }
+  }
+
+  /**
    * Helper function to update unified transaction status in database
    */
   private async updateUnifiedTransactionStatus(transactionId: string, status: string): Promise<void> {
@@ -751,6 +813,9 @@ export class UnifiedCheckoutController {
           originalStatus: status,
           timestamp: new Date().toISOString()
         });
+
+        // Clear status cache since status changed
+        statusCache.delete(transactionId);
       } else {
         console.warn(`[UNIFIED-CHECKOUT-AUTO] Transaction not found for status update: ${transactionId}`);
       }

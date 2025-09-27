@@ -218,8 +218,19 @@ export class UnifiedCartService {
       }
     });
 
-    // Only check openDays if there's no event (events bypass openDays validation)
-    if (!event) {
+    // Check if there are free tickets available on this date - if so, bypass openDays validation
+    const ticketRepo = AppDataSource.getRepository('Ticket');
+    const freeTicket = await ticketRepo.findOne({
+      where: {
+        clubId: menuItem.clubId,
+        availableDate: new Date(`${date}T00:00:00`),
+        category: 'free',
+        isActive: true
+      }
+    });
+
+    // Only check openDays if there's no event and no free tickets (events and free tickets bypass openDays validation)
+    if (!event && !freeTicket) {
       const selectedDay = new Date(`${date}T12:00:00`).toLocaleString("en-US", { weekday: "long" });
       if (!(menuItem.club.openDays || []).includes(selectedDay)) {
         throw new Error(`This club is not open on ${selectedDay}`);

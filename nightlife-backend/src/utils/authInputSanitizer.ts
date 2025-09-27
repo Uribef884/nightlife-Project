@@ -242,10 +242,15 @@ export class AuthInputSanitizer {
       return { isValid: false, error: 'Reset token is required' };
     }
 
-    // Token format validation (UUID format)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(token)) {
+    // JWT token format validation (3 base64url-encoded parts separated by dots)
+    const jwtRegex = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+    if (!jwtRegex.test(token)) {
       return { isValid: false, error: 'Invalid reset token format' };
+    }
+
+    // Basic length validation for JWT tokens
+    if (token.length < 20 || token.length > 2048) {
+      return { isValid: false, error: 'Invalid reset token length' };
     }
 
     return { isValid: true, sanitizedValue: token };
