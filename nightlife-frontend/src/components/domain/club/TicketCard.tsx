@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import type { TicketDTO } from "@/services/clubs.service";
 import { nowInBogota, parseBogotaDate } from '@/utils/timezone';
+import { EVENT_GRACE_PERIOD_HOURS } from '@/lib/constants';
 
 // Local types for type safety
 type TicketWithAny = {
@@ -241,8 +242,8 @@ export default function TicketCard({
       const [openHour, openMinute] = openHours.open.split(':').map(Number);
       const eventStart = eventDateBogota.set({ hour: openHour, minute: openMinute, second: 0, millisecond: 0 });
       
-      // Grace period ends 1 hour after event starts
-      const gracePeriodEnd = eventStart.plus({ hours: 1 });
+      // Grace period ends after configured hours after event starts
+      const gracePeriodEnd = eventStart.plus({ hours: EVENT_GRACE_PERIOD_HOURS });
       const now = nowInBogota();
       
       // SIMPLE LOGIC: If current time > grace period end, then unavailable

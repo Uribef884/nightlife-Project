@@ -25,6 +25,12 @@ export const GATEWAY_FEES = {
   IVA: 0.19,        // IVA 19% on the subtotal
 } as const;
 
+// Event Grace Period Configuration
+export const EVENT_GRACE_PERIOD = {
+  HOURS: 3,         // Grace period duration in hours after event starts
+  MULTIPLIER: 1.3,  // Price multiplier during grace period (30% surcharge)
+} as const;
+
 // Dynamic Pricing Rules (multipliers only; reasons are resolved via helpers below)
 export const DYNAMIC_PRICING = {
   // General covers rules (3+ hours: 30%, 2-3 hours: 10%, <2 hours: base, during open: base)
@@ -55,7 +61,7 @@ export const DYNAMIC_PRICING = {
     HOURS_48_PLUS: 0.7,  // 30% discount for 48+ hours away
     HOURS_24_48: 1.0,    // Base price for 24-48 hours away
     HOURS_LESS_24: 1.2,  // 20% surplus for less than 24 hours
-    GRACE_PERIOD: 1.3,   // 30% surplus during 1-hour grace period
+    GRACE_PERIOD: EVENT_GRACE_PERIOD.MULTIPLIER,   // Grace period surplus (configurable)
   },
 } as const;
 
@@ -76,7 +82,7 @@ export const getEventTicketPricingMultiplier = (hoursUntilEvent: number): number
   if (hoursUntilEvent >= 48) return DYNAMIC_PRICING.EVENT_TICKETS.HOURS_48_PLUS;
   if (hoursUntilEvent >= 24) return DYNAMIC_PRICING.EVENT_TICKETS.HOURS_24_48;
   if (hoursUntilEvent >= 0) return DYNAMIC_PRICING.EVENT_TICKETS.HOURS_LESS_24;
-  if (hoursUntilEvent >= -1) return DYNAMIC_PRICING.EVENT_TICKETS.GRACE_PERIOD; // 1 hour grace period
+  if (hoursUntilEvent >= -EVENT_GRACE_PERIOD.HOURS) return DYNAMIC_PRICING.EVENT_TICKETS.GRACE_PERIOD; // Configurable grace period
   return -1; // Event has passed grace period - blocked
 };
 
@@ -96,7 +102,7 @@ export const getEventTicketPricingReason = (hoursUntilEvent: number): string => 
   if (hoursUntilEvent >= 48) return "event_48_plus";
   if (hoursUntilEvent >= 24) return "event_24_48";
   if (hoursUntilEvent >= 0) return "event_less_24";
-  if (hoursUntilEvent >= -1) return "event_grace_period";
+  if (hoursUntilEvent >= -EVENT_GRACE_PERIOD.HOURS) return "event_grace_period";
   return "event_expired";
 };
 

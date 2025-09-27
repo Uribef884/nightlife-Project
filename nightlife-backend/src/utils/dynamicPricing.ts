@@ -1,5 +1,6 @@
 import {
   DYNAMIC_PRICING,
+  EVENT_GRACE_PERIOD,
   getEventTicketPricingMultiplier,
   getEventMenuPricingMultiplier,
   getEventTicketPricingReason,
@@ -715,7 +716,7 @@ export function computeDynamicEventPrice(
   // DP disabled: base before event, +30% grace, then blocked
   if (dynamicEnabled === false) {
     if (hoursUntilEvent >= 0) return basePrice; // base pre-event
-    if (hoursUntilEvent >= -1) {
+    if (hoursUntilEvent >= -EVENT_GRACE_PERIOD.HOURS) {
       const m = DYNAMIC_PRICING.EVENT_TICKETS.GRACE_PERIOD; // +30%
       return Math.round(basePrice * m * 100) / 100;
     }
@@ -744,7 +745,7 @@ export function computeDynamicEventPrice(
 
   // Event started → grace or block
   const hoursSinceStart = Math.abs(hoursUntilEvent);
-  if (hoursSinceStart <= 1) {
+  if (hoursSinceStart <= EVENT_GRACE_PERIOD.HOURS) {
     const m = getEventTicketPricingMultiplier(hoursUntilEvent);
     const result = Math.round(basePrice * m * 100) / 100;
     console.log(`[EVENT-DP] Event in grace period: hoursSinceStart=${hoursSinceStart}, multiplier=${m}, result=${result}`);
@@ -802,7 +803,7 @@ export function getEventTicketDynamicPricingReason(
 
   if (dynamicEnabled === false) {
     if (hoursUntilEvent >= 0) return getTicketDisabledReason(); // base while DP disabled
-    if (hoursUntilEvent >= -1) return "event_grace_period";     // grace still applies
+    if (hoursUntilEvent >= -EVENT_GRACE_PERIOD.HOURS) return "event_grace_period";     // grace still applies
     return "event_expired";
   }
 
