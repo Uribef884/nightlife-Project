@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { LogIn, User } from "lucide-react";
+import { LogIn, User, Menu } from "lucide-react";
 import { ClubTabs } from "@/components/domain/club/ClubTabs";
 import { useAuthStore } from "@/stores/auth.store";
 import { saveRedirectPath } from "@/utils/redirect";
@@ -29,11 +29,13 @@ function resolveTabFromURL(): TabKey {
 
 export default function NavBar() {
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
 
   const pathname = usePathname() || "/";
   const isClubRoute = pathname.startsWith("/clubs/");
   const isAuthRoute = pathname.startsWith("/auth/") || pathname === "/auth";
+  const isClubOwner = user?.role === 'clubowner';
+  const isClubOwnerDashboard = pathname.startsWith("/dashboard/club-owner");
 
   const [currentTab, setCurrentTab] = useState<TabKey>("general");
 
@@ -88,25 +90,40 @@ export default function NavBar() {
 
         {/* Only show actions if not on auth routes */}
         {!isAuthRoute && (
-          <>
+          <div className="ml-auto flex items-center gap-2">
             {/* Desktop actions */}
             <div className="hidden items-center gap-3 md:flex">
-              <CartButton
-                variant="icon"
-                size="md"
-                showCount={true}
-                onClick={() => setCartDrawerOpen(true)}
-                className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
-              />
+              {/* Only show cart for non-club owners */}
+              {!isClubOwner && (
+                <CartButton
+                  variant="icon"
+                  size="md"
+                  showCount={true}
+                  onClick={() => setCartDrawerOpen(true)}
+                  className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
+                />
+              )}
 
               {isAuthenticated ? (
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
-                >
-                  <User className="h-4 w-4" />
-                  Ver Perfil
-                </Link>
+                !isClubOwner ? (
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
+                  >
+                    <User className="h-4 w-4" />
+                    Ver Perfil
+                  </Link>
+                ) : (
+                  !isClubOwnerDashboard && (
+                    <Link
+                      href="/dashboard/club-owner"
+                      className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500"
+                    >
+                      <Menu className="h-4 w-4" />
+                      Ir al Panel de Control
+                    </Link>
+                  )
+                )
               ) : (
                 <Link
                   href="/auth/login"
@@ -124,22 +141,37 @@ export default function NavBar() {
 
             {/* Mobile buttons */}
             <div className="flex items-center gap-2 md:hidden">
-              <CartButton
-                variant="icon"
-                size="md"
-                showCount={true}
-                onClick={() => setCartDrawerOpen(true)}
-                className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
-              />
+              {/* Only show cart for non-club owners */}
+              {!isClubOwner && (
+                <CartButton
+                  variant="icon"
+                  size="md"
+                  showCount={true}
+                  onClick={() => setCartDrawerOpen(true)}
+                  className="rounded-md border border-slate-700/60 p-2 text-slate-200 hover:bg-slate-800"
+                />
+              )}
 
               {isAuthenticated ? (
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-violet-600 text-white hover:bg-violet-500"
-                  title="Ver Perfil"
-                >
-                  <User className="h-5 w-5" />
-                </Link>
+                !isClubOwner ? (
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-violet-600 text-white hover:bg-violet-500"
+                    title="Ver Perfil"
+                  >
+                    <User className="h-5 w-5" />
+                  </Link>
+                ) : (
+                  !isClubOwnerDashboard && (
+                    <Link
+                      href="/dashboard/club-owner"
+                      className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-violet-600 text-white hover:bg-violet-500"
+                      title="Ir al Panel de Control"
+                    >
+                      <Menu className="h-5 w-5" />
+                    </Link>
+                  )
+                )
               ) : (
                 <Link
                   href="/auth/login"
@@ -154,7 +186,7 @@ export default function NavBar() {
                 </Link>
               )}
             </div>
-          </>
+          </div>
         )}
 
       </div>
@@ -171,16 +203,18 @@ export default function NavBar() {
 
       </header>
       
-      {/* Cart Drawer - Outside header to avoid z-index issues */}
-      <CartDrawer
-        isOpen={cartDrawerOpen}
-        onClose={() => setCartDrawerOpen(false)}
-        onCheckout={() => {
-          setCartDrawerOpen(false);
-          // Navigate to checkout page
-          window.location.href = '/checkout';
-        }}
-      />
+      {/* Cart Drawer - Outside header to avoid z-index issues - Only for non-club owners */}
+      {!isClubOwner && (
+        <CartDrawer
+          isOpen={cartDrawerOpen}
+          onClose={() => setCartDrawerOpen(false)}
+          onCheckout={() => {
+            setCartDrawerOpen(false);
+            // Navigate to checkout page
+            window.location.href = '/checkout';
+          }}
+        />
+      )}
     </>
   );
 }

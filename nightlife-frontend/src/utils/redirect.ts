@@ -1,5 +1,6 @@
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useCallback } from 'react';
+import { useAuthStore } from '@/stores/auth.store';
 
 const REDIRECT_KEY = 'auth_redirect_path';
 const REDIRECT_COOLDOWN_KEY = 'auth_redirect_cooldown';
@@ -42,6 +43,7 @@ export function getAndClearRedirectPath(): string | null {
  */
 export function useAuthRedirect(defaultPath: string = '/') {
   const router = useRouter();
+  const { user } = useAuthStore();
   
   const redirectAfterAuth = useCallback(() => {
     // Prevent redirect if we're already on an auth route
@@ -60,7 +62,12 @@ export function useAuthRedirect(defaultPath: string = '/') {
     }
     
     const savedPath = getAndClearRedirectPath();
-    const targetPath = savedPath || defaultPath;
+    let targetPath = savedPath || defaultPath;
+    
+    // Redirect club owners to club dashboard if no specific redirect path
+    if (!savedPath && user?.role === 'clubowner') {
+      targetPath = '/dashboard/club-owner';
+    }
     
     // Use window.location.href as fallback if router.push fails
     try {
@@ -69,7 +76,7 @@ export function useAuthRedirect(defaultPath: string = '/') {
       console.warn('Router push failed, using window.location:', error);
       window.location.href = targetPath;
     }
-  }, [router, defaultPath]);
+  }, [router, defaultPath, user?.role]);
   
   return redirectAfterAuth;
 }

@@ -99,7 +99,7 @@ export function ClientHome({
 
   return (
     <>
-      <section className="space-y-4">
+      <section className="space-y-3">
         {/* Ads first (as you requested earlier) */}
         {ads?.length > 0 && (
           <div className="pt-1">

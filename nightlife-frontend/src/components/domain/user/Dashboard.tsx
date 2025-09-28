@@ -99,6 +99,7 @@ function PerfilContent() {
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mt-1">{user?.email}</p>
         </div>
 
+
         {/* Historial de órdenes */}
         <Link
           href="/profile/orders"

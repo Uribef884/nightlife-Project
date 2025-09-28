@@ -170,9 +170,6 @@ export function SearchBar({
       <div 
         ref={searchSectionRef}
         className="w-full"
-        style={{
-          paddingBottom: `max(var(--kb-inset, 0px), env(safe-area-inset-bottom))`
-        }}
       >
       <div
         className="

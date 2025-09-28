@@ -9,7 +9,6 @@ import { validateImageUrlWithResponse } from "../utils/validateImageUrl";
 import { sanitizeInput, sanitizeObject } from "../utils/sanitizeInput";
 import { cleanupClubS3Files } from "../utils/s3Cleanup";
 import { AuthInputSanitizer } from "../utils/authInputSanitizer";
-import { secureQuery, createQueryContext } from "../utils/secureQuery";
 
 // CREATE CLUB
 export async function createClub(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -45,6 +44,12 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
     ownerId,
   } = sanitizedBody;
 
+  // Validate required fields
+  if (!name || typeof name !== "string" || name.trim() === "") {
+    res.status(400).json({ error: "El nombre del club es requerido" });
+    return;
+  }
+
   // Validate image URLs
   if (profileImageUrl && !validateImageUrlWithResponse(profileImageUrl, res)) {
     return;
@@ -61,6 +66,12 @@ export async function createClub(req: AuthenticatedRequest, res: Response): Prom
   }
   if (extraInfo && extraInfo.length > 500) {
     res.status(400).json({ error: "Información adicional no puede exceder 500 caracteres" });
+    return;
+  }
+
+  // Validate minimum age
+  if (minimumAge !== undefined && minimumAge !== null && minimumAge < 0) {
+    res.status(400).json({ error: "La edad mínima no puede ser negativa" });
     return;
   }
 
@@ -372,6 +383,12 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
       return;
     }
 
+    // Validate required fields
+    if (sanitizedBody.name !== undefined && (!sanitizedBody.name || typeof sanitizedBody.name !== "string" || sanitizedBody.name.trim() === "")) {
+      res.status(400).json({ error: "El nombre del club es requerido" });
+      return;
+    }
+
     // Validate character limits
     if (sanitizedBody.description && sanitizedBody.description.length > 1000) {
       res.status(400).json({ error: "Descripción no puede exceder 1000 caracteres" });
@@ -383,6 +400,12 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
     }
     if (sanitizedBody.extraInfo && sanitizedBody.extraInfo.length > 500) {
       res.status(400).json({ error: "Información adicional no puede exceder 500 caracteres" });
+      return;
+    }
+
+    // Validate minimum age
+    if (sanitizedBody.minimumAge !== undefined && sanitizedBody.minimumAge !== null && sanitizedBody.minimumAge < 0) {
+      res.status(400).json({ error: "La edad mínima no puede ser negativa" });
       return;
     }
 
@@ -435,6 +458,14 @@ export async function updateMyClub(req: AuthenticatedRequest, res: Response): Pr
       updateData.priority = 1;
     } else if (priority) {
       updateData.priority = priority;
+    }
+
+    // Add openDays and openHours to updateData if they were provided
+    if (openDays !== undefined) {
+      updateData.openDays = openDays;
+    }
+    if (openHours !== undefined) {
+      updateData.openHours = openHours;
     }
 
     repo.merge(club, updateData);
@@ -665,9 +696,8 @@ export async function getFilteredClubs(req: Request, res: Response): Promise<voi
       sanitizedCity = cityValidation.sanitizedValue;
     }
 
-    // Use secure query with monitoring
-    const repo = secureQuery.getRepository(Club);
-    const context = createQueryContext('search_clubs', (req as any).user?.id, (req as any).sessionId);
+    // Use regular TypeORM repository
+    const repo = AppDataSource.getRepository(Club);
 
     // Build where conditions properly for TypeORM
     const whereConditions: any = {
@@ -679,9 +709,9 @@ export async function getFilteredClubs(req: Request, res: Response): Promise<voi
       whereConditions.city = sanitizedCity;
     }
 
-    const clubs = await secureQuery.find(repo, {
+    const clubs = await repo.find({
       where: whereConditions
-    }, context);
+    });
 
     // Apply additional filters
     let filteredClubs = clubs;

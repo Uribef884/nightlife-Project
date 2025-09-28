@@ -51,7 +51,12 @@ function GoogleCallbackContent() {
           
           // Get the saved redirect path
           const savedPath = sessionStorage.getItem('auth_redirect_path');
-          const targetPath = savedPath || '/';
+          let targetPath = savedPath || '/';
+          
+          // Redirect club owners to club dashboard if no specific redirect path
+          if (!savedPath && userData?.role === 'clubowner') {
+            targetPath = '/dashboard/club-owner';
+          }
           
           // Clear the redirect path
           if (savedPath) {

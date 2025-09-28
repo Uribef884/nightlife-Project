@@ -24,6 +24,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  selectedClub: string | null;
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
@@ -39,6 +40,7 @@ interface AuthState {
   checkAuth: () => Promise<void>;
   clearError: () => void;
   setUser: (user: User | null) => void;
+  setSelectedClub: (clubId: string | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -49,6 +51,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      selectedClub: null,
 
       // Login action
       login: async (email: string, password: string): Promise<void> => {
@@ -68,6 +71,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
             error: null,
+            selectedClub: response.user.clubId || null,
           });
         } catch (error) {
           set({
@@ -96,6 +100,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
             error: null,
+            selectedClub: response.user.clubId || null,
           });
         } catch (error) {
           set({
@@ -124,6 +129,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             isLoading: false,
             error: null,
+            selectedClub: null,
           });
         } catch (error) {
           console.warn('Logout failed on backend:', error);
@@ -139,6 +145,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             isLoading: false,
             error: null,
+            selectedClub: null,
           });
         }
       },
@@ -249,6 +256,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
             error: null,
+            selectedClub: user.clubId || null,
           });
         } catch (error) {
           console.warn('Failed to check authentication status:', error);
@@ -257,6 +265,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
             isLoading: false,
             error: null,
+            selectedClub: null,
           });
         }
       },
@@ -280,7 +289,13 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: !!user,
           isLoading: false,
           error: null,
+          selectedClub: user?.clubId || null,
         });
+      },
+
+      // Set selected club
+      setSelectedClub: (clubId: string | null): void => {
+        set({ selectedClub: clubId });
       },
     }),
     {
@@ -288,6 +303,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
+        selectedClub: state.selectedClub,
       }),
     }
   )
@@ -298,6 +314,7 @@ export const useUser = () => useAuthStore((state) => state.user);
 export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenticated);
 export const useIsLoading = () => useAuthStore((state) => state.isLoading);
 export const useAuthError = () => useAuthStore((state) => state.error);
+export const useSelectedClub = () => useAuthStore((state) => state.selectedClub);
 
 // Direct store access for actions to avoid selector issues
 export const useAuthActions = () => {
@@ -312,5 +329,6 @@ export const useAuthActions = () => {
     checkAuth: store.checkAuth,
     clearError: store.clearError,
     setUser: store.setUser,
+    setSelectedClub: store.setSelectedClub,
   };
 };

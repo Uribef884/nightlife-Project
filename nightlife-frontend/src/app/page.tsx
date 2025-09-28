@@ -107,7 +107,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   return (
     <main 
-      className="mx-auto max-w-7xl px-4 space-y-6"
+      className="mx-auto max-w-7xl px-4 space-y-4"
       style={{
         paddingBottom: `max(var(--kb-inset, 0px), env(safe-area-inset-bottom))`
       }}
@@ -118,7 +118,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       </Suspense>
 
       {/* "Clubs:" heading + SSR-rendered grid */}
-      <h2 id="clubs-heading" className="pt-1 text-lg md:text-xl font-semibold text-white/90">
+      <h2 id="clubs-heading" className="text-lg md:text-xl font-semibold text-white/90">
         Clubs:
       </h2>
       <div role="region" aria-labelledby="clubs-heading">

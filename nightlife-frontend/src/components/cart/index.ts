@@ -9,3 +9,4 @@ export { default as AddMenuItemToCartButton } from './AddMenuItemToCartButton';
 export { default as CartProvider } from './CartProvider';
 export { CartDateChangeModal } from './CartDateChangeModal';
 export { CartClubChangeModal } from './CartClubChangeModal';
+export { UnsavedChangesModal } from './UnsavedChangesModal';
