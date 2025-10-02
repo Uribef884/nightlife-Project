@@ -84,18 +84,18 @@ export function ClubCard({ club }: { club: CardClub }) {
       href={`/clubs/${club.id}`}
       aria-label={`Abrir ${club.name}`}
       className="
-        group flex items-center gap-4 w-full
-        rounded-2xl border border-nl-secondary/30 bg-nl-card shadow-soft
+        group flex items-center gap-3 w-full
+        rounded-xl border border-nl-secondary/30 bg-nl-card shadow-soft
         hover:border-nl-secondary/60 transition
-        px-4 py-3
+        px-3 py-2.5 sm:px-4 sm:py-3
       "
     >
       {/* Left: square image with purple outline; falls back to svg placeholder */}
       <div
         className="
-          relative w-20 h-20 shrink-0
-          rounded-2xl overflow-hidden
-          ring-2 ring-nl-secondary/60
+          relative w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 shrink-0
+          rounded-xl sm:rounded-2xl overflow-hidden
+          ring-1 sm:ring-2 ring-nl-secondary/60
           bg-black/20
         "
       >
@@ -105,7 +105,7 @@ export function ClubCard({ club }: { club: CardClub }) {
             alt={club.name}
             fill
             className="object-cover"
-            sizes="80px"
+            sizes="(max-width: 640px) 64px, (max-width: 1024px) 72px, 80px"
           />
         ) : (
           <Image
@@ -113,12 +113,12 @@ export function ClubCard({ club }: { club: CardClub }) {
             alt={`${club.name} (sin imagen)`}
             fill
             className="object-cover"
-            sizes="80px"
+            sizes="(max-width: 640px) 64px, (max-width: 1024px) 72px, 80px"
             // If you remove the svg later, we still show initials
             onError={(e) => {
               const el = (e.currentTarget as HTMLImageElement).parentElement as HTMLElement | null;
               if (el) {
-                el.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#6B3FA0]/20 to-black/60"><span class="text-white/80 font-semibold text-xl">${initials(
+                el.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#6B3FA0]/20 to-black/60"><span class="text-white/80 font-semibold text-base sm:text-lg lg:text-xl">${initials(
                   club.name
                 )}</span></div>`;
               }
@@ -129,32 +129,32 @@ export function ClubCard({ club }: { club: CardClub }) {
 
       {/* Middle: title + address (with red pin) */}
       <div className="min-w-0 flex-1">
-        <h3 className="text-white/90 font-semibold text-lg leading-tight line-clamp-2">
+        <h3 className="text-white/90 font-semibold text-base sm:text-lg lg:text-xl leading-tight line-clamp-2">
           {club.name}
         </h3>
 
         {/* Address row (always render if present in list payload) */}
-        <div className="mt-1 flex items-start gap-2">
+        <div className="mt-1 flex items-start gap-1.5 sm:gap-2">
           <svg
             aria-hidden="true"
             viewBox="0 0 24 24"
-            className="mt-[2px] h-4 w-4 text-nl-accent flex-none"
+            className="mt-[2px] h-4 w-4 sm:h-4 sm:w-4 text-nl-accent flex-none"
             fill="currentColor"
           >
             <path d="M12 2a7 7 0 0 0-7 7c0 5.25 7 13 7 13s7-7.75 7-13a7 7 0 0 0-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z" />
           </svg>
-          <p className="text-white/80 text-sm leading-snug line-clamp-3">
+          <p className="text-white/80 text-sm sm:text-sm leading-snug line-clamp-2 sm:line-clamp-3">
             {club.address}
           </p>
         </div>
 
         {/* City row (lazy-hydrated). Only render when we actually have a city. */}
         {showCityRow && (
-          <div className="mt-1 flex items-start gap-2">
+          <div className="mt-1 flex items-start gap-1.5 sm:gap-2">
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              className="mt-[2px] h-4 w-4 text-nl-accent flex-none"
+              className="mt-[2px] h-4 w-4 sm:h-4 sm:w-4 text-nl-accent flex-none"
               fill="currentColor"
               focusable="false"
             >
@@ -164,7 +164,7 @@ export function ClubCard({ club }: { club: CardClub }) {
               {/* single building with pointed roof */}
               <path d="M12 5l4 4v12H8V9l4-4z" />
             </svg>
-            <p className="text-white/80 text-sm leading-snug">{cityToShow}</p>
+            <p className="text-white/80 text-sm sm:text-sm leading-snug">{cityToShow}</p>
           </div>
         )}
       </div>
@@ -174,7 +174,7 @@ export function ClubCard({ club }: { club: CardClub }) {
         <svg
           aria-hidden="true"
           viewBox="0 0 24 24"
-          className="h-6 w-6 text-nl-accent transform transition-transform group-hover:translate-x-0.5"
+          className="h-5 w-5 sm:h-5 sm:w-5 lg:h-6 lg:w-6 text-nl-accent transform transition-transform group-hover:translate-x-0.5"
           fill="currentColor"
         >
           <path d="M9.29 6.71a1 1 0 0 0 0 1.41L13.17 12l-3.88 3.88a1 1 0 1 0 1.41 1.41l4.59-4.59a1 1 0 0 0 0-1.41L10.7 6.7a1 1 0 0 0-1.41 0Z" />

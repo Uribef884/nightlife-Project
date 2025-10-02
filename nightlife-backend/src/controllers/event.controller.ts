@@ -85,11 +85,20 @@ export const getEventById = async (req: Request, res: Response) => {
 export const getEventsByClubId = async (req: Request, res: Response) => {
   try {
     const { clubId } = req.params;
+    const { includeHidden } = req.query;
     const eventRepo = AppDataSource.getRepository(Event);
     const ticketIncludedMenuRepo = AppDataSource.getRepository(TicketIncludedMenuItem);
     
+    // Build where clause based on includeHidden parameter
+    let whereClause: any = { clubId, isDeleted: false, availableDate: MoreThanOrEqual(getTodayDate()) };
+    
+    // Only include active events unless includeHidden=true
+    if (includeHidden !== 'true') {
+      whereClause.isActive = true;
+    }
+    
     const events = await eventRepo.find({
-      where: { clubId, isActive: true, isDeleted: false, availableDate: MoreThanOrEqual(getTodayDate()) },
+      where: whereClause,
       relations: ["club", "tickets"],
       order: { availableDate: "ASC", createdAt: "DESC" }
     });
@@ -225,6 +234,12 @@ export const getMyClubEvents = async (req: AuthenticatedRequest, res: Response):
       return;
     }
 
+    // Verify the user owns this active club
+    if (user.role !== "admin" && user.clubId && !user.clubIds?.includes(user.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
+      return;
+    }
+
     const clubId = user.clubId!;
     const eventRepo = AppDataSource.getRepository(Event);
     
@@ -261,6 +276,12 @@ export const createEvent = async (req: AuthenticatedRequest, res: Response): Pro
 
     if (!user || !user.clubId) {
       res.status(403).json({ error: "Prohibido: No hay clubId asociado" });
+      return;
+    }
+
+    // Verify the user owns this active club
+    if (!user.clubIds?.includes(user.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
       return;
     }
 
@@ -384,6 +405,12 @@ export const deleteEvent = async (req: AuthenticatedRequest, res: Response) => {
       return;
     }
 
+    // Verify the user owns this active club
+    if (!user.clubIds?.includes(user.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
+      return;
+    }
+
     const eventRepo = AppDataSource.getRepository(Event);
     const event = await eventRepo.findOne({ 
       where: { id: eventId },
@@ -489,6 +516,12 @@ export const updateEvent = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
+    // Verify the user owns this active club
+    if (!user.clubIds?.includes(user.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
+      return;
+    }
+
     // Prevent changing availableDate
     if (availableDate !== undefined) {
       res.status(400).json({ error: "No se puede actualizar availableDate después de la creación" });
@@ -568,6 +601,12 @@ export const updateEventImage = async (req: AuthenticatedRequest, res: Response)
       return;
     }
 
+    // Verify the user owns this active club
+    if (!user.clubIds?.includes(user.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
+      return;
+    }
+
     if (!req.file) {
       res.status(400).json({ error: "Archivo de imagen requerido." });
       return;
@@ -629,6 +668,17 @@ export const toggleEventVisibility = async (req: AuthenticatedRequest, res: Resp
     const user = req.user;
     if (!user) {
       res.status(401).json({ error: "No autorizado" });
+      return;
+    }
+
+    if (!user.clubId) {
+      res.status(403).json({ error: "Prohibido: No hay clubId asociado" });
+      return;
+    }
+
+    // Verify the user owns this active club
+    if (!user.clubIds?.includes(user.clubId)) {
+      res.status(403).json({ error: "No eres propietario del club activo" });
       return;
     }
 

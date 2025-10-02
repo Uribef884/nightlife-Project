@@ -31,6 +31,7 @@ export type CartItem = {
   quantity: number;
   date: string;
   clubId: string;
+  updatedAt?: string;
   
   // Ticket-specific
   ticketId?: string;

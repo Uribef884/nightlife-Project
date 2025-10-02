@@ -188,6 +188,37 @@ export const updateMenuCategory = async (req: Request, res: Response): Promise<v
   }
 };
 
+export const getCategoriesForMyClub = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const user = req.user;
+
+    if (!user || user.role !== "clubowner") {
+      res.status(403).json({ error: "Solo los dueños de clubes pueden acceder a sus categorías" });
+      return;
+    }
+
+    if (!user.clubId) {
+      res.status(403).json({ error: "ID del club es requerido" });
+      return;
+    }
+
+    const repo = AppDataSource.getRepository(MenuCategory);
+    const categories = await repo.find({
+      where: { 
+        clubId: user.clubId, 
+        isActive: true, 
+        isDeleted: false 
+      },
+      order: { name: "ASC" }
+    });
+
+    res.json(categories);
+  } catch (err) {
+    console.error("Error fetching categories for my club:", err);
+    res.status(500).json({ error: "Error del servidor al obtener categorías del club" });
+  }
+};
+
 export const deleteMenuCategory = async (req: Request, res: Response): Promise<void>  => {
   try {
     const { id } = req.params;

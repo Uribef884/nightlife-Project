@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cart Age Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1e293b;
+            color: #e2e8f0;
+        }
+        .test-section {
+            background-color: #334155;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border: 1px solid #475569;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success { background-color: #065f46; }
+        .error { background-color: #7f1d1d; }
+        .info { background-color: #1e40af; }
+        button {
+            background-color: #7c3aed;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #6d28d9; }
+    </style>
+</head>
+<body>
+    <h1>Cart Age Checking Test</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: Fresh Cart (0 minutes old)</h2>
+        <button onclick="testFreshCart()">Test Fresh Cart</button>
+        <div id="fresh-result" class="test-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Old Cart (35 minutes old)</h2>
+        <button onclick="testOldCart()">Test Old Cart</button>
+        <div id="old-result" class="test-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Empty Cart</h2>
+        <button onclick="testEmptyCart()">Test Empty Cart</button>
+        <div id="empty-result" class="test-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 4: Cart with Mixed Ages</h2>
+        <button onclick="testMixedAges()">Test Mixed Ages</button>
+        <div id="mixed-result" class="test-result"></div>
+    </div>
+
+    <script>
+        // Mock cart age checking functions (simplified version)
+        function checkCartAge(cartItems, maxAgeMinutes = 30) {
+            if (!cartItems || cartItems.length === 0) {
+                return {
+                    isOld: false,
+                    ageInMinutes: 0,
+                    oldestItemDate: null,
+                    newestItemDate: null
+                };
+            }
+
+            const now = new Date();
+            let oldestDate = null;
+            let newestDate = null;
+
+            cartItems.forEach(item => {
+                if (item.updatedAt) {
+                    const itemDate = new Date(item.updatedAt);
+                    
+                    if (!oldestDate || itemDate < oldestDate) {
+                        oldestDate = itemDate;
+                    }
+                    
+                    if (!newestDate || itemDate > newestDate) {
+                        newestDate = itemDate;
+                    }
+                }
+            });
+
+            if (!oldestDate) {
+                return {
+                    isOld: false,
+                    ageInMinutes: 0,
+                    oldestItemDate: null,
+                    newestItemDate: null
+                };
+            }
+
+            const ageInMinutes = Math.floor((now.getTime() - oldestDate.getTime()) / (1000 * 60));
+            
+            return {
+                isOld: ageInMinutes > maxAgeMinutes,
+                ageInMinutes,
+                oldestItemDate: oldestDate,
+                newestItemDate: newestDate
+            };
+        }
+
+        function formatCartAge(ageInMinutes) {
+            if (ageInMinutes < 1) {
+                return 'menos de 1 minuto';
+            } else if (ageInMinutes < 60) {
+                return `${ageInMinutes} minuto${ageInMinutes === 1 ? '' : 's'}`;
+            } else {
+                const hours = Math.floor(ageInMinutes / 60);
+                const minutes = ageInMinutes % 60;
+                
+                if (minutes === 0) {
+                    return `${hours} hora${hours === 1 ? '' : 's'}`;
+                } else {
+                    return `${hours}h ${minutes}m`;
+                }
+            }
+        }
+
+        function testFreshCart() {
+            const now = new Date();
+            const freshCart = [
+                {
+                    id: '1',
+                    itemType: 'ticket',
+                    updatedAt: now.toISOString()
+                },
+                {
+                    id: '2',
+                    itemType: 'menu',
+                    updatedAt: new Date(now.getTime() - 5 * 60 * 1000).toISOString() // 5 minutes ago
+                }
+            ];
+
+            const result = checkCartAge(freshCart, 30);
+            const resultDiv = document.getElementById('fresh-result');
+            
+            resultDiv.className = 'test-result ' + (result.isOld ? 'error' : 'success');
+            resultDiv.innerHTML = `
+                <strong>Result:</strong> ${result.isOld ? 'OLD' : 'FRESH'}<br>
+                <strong>Age:</strong> ${formatCartAge(result.ageInMinutes)}<br>
+                <strong>Oldest Item:</strong> ${result.oldestItemDate ? result.oldestItemDate.toLocaleString() : 'N/A'}<br>
+                <strong>Newest Item:</strong> ${result.newestItemDate ? result.newestItemDate.toLocaleString() : 'N/A'}
+            `;
+        }
+
+        function testOldCart() {
+            const now = new Date();
+            const oldCart = [
+                {
+                    id: '1',
+                    itemType: 'ticket',
+                    updatedAt: new Date(now.getTime() - 35 * 60 * 1000).toISOString() // 35 minutes ago
+                },
+                {
+                    id: '2',
+                    itemType: 'menu',
+                    updatedAt: new Date(now.getTime() - 40 * 60 * 1000).toISOString() // 40 minutes ago
+                }
+            ];
+
+            const result = checkCartAge(oldCart, 30);
+            const resultDiv = document.getElementById('old-result');
+            
+            resultDiv.className = 'test-result ' + (result.isOld ? 'error' : 'success');
+            resultDiv.innerHTML = `
+                <strong>Result:</strong> ${result.isOld ? 'OLD' : 'FRESH'}<br>
+                <strong>Age:</strong> ${formatCartAge(result.ageInMinutes)}<br>
+                <strong>Oldest Item:</strong> ${result.oldestItemDate ? result.oldestItemDate.toLocaleString() : 'N/A'}<br>
+                <strong>Newest Item:</strong> ${result.newestItemDate ? result.newestItemDate.toLocaleString() : 'N/A'}
+            `;
+        }
+
+        function testEmptyCart() {
+            const result = checkCartAge([], 30);
+            const resultDiv = document.getElementById('empty-result');
+            
+            resultDiv.className = 'test-result ' + (result.isOld ? 'error' : 'success');
+            resultDiv.innerHTML = `
+                <strong>Result:</strong> ${result.isOld ? 'OLD' : 'FRESH'}<br>
+                <strong>Age:</strong> ${formatCartAge(result.ageInMinutes)}<br>
+                <strong>Oldest Item:</strong> ${result.oldestItemDate ? result.oldestItemDate.toLocaleString() : 'N/A'}<br>
+                <strong>Newest Item:</strong> ${result.newestItemDate ? result.newestItemDate.toLocaleString() : 'N/A'}
+            `;
+        }
+
+        function testMixedAges() {
+            const now = new Date();
+            const mixedCart = [
+                {
+                    id: '1',
+                    itemType: 'ticket',
+                    updatedAt: new Date(now.getTime() - 10 * 60 * 1000).toISOString() // 10 minutes ago
+                },
+                {
+                    id: '2',
+                    itemType: 'menu',
+                    updatedAt: new Date(now.getTime() - 45 * 60 * 1000).toISOString() // 45 minutes ago
+                },
+                {
+                    id: '3',
+                    itemType: 'ticket',
+                    updatedAt: new Date(now.getTime() - 5 * 60 * 1000).toISOString() // 5 minutes ago
+                }
+            ];
+
+            const result = checkCartAge(mixedCart, 30);
+            const resultDiv = document.getElementById('mixed-result');
+            
+            resultDiv.className = 'test-result ' + (result.isOld ? 'error' : 'success');
+            resultDiv.innerHTML = `
+                <strong>Result:</strong> ${result.isOld ? 'OLD' : 'FRESH'}<br>
+                <strong>Age:</strong> ${formatCartAge(result.ageInMinutes)}<br>
+                <strong>Oldest Item:</strong> ${result.oldestItemDate ? result.oldestItemDate.toLocaleString() : 'N/A'}<br>
+                <strong>Newest Item:</strong> ${result.newestItemDate ? result.newestItemDate.toLocaleString() : 'N/A'}
+            `;
+        }
+    </script>
+</body>
+</html>

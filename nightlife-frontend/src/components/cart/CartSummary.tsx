@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useCartStore } from '@/stores/cart.store';
 import { ShoppingCart } from 'lucide-react';
+import { CartAgeWarningModal } from './CartAgeWarningModal';
 
 // Local type definitions for window cart summaries
 type UnifiedSummary = {
@@ -26,8 +27,9 @@ export default function CartSummary({
   showCheckoutButton = true,
   className = ''
 }: CartSummaryProps) {
-  const { getCartSummary, isLoading } = useCartStore();
+  const { getCartSummary, isLoading, checkCartAge, clearCart } = useCartStore();
   const summary = getCartSummary();
+  const [showAgeWarning, setShowAgeWarning] = useState(false);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('es-CO', {
@@ -35,6 +37,29 @@ export default function CartSummary({
       currency: 'COP',
       minimumFractionDigits: 0,
     }).format(price);
+  };
+
+  // Handle checkout with cart age check
+  const handleCheckout = () => {
+    if (!onCheckout) return;
+
+    // Check if cart is older than 30 minutes
+    const ageInfo = checkCartAge(30);
+    
+    if (ageInfo.isOld) {
+      setShowAgeWarning(true);
+    } else {
+      onCheckout();
+    }
+  };
+
+
+  // Handle clearing cart and showing updated prices
+  const handleClearCartForUpdate = async () => {
+    setShowAgeWarning(false);
+    await clearCart();
+    // The user will need to refresh the page or navigate back to add items again
+    // This gives them a fresh start with current prices
   };
 
   if (!summary) {
@@ -107,7 +132,7 @@ export default function CartSummary({
       {showCheckoutButton && (
         <div className="px-6 py-4 border-t border-slate-700/60">
           <button
-            onClick={onCheckout}
+            onClick={handleCheckout}
             disabled={isLoading}
             className="w-full text-white py-3 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors bg-violet-600 hover:bg-violet-500"
           >
@@ -115,6 +140,13 @@ export default function CartSummary({
           </button>
         </div>
       )}
+
+      {/* Cart Age Warning Modal */}
+      <CartAgeWarningModal
+        isOpen={showAgeWarning}
+        onClose={() => setShowAgeWarning(false)}
+        onClearCart={handleClearCartForUpdate}
+      />
     </div>
   );
 }

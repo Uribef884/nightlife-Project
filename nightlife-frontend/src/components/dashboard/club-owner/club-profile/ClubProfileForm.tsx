@@ -98,7 +98,8 @@ export function ClubProfileForm({ clubId, onImageUploaded }: ClubProfileFormProp
         setLoading(true);
         setError(null);
         
-        const response = await fetch(`http://localhost:4000/clubs/${clubId}`, {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+        const response = await fetch(`${API_BASE}/clubs/${clubId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -215,7 +216,8 @@ export function ClubProfileForm({ clubId, onImageUploaded }: ClubProfileFormProp
       console.log('Sending only changed fields:', updateData);
 
       // Update club data
-      const response = await fetch('http://localhost:4000/clubs/my-club', {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+      const response = await fetch(`${API_BASE}/clubs/my-club`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -450,7 +452,8 @@ export function ClubProfileForm({ clubId, onImageUploaded }: ClubProfileFormProp
       formDataImage.append('image', file);
 
       // Upload image
-      const response = await fetch('http://localhost:4000/upload/club/profile-image', {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+      const response = await fetch(`${API_BASE}/upload/club/profile-image`, {
         method: 'POST',
         credentials: 'include',
         body: formDataImage,

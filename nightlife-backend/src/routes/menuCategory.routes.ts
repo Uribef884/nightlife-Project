@@ -5,6 +5,7 @@ import {
   createMenuCategory,
   updateMenuCategory,
   deleteMenuCategory,
+  getCategoriesForMyClub,
 } from "../controllers/menuCategory.controller";
 import { authMiddleware, requireClubOwnerOrAdmin } from "../middlewares/authMiddleware";
 
@@ -14,6 +15,7 @@ const router = Router();
 router.get("/:clubId", getAllMenuCategories);
 
 // Protected routes for clubowners/admins
+router.get("/my/categories", authMiddleware, requireClubOwnerOrAdmin, getCategoriesForMyClub);
 router.post("/", authMiddleware, requireClubOwnerOrAdmin, createMenuCategory);
 router.patch("/:id", authMiddleware, requireClubOwnerOrAdmin, updateMenuCategory);
 router.delete("/:id", authMiddleware, requireClubOwnerOrAdmin, deleteMenuCategory);

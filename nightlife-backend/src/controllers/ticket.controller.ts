@@ -361,7 +361,7 @@ export const updateTicket = async (req: Request, res: Response): Promise<void> =
     return;
   }
 
-  if (user.role === "clubowner" && ticket.club.ownerId !== user.id) {
+  if (user.role === "clubowner" && user.clubId !== ticket.club.id) {
     res.status(403).json({ error: "No estás autorizado para actualizar este ticket" });
     return;
   }
@@ -871,7 +871,7 @@ export async function getTicketById(req: AuthenticatedRequest, res: Response): P
     }
     
     // If user is authenticated and is a clubowner, check ownership
-    if (user && user.role === "clubowner" && ticket.club.ownerId !== user.id) {
+    if (user && user.role === "clubowner" && user.clubId !== ticket.club.id) {
       res.status(403).json({ error: "Prohibido: Este ticket no pertenece a tu club" });
       return;
     }
@@ -920,6 +920,7 @@ export const getTicketsForMyClub = async (req: AuthenticatedRequest, res: Respon
 
     const clubRepo = AppDataSource.getRepository(Club);
     const ticketRepo = AppDataSource.getRepository(Ticket);
+    const ticketIncludedMenuRepo = AppDataSource.getRepository(TicketIncludedMenuItem);
 
     // Use the active club from the authenticated user
     if (!user.clubId) {
@@ -943,11 +944,50 @@ export const getTicketsForMyClub = async (req: AuthenticatedRequest, res: Respon
     const tickets = await ticketRepo.find({
       where: { club: { id: club.id }, isDeleted: false },
       order: { priority: "ASC" },
+      relations: ["club", "event"],
     });
 
-    const formatted = tickets.map((t) => ({
-      ...t,
-      soldOut: t.quantity !== null && t.quantity === 0,
+    const formatted = await Promise.all(tickets.map(async (t) => {
+      // Fetch included menu items if this ticket includes them
+      let includedMenuItems: Array<{
+        id: string;
+        menuItemId: string;
+        menuItemName: string;
+        variantId?: string;
+        variantName: string | null;
+        quantity: number;
+      }> = [];
+      
+      if (t.includesMenuItem) {
+        const includedItems = await ticketIncludedMenuRepo.find({
+          where: { ticketId: t.id },
+          relations: ["menuItem", "variant"]
+        });
+        
+        includedMenuItems = includedItems.map(item => ({
+          id: item.id,
+          menuItemId: item.menuItemId,
+          menuItemName: item.menuItem?.name || 'Unknown Item',
+          variantId: item.variantId,
+          variantName: item.variant?.name || null,
+          quantity: item.quantity
+        }));
+      }
+
+      return {
+        ...t,
+        soldOut: t.quantity !== null && t.quantity === 0,
+        includedMenuItems,
+        // Explicitly include event data for frontend
+        event: t.event ? {
+          id: t.event.id,
+          name: t.event.name,
+          description: t.event.description,
+          availableDate: t.event.availableDate,
+          openHours: typeof t.event.openHours === 'string' ? JSON.parse(t.event.openHours) : t.event.openHours,
+          bannerUrl: t.event.bannerUrl
+        } : null
+      };
     }));
 
     res.json(formatted);
@@ -980,7 +1020,7 @@ export async function deleteTicket(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    if (user.role === "clubowner" && ticket.club.ownerId !== user.id) {
+    if (user.role === "clubowner" && user.clubId !== ticket.club.id) {
       res.status(403).json({ error: "No estás autorizado para eliminar este ticket" });
       return;
     }
@@ -1039,8 +1079,8 @@ export const toggleTicketVisibility = async (req: Request, res: Response): Promi
       return;
     }
 
-    if (user.role === "clubowner" && ticket.club.ownerId !== user.id) {
-      res.status(403).json({ error: "No estás autorizado para modificar este ticket" });
+    if (user.role === "clubowner" && user.clubId !== ticket.club.id) {
+      res.status(403).json({ error: "No estás autorizado para modificar tickets de este club" });
       return;
     }
 
@@ -1072,8 +1112,8 @@ export const toggleTicketDynamicPricing = async (req: Request, res: Response): P
       return;
     }
 
-    if (user.role === "clubowner" && ticket.club.ownerId !== user.id) {
-      res.status(403).json({ error: "No estás autorizado para modificar este ticket" });
+    if (user.role === "clubowner" && user.clubId !== ticket.club.id) {
+      res.status(403).json({ error: "No estás autorizado para modificar tickets de este club" });
       return;
     }
 
@@ -1173,7 +1213,7 @@ export async function getAvailableTicketsForDate(req: Request, res: Response): P
     }
     
     // If clubowner, verify they own this club
-    if (user && user.role === "clubowner" && club.ownerId !== user.id) {
+    if (user && user.role === "clubowner" && user.clubId !== club.id) {
       res.status(403).json({ error: "Prohibido: Solo puedes acceder a tu propio club" });
       return;
     }

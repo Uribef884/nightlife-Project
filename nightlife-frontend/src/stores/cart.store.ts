@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { API_BASE_CSR, joinUrl } from '@/lib/env';
+import { checkCartAge, CartAgeInfo } from '@/utils/cartAge';
 
 export interface CartItem {
   id: string;
@@ -8,6 +9,7 @@ export interface CartItem {
   quantity: number;
   date: string;
   clubId: string;
+  updatedAt?: string;
   
   // Ticket-specific
   ticketId?: string;
@@ -96,6 +98,10 @@ export interface CartState {
   // Utilities
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  
+  // Cart age checking
+  checkCartAge: (maxAgeMinutes?: number) => CartAgeInfo;
+  isCartOld: (maxAgeMinutes?: number) => boolean;
   
   // Club validation
   checkClubConflict: (clubId: string) => { hasConflict: boolean; currentClubId?: string };
@@ -327,6 +333,7 @@ export const useCartStore = create<CartState>()(
             quantity: unknown;
             date: unknown;
             clubId: unknown;
+            updatedAt?: unknown;
             ticketId?: unknown;
             ticket?: {
               id: unknown;
@@ -374,6 +381,7 @@ export const useCartStore = create<CartState>()(
             quantity: Number(backendItem.quantity),
             date: String(backendItem.date),
             clubId: String(backendItem.clubId),
+            updatedAt: backendItem.updatedAt ? String(backendItem.updatedAt) : undefined,
             
             // Ticket data
             ticketId: backendItem.ticketId ? String(backendItem.ticketId) : undefined,
@@ -555,6 +563,17 @@ export const useCartStore = create<CartState>()(
             lastUpdated: new Date(),
           };
         });
+      },
+
+      // Cart age checking
+      checkCartAge: (maxAgeMinutes: number = 30) => {
+        const state = get();
+        return checkCartAge(state.items, maxAgeMinutes);
+      },
+
+      isCartOld: (maxAgeMinutes: number = 30) => {
+        const state = get();
+        return checkCartAge(state.items, maxAgeMinutes).isOld;
       },
     }),
     {

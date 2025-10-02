@@ -37,13 +37,14 @@ export async function getTicketIncludedMenuItems(
     const ticketIncludedMenuItemRepo = AppDataSource.getRepository(TicketIncludedMenuItem);
     const includedItems = await ticketIncludedMenuItemRepo.find({
       where: { ticketId },
-      relations: ["menuItem", "variant"]
+      relations: ["menuItem", "menuItem.category", "variant"]
     });
 
     const formattedItems = includedItems.map(item => ({
       id: item.id,
       menuItemId: item.menuItemId,
       menuItemName: item.menuItem.name,
+      categoryId: item.menuItem.categoryId,
       variantId: item.variantId,
       variantName: item.variant?.name || null,
       quantity: item.quantity

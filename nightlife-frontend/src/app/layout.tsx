@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <div className="flex min-h-screen flex-col">
             <NavBar />
-            <main className="mx-auto w-full max-w-6xl px-4 py-6 flex-1">
+            <main className="flex-1">
               {/* Smooth route-to-route transitions (pages) */}
               <RouteTransitions>{children}</RouteTransitions>
             </main>

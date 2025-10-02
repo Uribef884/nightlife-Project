@@ -25,7 +25,8 @@ export function ClubSelector({ selectedClub, onClubChange, refreshTrigger }: Clu
     const fetchClubs = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:4000/auth/available-clubs', {
+        const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+        const response = await fetch(`${API_BASE}/auth/available-clubs`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -53,8 +54,10 @@ export function ClubSelector({ selectedClub, onClubChange, refreshTrigger }: Clu
   const selectedClubData = clubs.find(club => club.id === selectedClub);
 
   const handleClubSelect = async (clubId: string) => {
+    
     try {
-      const response = await fetch('http://localhost:4000/auth/select-club', {
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+      const response = await fetch(`${API_BASE}/auth/select-club`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,15 +66,22 @@ export function ClubSelector({ selectedClub, onClubChange, refreshTrigger }: Clu
         body: JSON.stringify({ clubId }),
       });
 
+
       if (!response.ok) {
-        throw new Error('Failed to select club');
+        const errorText = await response.text();
+        throw new Error(`Failed to select club: ${response.status} - ${errorText}`);
       }
+
+      const responseData = await response.json();
 
       // Close dropdown first
       setIsOpen(false);
       
       // Update the parent component with the new club selection
       onClubChange(clubId);
+      
+      // Reload the page to pick up the new JWT token with updated clubId
+      window.location.reload();
     } catch (err) {
       console.error('Error selecting club:', err);
       // Still close the dropdown even if there's an error

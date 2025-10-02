@@ -7,6 +7,7 @@ import {
   getAllMenuItems,
   getMenuItemById,
   getItemsForMyClub,
+  getMenuItemsForCategory,
   getMenuForClub,
   getPublicMenuForClub,
   getAvailableMenuForDate,
@@ -26,6 +27,7 @@ router.get("/:id", getMenuItemById);
 
 // Clubowner routes
 router.get("/my/items", authMiddleware, requireClubOwnerOrAdmin, getItemsForMyClub);
+router.get("/category/:categoryId", authMiddleware, requireClubOwnerOrAdmin, getMenuItemsForCategory);
 router.post("/", authMiddleware, requireClubOwnerOrAdmin, upload.single('image'), createMenuItem);
 router.patch("/:id", authMiddleware, requireClubOwnerOrAdmin, updateMenuItem);
 router.patch("/:id/image", authMiddleware, requireClubOwnerOrAdmin, upload.single('image'), updateMenuItemImage);

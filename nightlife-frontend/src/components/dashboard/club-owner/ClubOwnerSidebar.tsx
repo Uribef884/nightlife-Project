@@ -20,11 +20,21 @@ import {
 interface ClubOwnerSidebarProps {
   selectedClub: string | null;
   activeSection?: string;
+  isMobileMenuOpen?: boolean;
+  setIsMobileMenuOpen?: (open: boolean) => void;
 }
 
-export function ClubOwnerSidebar({ selectedClub }: ClubOwnerSidebarProps) {
+export function ClubOwnerSidebar({ 
+  selectedClub, 
+  isMobileMenuOpen: externalIsMobileMenuOpen, 
+  setIsMobileMenuOpen: externalSetIsMobileMenuOpen 
+}: ClubOwnerSidebarProps) {
   const pathname = usePathname();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [internalIsMobileMenuOpen, setInternalIsMobileMenuOpen] = useState(false);
+  
+  // Use external state if provided, otherwise use internal state
+  const isMobileMenuOpen = externalIsMobileMenuOpen ?? internalIsMobileMenuOpen;
+  const setIsMobileMenuOpen = externalSetIsMobileMenuOpen ?? setInternalIsMobileMenuOpen;
   
   // Only show hamburger menu on club owner dashboard pages
   const isClubOwnerDashboard = pathname.startsWith('/dashboard/club-owner');
@@ -37,7 +47,7 @@ export function ClubOwnerSidebar({ selectedClub }: ClubOwnerSidebarProps) {
       active: pathname === '/dashboard/club-owner/club-profile'
     },
     {
-      name: 'Gestión de Entradas',
+      name: 'Gestión de Reservas',
       href: '/dashboard/club-owner/tickets',
       icon: Ticket,
       active: pathname === '/dashboard/club-owner/tickets'
@@ -87,27 +97,20 @@ export function ClubOwnerSidebar({ selectedClub }: ClubOwnerSidebarProps) {
 
   return (
     <>
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="lg:hidden fixed top-4 right-4 z-50 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
-      >
-        {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
-
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div 
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <div className={`
-        fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-lg border-r border-gray-200 dark:border-gray-700
+        fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-900/80 backdrop-blur border-r border-slate-800/60
         transform transition-transform duration-300 ease-in-out
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        pt-16 lg:pt-12
       `}>
 
         {/* Navigation */}
@@ -124,8 +127,8 @@ export function ClubOwnerSidebar({ selectedClub }: ClubOwnerSidebarProps) {
                 className={`
                   flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors
                   ${isActive 
-                    ? 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300' 
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    ? 'bg-slate-800/60 text-slate-100' 
+                    : 'text-slate-200 hover:bg-slate-800/40'
                   }
                 `}
               >

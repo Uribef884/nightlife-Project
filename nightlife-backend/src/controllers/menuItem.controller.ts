@@ -438,6 +438,108 @@ export const getItemsForMyClub = async (req: AuthenticatedRequest, res: Response
   }
 };
 
+export const getMenuItemsForCategory = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const user = req.user;
+    const { categoryId } = req.params;
+
+    if (!user || user.role !== "clubowner") {
+      res.status(403).json({ error: "Solo los propietarios de club pueden acceder a esto" });
+      return;
+    }
+
+    if (!user.clubId) {
+      res.status(403).json({ error: "ID del club es requerido" });
+      return;
+    }
+
+    // First verify the category belongs to the user's club
+    const categoryRepo = AppDataSource.getRepository(MenuCategory);
+    const category = await categoryRepo.findOne({
+      where: { 
+        id: categoryId, 
+        clubId: user.clubId, 
+        isActive: true, 
+        isDeleted: false 
+      }
+    });
+
+    if (!category) {
+      res.status(404).json({ error: "Categoría no encontrada o no pertenece a tu club" });
+      return;
+    }
+
+    const repo = AppDataSource.getRepository(MenuItem);
+    const clubRepo = AppDataSource.getRepository(Club);
+    const items = await repo.find({
+      where: {
+        categoryId: categoryId,
+        clubId: user.clubId,
+        isActive: true,
+        isDeleted: false,
+      },
+      relations: ["category", "variants"],
+      order: { name: "ASC" },
+    });
+
+    // Get club information for dynamic pricing
+    const club = await clubRepo.findOne({ where: { id: user.clubId } });
+
+    // Filter inactive and soft-deleted variants and add dynamic pricing
+    const itemsWithDynamic = await Promise.all(items.map(async item => {
+      if (item.variants) {
+        item.variants = item.variants.filter(v => v.isActive && !v.isDeleted);
+      }
+
+      let dynamicPrice = null;
+      if (item.dynamicPricingEnabled && !item.hasVariants && club) {
+        // Use the new event-aware dynamic pricing logic
+        const cartService = new UnifiedCartService();
+        dynamicPrice = await cartService.calculateMenuDynamicPrice({
+          basePrice: Number(item.price),
+          clubOpenDays: club.openDays,
+          openHours: club.openHours,
+          selectedDate: undefined, // No specific date for general menu display
+          clubId: club.id,
+        });
+      }
+
+      let variants = item.variants;
+      if (item.hasVariants && variants && club) {
+        variants = await Promise.all(variants.map(async variant => {
+          let vDynamicPrice = variant.price;
+          if (variant.dynamicPricingEnabled) {
+            // Use the new event-aware dynamic pricing logic for variants
+            const cartService = new UnifiedCartService();
+            vDynamicPrice = await cartService.calculateMenuDynamicPrice({
+              basePrice: Number(variant.price),
+              clubOpenDays: club.openDays,
+              openHours: club.openHours,
+              selectedDate: undefined, // No specific date for general menu display
+              clubId: club.id,
+            });
+          }
+          return {
+            ...variant,
+            dynamicPrice: vDynamicPrice,
+          };
+        }));
+      }
+
+      return {
+        ...item,
+        dynamicPrice,
+        variants,
+      };
+    }));
+
+    res.json(itemsWithDynamic);
+  } catch (err) {
+    console.error("Error fetching menu items for category:", err);
+    res.status(500).json({ error: "Error al cargar elementos del menú para la categoría" });
+  }
+};
+
 export const deleteMenuItem = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const user = req.user;

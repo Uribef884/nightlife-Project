@@ -75,7 +75,7 @@ export default function NavBar() {
       <header
         id="app-navbar"
         role="banner"
-        className="sticky top-0 z-40 w-full border-b border-slate-800/60 bg-slate-900/80 backdrop-blur"
+        className="sticky top-0 z-50 w-full border-b border-slate-800/60 bg-slate-900/80 backdrop-blur"
       >
       {/* Row 1: brand + actions */}
       <div className={row1}>
