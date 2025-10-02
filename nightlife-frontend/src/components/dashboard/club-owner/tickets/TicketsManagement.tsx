@@ -15,6 +15,8 @@ import { CreateTicketModal } from './CreateTicketModal';
 import { UpdateTicketModal } from './UpdateTicketModal';
 import { CreateEventModal } from '../events/CreateEventModal';
 import { UpdateEventModal } from '../events/UpdateEventModal';
+import { ShareButton } from '@/components/common/ShareButton';
+import type { ShareableEvent, ShareableTicket } from '@/utils/share';
 
 interface TicketsManagementProps {
   clubId: string;
@@ -270,12 +272,34 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
             <div
               key={ticket.id}
               className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 p-4 border border-gray-200 dark:border-gray-600 rounded-lg min-w-0"
+              data-ticket-id={ticket.id}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex flex-col gap-2">
-                  <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white leading-tight">
-                    {ticket.name}
-                  </h4>
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white leading-tight flex-1 min-w-0">
+                      {ticket.name}
+                    </h4>
+                    <ShareButton
+                      options={{
+                        ticket: {
+                          id: ticket.id,
+                          name: ticket.name,
+                          description: ticket.description || '',
+                          price: ticket.price,
+                          dynamicPrice: ticket.dynamicPrice,
+                          dynamicPricingEnabled: ticket.dynamicPricingEnabled,
+                          category: ticket.category,
+                          clubId: clubId,
+                          clubName: undefined // We don't have club name in this context
+                        },
+                        clubId: clubId
+                      }}
+                      variant="button-gray"
+                      size="sm"
+                      className="flex-shrink-0"
+                    />
+                  </div>
                   <div className="flex items-center gap-2">
                     {!ticket.isActive && (
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
@@ -942,9 +966,32 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
             >
                 <div className="flex-1 min-w-0">
                 <div className="flex flex-col gap-2">
-                  <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white leading-tight">
-                    {ticket.name}
-                  </h4>
+                  <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white leading-tight flex-1 min-w-0">
+                      {ticket.name}
+                    </h4>
+                    {!isInactive && (
+                      <ShareButton
+                        options={{
+                          ticket: {
+                            id: ticket.id,
+                            name: ticket.name,
+                            description: ticket.description || '',
+                            price: ticket.price,
+                            dynamicPrice: ticket.dynamicPrice,
+                            dynamicPricingEnabled: ticket.dynamicPricingEnabled,
+                            category: ticket.category,
+                            clubId: clubId,
+                            clubName: undefined // We don't have club name in this context
+                          },
+                          clubId: clubId
+                        }}
+                        variant="button-gray"
+                        size="sm"
+                        className="flex-shrink-0"
+                      />
+                    )}
+                  </div>
                   {ticket.availableDate && (
                     <div>
                       <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${
@@ -1210,7 +1257,7 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                     const isExpanded = expandedEvents.has(event.id);
                     
                     return (
-                      <div key={event.id} className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+                      <div key={event.id} className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden" data-event-id={event.id}>
                         {/* Event Banner */}
                         {event.bannerUrl && (
                           <div className="relative h-48 w-full overflow-hidden">
@@ -1232,15 +1279,34 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
                             <div className="flex-1">
                               <div className="mb-2">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                    {event.name}
-                                  </h3>
-                                  {!event.isActive && (
-                                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                      OCULTO
-                                    </span>
-                                  )}
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                                      {event.name}
+                                    </h3>
+                                    {!event.isActive && (
+                                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 flex-shrink-0">
+                                        OCULTO
+                                      </span>
+                                    )}
+                                  </div>
+                                  <ShareButton
+                                    options={{
+                                      event: {
+                                        id: event.id,
+                                        name: event.name,
+                                        description: event.description || '',
+                                        availableDate: event.availableDate,
+                                        bannerUrl: event.bannerUrl,
+                                        clubId: clubId,
+                                        clubName: undefined // We don't have club name in this context
+                                      },
+                                      clubId: clubId
+                                    }}
+                                    variant="button-gray"
+                                    size="sm"
+                                    className="flex-shrink-0"
+                                  />
                                 </div>
                               </div>
                             {event.availableDate && (
@@ -1298,7 +1364,7 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                               onClick={() => handleUpdateEventClick(event)}
                               className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                             >
-                              Editar Evento
+                              Editar
                             </button>
                             <button 
                               onClick={() => handleDeleteEventClick(event.id)}
@@ -1371,18 +1437,20 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
                                   <div className="flex-1">
                                     <div className="mb-2">
-                                      <div className="flex items-center gap-2">
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                                          {event.name}
-                                        </h3>
-                                        {!event.isActive && (
-                                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                            OCULTO
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                                            {event.name}
+                                          </h3>
+                                          {!event.isActive && (
+                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 flex-shrink-0">
+                                              OCULTO
+                                            </span>
+                                          )}
+                                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 flex-shrink-0">
+                                            VENCIDO
                                           </span>
-                                        )}
-                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                                          VENCIDO
-                                        </span>
+                                        </div>
                                       </div>
                                     </div>
                                     {event.availableDate && (

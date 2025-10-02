@@ -9,6 +9,8 @@ import TicketCard from "./TicketCard";
 import { useCartContext } from "@/contexts/CartContext";
 import { useClubProtection } from "@/hooks/useClubProtection";
 import { CartClubChangeModal } from "@/components/cart";
+import { ShareButton } from "@/components/common/ShareButton";
+import type { ShareableEvent } from "@/utils/share";
 
 /* ---------------- small helpers ---------------- */
 type AvailableForDay = {
@@ -97,6 +99,9 @@ function ExpandedEventTickets({
   onAdd,
   onChangeQty,
   eventData,
+  clubId,
+  clubName,
+  selectedDate,
 }: {
   evKey: string;
   tickets: TicketDTO[];
@@ -104,6 +109,9 @@ function ExpandedEventTickets({
   onAdd: (t: TicketDTO) => void;
   onChangeQty: (itemId: string, nextQty: number) => void;
   eventData?: { availableDate: string; openHours?: { open: string; close: string } };
+  clubId?: string;
+  clubName?: string;
+  selectedDate?: string | null;
 }) {
   // Use the same categorization logic as TicketsGrid
   const combos = useMemo(() => tickets.filter(isCombo), [tickets]);
@@ -280,6 +288,10 @@ function ExpandedEventTickets({
               onChangeQty={onChangeQty}
               compact
               showDescription
+              clubId={clubId}
+              clubName={clubName}
+              showShareButton={true}
+              selectedDate={selectedDate}
             />
           );
         })}
@@ -310,6 +322,10 @@ function ExpandedEventTickets({
               onChangeQty={onChangeQty}
               compact
               showDescription
+              clubId={clubId}
+              clubName={clubName}
+              showShareButton={true}
+              selectedDate={selectedDate}
             />
           );
         })}
@@ -495,7 +511,7 @@ export function ClubEvents({
           const expanded = !!descExpanded[evId];
 
           return (
-            <div key={evId} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+            <div key={evId} className="rounded-xl border border-white/10 bg-white/5 overflow-hidden" data-event-id={evId}>
               {/* Header row with image + content */}
               <div className="p-4">
                 <div className="flex items-start gap-4">
@@ -509,7 +525,26 @@ export function ClubEvents({
                   </button>
 
                   <div className="flex-1 min-w-0">
-                    <div className="text-white font-semibold text-lg leading-tight">{eventWithAny.name}</div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="text-white font-semibold text-lg leading-tight">{eventWithAny.name}</div>
+                      <ShareButton
+                        options={{
+                          event: {
+                            id: evId,
+                            name: eventWithAny.name || '',
+                            description: getEventDesc(ev),
+                            availableDate: eventWithAny.availableDate || '',
+                            bannerUrl: eventWithAny.bannerUrl || undefined,
+                            clubId: clubId || '',
+                            clubName: clubName
+                          },
+                          clubId: clubId || '',
+                          clubName: clubName
+                        }}
+                        variant="button-gray"
+                        size="sm"
+                      />
+                    </div>
                     {evDate && (
                       <div className="text-white/70 text-sm font-medium mt-1">
                         {formatDateLabel(evDate)}
@@ -617,6 +652,9 @@ export function ClubEvents({
                               availableDate: selectedEvent.availableDate || '',
                               openHours: (selectedEvent as EventWithAny).openHours
                             } : undefined}
+                            clubId={clubId}
+                            clubName={clubName}
+                            selectedDate={selectedDate}
                           />
                         ) : (
                           <div className="text-white/60">No hay reservas disponibles para esta fecha.</div>

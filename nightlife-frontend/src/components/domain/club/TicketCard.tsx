@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import type { TicketDTO } from "@/services/clubs.service";
 import { nowInBogota, parseBogotaDate } from '@/utils/timezone';
 import { EVENT_GRACE_PERIOD_HOURS } from '@/lib/constants';
+import { ShareButton } from "@/components/common/ShareButton";
+import type { ShareableTicket } from "@/utils/share";
 
 // Local types for type safety
 type TicketWithAny = {
@@ -66,6 +68,10 @@ export type TicketCardProps = {
   compact?: boolean;
   showDescription?: boolean;
   isFree?: boolean;
+  clubId?: string;
+  clubName?: string;
+  showShareButton?: boolean;
+  selectedDate?: string;
 };
 
 /* ---------------- helpers ---------------- */
@@ -195,6 +201,10 @@ export default function TicketCard({
   compact = true,
   showDescription = true,
   isFree = false,
+  clubId,
+  clubName,
+  showShareButton = false,
+  selectedDate,
 }: TicketCardProps) {
   const title = getTitle(ticket);
   const desc = getDescription(ticket);
@@ -274,6 +284,7 @@ export default function TicketCard({
         isFree ? "border-yellow-400/40 bg-yellow-500/10" : "border-white/10 bg-white/5",
         compact ? "p-3" : "p-4",
       ].join(" ")}
+      data-ticket-id={String(ticketWithAny.id)}
     >
       {/* Header */}
       <div className="min-w-0">
@@ -282,12 +293,41 @@ export default function TicketCard({
             {title}
           </div>
 
-          {/* COMBO badge */}
-          {combo && (
-            <span className="ml-auto inline-flex items-center rounded-full bg-fuchsia-700/30 text-fuchsia-200 text-[10px] font-semibold px-2 py-0.5 ring-1 ring-fuchsia-400/30">
-              COMBO
-            </span>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {/* COMBO badge */}
+            {combo && (
+              <span className="inline-flex items-center rounded-full bg-fuchsia-700/30 text-fuchsia-200 text-[10px] font-semibold px-2 py-0.5 ring-1 ring-fuchsia-400/30">
+                COMBO
+              </span>
+            )}
+
+            {/* Share button */}
+            {showShareButton && clubId && (
+              <ShareButton
+                options={{
+                  ticket: {
+                    id: String(ticketWithAny.id),
+                    name: title,
+                    description: desc,
+                    price: price || 0,
+                    dynamicPrice: ticketWithAny.dynamicPrice ? Number(ticketWithAny.dynamicPrice) : undefined,
+                    dynamicPricingEnabled: ticketWithAny.dynamicPricingEnabled,
+                    category: ticketWithAny.category || 'general',
+                    clubId: clubId,
+                    clubName: clubName,
+                    eventId: ticketWithAny.event?.id ? String(ticketWithAny.event.id) : undefined,
+                    eventName: ticketWithAny.event?.name,
+                    eventDate: ticketWithAny.event?.availableDate || ticketWithAny.availableDate
+                  },
+                  clubId: clubId,
+                  clubName: clubName,
+                  selectedDate: selectedDate
+                }}
+                variant="button-gray"
+                size="sm"
+              />
+            )}
+          </div>
         </div>
 
                  <div className="mt-0.5 flex items-baseline gap-2">

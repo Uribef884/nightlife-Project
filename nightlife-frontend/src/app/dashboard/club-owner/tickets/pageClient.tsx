@@ -50,7 +50,7 @@ export default function TicketsManagementPage() {
                     Gestión de Reservas
                   </h1>
                   <p className="text-xs sm:text-sm lg:text-base text-gray-600 dark:text-gray-400 truncate">
-                    Crea y gestiona entradas para tu club
+                    Crea y gestiona Eventos y Reservas para tu club
                   </p>
                 </div>
                 <div className="w-full sm:w-auto sm:flex-shrink-0 flex items-center gap-2">

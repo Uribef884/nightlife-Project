@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Plus, Calendar, Clock, Image, Loader2, AlertCircle } from 'lucide-react';
 import { CreateEventModal } from './CreateEventModal';
+import { ShareButton } from '@/components/common/ShareButton';
+import type { ShareableEvent } from '@/utils/share';
 
 interface EventsManagementProps {
   clubId: string;
@@ -156,6 +158,7 @@ export function EventsManagement({ clubId }: EventsManagementProps) {
             <div
               key={event.id}
               className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden"
+              data-event-id={event.id}
             >
               {/* Event Banner */}
               <div className="relative h-32 sm:h-48 bg-gradient-to-r from-purple-500 to-pink-500">
@@ -179,9 +182,28 @@ export function EventsManagement({ clubId }: EventsManagementProps) {
 
               {/* Event Details */}
               <div className="p-4 sm:p-6">
-                <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2 truncate">
-                  {event.name}
-                </h3>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white truncate flex-1">
+                    {event.name}
+                  </h3>
+                  <ShareButton
+                    options={{
+                      event: {
+                        id: event.id,
+                        name: event.name,
+                        description: event.description,
+                        availableDate: event.availableDate,
+                        bannerUrl: event.bannerUrl,
+                        clubId: clubId,
+                        clubName: undefined // We don't have club name in this context
+                      },
+                      clubId: clubId
+                    }}
+                    variant="icon"
+                    size="sm"
+                    className="p-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex-shrink-0 text-gray-600 dark:text-gray-400"
+                  />
+                </div>
                 <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
                   {event.description}
                 </p>
@@ -207,6 +229,24 @@ export function EventsManagement({ clubId }: EventsManagementProps) {
                 )}
 
                 <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                  <ShareButton
+                    options={{
+                      event: {
+                        id: event.id,
+                        name: event.name,
+                        description: event.description,
+                        availableDate: event.availableDate,
+                        bannerUrl: event.bannerUrl,
+                        clubId: clubId,
+                        clubName: undefined // We don't have club name in this context
+                      },
+                      clubId: clubId
+                    }}
+                    variant="button-light"
+                    size="sm"
+                    showLabel={true}
+                    className="flex-1"
+                  />
                   <button className="flex-1 px-3 py-2 text-xs sm:text-sm bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded-md hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors">
                     Editar Evento
                   </button>

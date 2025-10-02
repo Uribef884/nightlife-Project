@@ -9,7 +9,7 @@
  * - Never parse YYYY-MM-DD with new Date(). Always parse as a local Bogota day
  */
 
-import { DateTime } from 'luxon';
+import { DateTime, Settings } from 'luxon';
 
 // Canonical timezone for all business logic
 export const BUSINESS_TIMEZONE = 'America/Bogota';
@@ -164,6 +164,36 @@ export function nowInBogotaISO(): string {
  */
 export function formatBogotaDate(dateString: string, format: string = 'dd/MM/yyyy'): string {
   return parseBogotaDate(dateString).toFormat(format);
+}
+
+/**
+ * Format a date string for display in Bogota timezone with Spanish locale
+ */
+export function formatBogotaDateSpanish(dateString: string, format: string = 'dd/MM/yyyy'): string {
+  const date = parseBogotaDate(dateString);
+  
+  // Spanish month names
+  const months = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+  ];
+  
+  // Spanish weekday names
+  const weekdays = [
+    'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'
+  ];
+  
+  // Handle specific format patterns manually
+  if (format === 'cccc, dd \'de\' MMMM \'de\' yyyy') {
+    const weekday = weekdays[date.weekday - 1];
+    const month = months[date.month - 1];
+    const day = date.day.toString().padStart(2, '0');
+    const year = date.year;
+    return `${weekday}, ${day} de ${month} de ${year}`;
+  }
+  
+  // For other formats, use the standard formatting
+  return date.toFormat(format);
 }
 
 /**

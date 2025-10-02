@@ -17,6 +17,7 @@ import { StructuredMenu } from "@/components/domain/club/menu/StructuredMenu";
 import GlobalCalendarPortal from "@/components/domain/club/GlobalCalendarPortal";
 import { CartDateChangeModal } from "@/components/cart";
 import { useCartContext } from "@/contexts/CartContext";
+import { useHighlight } from "@/hooks/useHighlight";
 
 import {
   getClubAdsCSR,
@@ -173,6 +174,9 @@ const tabMotion = {
 export default function ClubPageClient({ clubId, clubSSR }: Props) {
   // Cart context
   const { items: cartItems, clearCart, isLoading } = useCartContext();
+
+  // Handle highlighting of shared items
+  useHighlight();
   
   // Modal state for date change warning
   const [showDateChangeModal, setShowDateChangeModal] = useState(false);
@@ -334,6 +338,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     // Date from ?date (only when present); otherwise keep user's date (init once if null)
     const qdate = sp.get("date");
     const urlDate = qdate && /^\d{4}-\d{2}-\d{2}$/.test(qdate) ? qdate : null;
+    console.log('URL parsing - qdate:', qdate, 'urlDate:', urlDate, 'hash:', hash);
 
     setSelectedDate((prev) => {
       // Don't change date if we're setting it from the modal
@@ -343,6 +348,7 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       
       if (urlDate && prev !== urlDate) {
         // Reset caches only when date actually changes to avoid noise
+        console.log('Setting selectedDate from URL:', urlDate);
         setAvailable(null);
         setAvailError(null);
         setDateCache({});
@@ -396,6 +402,27 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     const off = installLocationObserver(syncFromLocation);
     return () => off();
   }, [clubId, clubSSR, syncFromLocation]); // removed cartItems to prevent reload on cart changes
+
+  // Update URL when selectedDate changes (but not when loading from URL)
+  useEffect(() => {
+    if (selectedDate && !isSettingDateFromModal) {
+      const url = new URL(window.location.href);
+      const currentDate = url.searchParams.get('date');
+      
+      // Only update URL if the date parameter is different
+      if (currentDate !== selectedDate) {
+        if (selectedDate) {
+          url.searchParams.set('date', selectedDate);
+        } else {
+          url.searchParams.delete('date');
+        }
+        
+        // Update URL without triggering a page reload
+        const newUrl = `${url.pathname}${url.search}${url.hash}`;
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  }, [selectedDate, isSettingDateFromModal]);
 
   // Separate effect to handle cart-based date selection when cart loads
   useEffect(() => {
@@ -568,6 +595,8 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
 
   // Availability buckets (debounced + cached per date)
   useEffect(() => {
+    console.log('useEffect triggered - selectedDate:', selectedDate, 'clubId:', clubId);
+    
     if (!selectedDate) {
       setAvailable(null);
       setAvailError(null);
@@ -575,11 +604,13 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     }
 
     if (dateCache[selectedDate]) {
+      console.log('Using cached data for date:', selectedDate);
       setAvailable(dateCache[selectedDate]);
       setAvailError(null);
       return;
     }
 
+    console.log('Loading tickets for date:', selectedDate);
     const timeoutId = setTimeout(() => {
       let cancelled = false;
       setAvailLoading(true);
@@ -588,11 +619,13 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
       getAvailableTicketsForDate(clubId, selectedDate)
         .then((data) => {
           if (cancelled) return;
+          console.log('Loaded tickets for date:', selectedDate, 'data:', data);
           setAvailable(data);
           setDateCache((prev) => ({ ...prev, [selectedDate]: data }));
         })
         .catch((e) => {
           if (cancelled) return;
+          console.error('Error loading tickets for date:', selectedDate, e);
           setAvailError(e?.message || "Error cargando boletas");
         })
         .finally(() => {

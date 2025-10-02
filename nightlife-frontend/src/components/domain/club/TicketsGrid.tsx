@@ -288,6 +288,10 @@ export default function TicketsGrid({
               onChangeQty={handleChangeQty}
               compact
               showDescription
+              clubId={club.id}
+              clubName={club.name}
+              showShareButton={true}
+              selectedDate={selectedDate}
             />
           );
         })}
@@ -306,6 +310,10 @@ export default function TicketsGrid({
               onChangeQty={handleChangeQty}
               compact
               showDescription
+              clubId={club.id}
+              clubName={club.name}
+              showShareButton={true}
+              selectedDate={selectedDate}
             />
           );
         })}
@@ -325,6 +333,9 @@ export default function TicketsGrid({
               compact
               showDescription
               isFree
+              clubId={club.id}
+              clubName={club.name}
+              showShareButton={true}
             />
           );
         })}
