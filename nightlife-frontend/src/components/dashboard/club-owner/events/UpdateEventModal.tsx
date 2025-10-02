@@ -1,42 +1,77 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Calendar, Clock, Image, Upload, AlertCircle } from 'lucide-react';
-import { formatBogotaDate, isPastDateInBogota, todayInBogota } from '@/utils/timezone';
+import { X, Calendar, Image, Upload, AlertCircle } from 'lucide-react';
 
-interface CreateEventModalProps {
+interface UpdateEventModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  clubId: string;
+  event: {
+    id: string;
+    name: string;
+    description?: string;
+    bannerUrl?: string;
+    openHours?: {
+      open: string;
+      close: string;
+    };
+  } | null;
 }
 
 interface EventFormData {
   name: string;
   description: string;
-  availableDate: string;
+  bannerImage: File | null;
   openHours: {
     open: string;
     close: string;
   };
-  bannerImage: File | null;
 }
 
-export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateEventModalProps) {
+export function UpdateEventModal({ isOpen, onClose, onSuccess, event }: UpdateEventModalProps) {
   const [formData, setFormData] = useState<EventFormData>({
     name: '',
     description: '',
-    availableDate: '',
+    bannerImage: null,
     openHours: {
-      open: '22:00',
-      close: '02:00'
-    },
-    bannerImage: null
+      open: '',
+      close: ''
+    }
+  });
+  
+  const [originalData, setOriginalData] = useState<EventFormData>({
+    name: '',
+    description: '',
+    bannerImage: null,
+    openHours: {
+      open: '',
+      close: ''
+    }
   });
   
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  // Initialize form data when event changes
+  useEffect(() => {
+    if (event) {
+      const initialData = {
+        name: event.name || '',
+        description: event.description || '',
+        bannerImage: null,
+        openHours: event.openHours || {
+          open: '',
+          close: ''
+        }
+      };
+      setFormData(initialData);
+      setOriginalData(initialData);
+      setImagePreview(event.bannerUrl || null);
+      setErrors({});
+    }
+  }, [event]);
 
   // iOS scroll lock handling
   useEffect(() => {
@@ -75,6 +110,17 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
     };
   }, [isOpen]);
 
+  // Check if form has changes
+  const hasChanges = (): boolean => {
+    return (
+      formData.name !== originalData.name ||
+      formData.description !== originalData.description ||
+      formData.openHours.open !== originalData.openHours.open ||
+      formData.openHours.close !== originalData.openHours.close ||
+      formData.bannerImage !== null
+    );
+  };
+
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -92,15 +138,6 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
       newErrors.description = 'La descripción no puede exceder 1000 caracteres';
     }
 
-    // Date validation
-    if (!formData.availableDate) {
-      newErrors.availableDate = 'La fecha es requerida';
-    } else {
-      if (isPastDateInBogota(formData.availableDate)) {
-        newErrors.availableDate = 'La fecha no puede ser en el pasado';
-      }
-    }
-
     // Open hours validation
     if (!formData.openHours.open) {
       newErrors.openHours = 'La hora de apertura es requerida';
@@ -112,11 +149,6 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
       newErrors.openHours = 'La hora de cierre es requerida';
     } else if (!/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(formData.openHours.close)) {
       newErrors.openHours = 'Formato de hora inválido (HH:MM)';
-    }
-
-    // Banner image validation
-    if (!formData.bannerImage) {
-      newErrors.bannerImage = 'La imagen del banner es requerida';
     }
 
     setErrors(newErrors);
@@ -159,6 +191,14 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!event) return;
+    
+    // Check if there are any changes
+    if (!hasChanges()) {
+      onClose();
+      return;
+    }
+    
     if (!validateForm()) {
       return;
     }
@@ -167,32 +207,62 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
     try {
       const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
       
-      // Create FormData for multipart/form-data request
-      const formDataToSend = new FormData();
-      formDataToSend.append('name', formData.name.trim());
-      formDataToSend.append('description', formData.description.trim());
-      formDataToSend.append('availableDate', formData.availableDate);
-      formDataToSend.append('openHours', JSON.stringify(formData.openHours));
-      if (formData.bannerImage) {
-        formDataToSend.append('image', formData.bannerImage);
+      // Build update payload with only changed fields
+      const updatePayload: any = {};
+      
+      if (formData.name !== originalData.name) {
+        updatePayload.name = formData.name.trim();
+      }
+      
+      if (formData.description !== originalData.description) {
+        updatePayload.description = formData.description.trim();
+      }
+      
+      if (formData.openHours.open !== originalData.openHours.open || 
+          formData.openHours.close !== originalData.openHours.close) {
+        updatePayload.openHours = formData.openHours;
+      }
+      
+      // Only send event details update if there are changes
+      if (Object.keys(updatePayload).length > 0) {
+        const eventResponse = await fetch(`${API_BASE}/events/${event.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(updatePayload)
+        });
+
+        if (!eventResponse.ok) {
+          const errorData = await eventResponse.json();
+          setErrors({ submit: errorData.error || 'Error al actualizar el evento' });
+          return;
+        }
       }
 
-      const response = await fetch(`${API_BASE}/events`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formDataToSend
-      });
+      // Update banner image if a new one was selected
+      if (formData.bannerImage) {
+        const formDataToSend = new FormData();
+        formDataToSend.append('image', formData.bannerImage);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        setErrors({ submit: errorData.error || 'Error al crear el evento' });
-        return;
+        const imageResponse = await fetch(`${API_BASE}/events/${event.id}/image`, {
+          method: 'PUT',
+          credentials: 'include',
+          body: formDataToSend
+        });
+
+        if (!imageResponse.ok) {
+          const errorData = await imageResponse.json();
+          setErrors({ submit: errorData.error || 'Error al actualizar la imagen del evento' });
+          return;
+        }
       }
 
       onSuccess();
       onClose();
     } catch (error) {
-      console.error('Error creating event:', error);
+      console.error('Error updating event:', error);
       setErrors({ submit: 'Error de conexión' });
     } finally {
       setLoading(false);
@@ -203,19 +273,18 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
     setFormData({
       name: '',
       description: '',
-      availableDate: '',
+      bannerImage: null,
       openHours: {
-        open: '22:00',
-        close: '02:00'
-      },
-      bannerImage: null
+        open: '',
+        close: ''
+      }
     });
     setImagePreview(null);
     setErrors({});
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !event) return null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center p-2 sm:p-4 overflow-y-auto">
@@ -232,10 +301,10 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Crear Evento
+                Actualizar Evento
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Planifica un nuevo evento para tu club
+                Modifica los detalles del evento
               </p>
             </div>
           </div>
@@ -296,142 +365,104 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
             </div>
           </div>
 
-          {/* Date and Time */}
-          <div className="space-y-4">
-            <h4 className="text-md font-medium text-gray-900 dark:text-white">Fecha y Horario</h4>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Fecha del Evento *
-                </label>
-                <div className="relative overflow-hidden">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none z-10" />
-                  <input
-                    type="date"
-                    value={formData.availableDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, availableDate: e.target.value }))}
-                    className={`w-full pl-10 pr-3 py-3 sm:py-2 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none text-sm sm:text-base ${
-                      errors.availableDate ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'
-                    } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white`}
-                    min={todayInBogota()}
-                    style={{
-                      colorScheme: 'dark',
-                      WebkitAppearance: 'none',
-                      MozAppearance: 'textfield',
-                      maxWidth: '100%',
-                      boxSizing: 'border-box',
-                      width: '100%',
-                      minHeight: '44px', // iOS minimum touch target
-                      color: formData.availableDate ? 'inherit' : 'transparent',
-                      textIndent: formData.availableDate ? '0' : '-9999px'
-                    }}
-                  />
-                  {!formData.availableDate && (
-                    <div className="absolute left-10 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm pointer-events-none select-none">
-                      MM/DD/YY
-                    </div>
-                  )}
-                </div>
-                {errors.availableDate && <p className="mt-1 text-sm text-red-600">{errors.availableDate}</p>}
-              </div>
-
-              {/* Open Hours */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Horario *
-                </label>
-                <div className="flex items-center space-x-2">
-                  <div className="flex-1">
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <input
-                        type="time"
-                        value={formData.openHours.open}
-                        onChange={(e) => setFormData(prev => ({ 
-                          ...prev, 
-                          openHours: { ...prev.openHours, open: e.target.value }
-                        }))}
-                        className={`w-full pl-10 pr-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none ${
-                          errors.openHours ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'
-                        } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white`}
-                      />
-                    </div>
-                  </div>
-                  <span className="text-gray-500 dark:text-gray-400">-</span>
-                  <div className="flex-1">
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                      <input
-                        type="time"
-                        value={formData.openHours.close}
-                        onChange={(e) => setFormData(prev => ({ 
-                          ...prev, 
-                          openHours: { ...prev.openHours, close: e.target.value }
-                        }))}
-                        className={`w-full pl-10 pr-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none ${
-                          errors.openHours ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'
-                        } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white`}
-                      />
-                    </div>
-                  </div>
-                </div>
-                {errors.openHours && <p className="mt-1 text-sm text-red-600">{errors.openHours}</p>}
-              </div>
-            </div>
-          </div>
-
           {/* Banner Image */}
           <div className="space-y-4">
             <h4 className="text-md font-medium text-gray-900 dark:text-white">Imagen del Banner</h4>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Imagen del Banner *
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Imagen del Banner
               </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-gray-400 dark:hover:border-gray-500 transition-colors">
-                <div className="space-y-1 text-center">
+              <div className="flex items-center gap-4">
+                <div className="w-32 h-24 rounded-lg overflow-hidden border-2 border-gray-200 dark:border-gray-600 relative">
                   {imagePreview ? (
-                    <div className="space-y-2">
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="mx-auto h-32 w-auto rounded-lg object-cover"
-                      />
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {formData.bannerImage?.name}
-                      </p>
-                    </div>
+                    <img
+                      src={imagePreview}
+                      alt="Banner preview"
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
-                    <>
-                      <Image className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="flex text-sm text-gray-600 dark:text-gray-400">
-                        <label
-                          htmlFor="banner-image"
-                          className="relative cursor-pointer bg-white dark:bg-gray-800 rounded-md font-medium text-purple-600 hover:text-purple-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-purple-500"
-                        >
-                          <span>Subir imagen</span>
-                          <input
-                            id="banner-image"
-                            name="banner-image"
-                            type="file"
-                            className="sr-only"
-                            accept="image/*"
-                            onChange={handleImageChange}
-                          />
-                        </label>
-                        <p className="pl-1">o arrastra y suelta</p>
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        PNG, JPG, GIF hasta 5MB
-                      </p>
-                    </>
+                    <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                      <Image className="w-8 h-8 text-gray-400" />
+                    </div>
                   )}
+                </div>
+                <div className="flex-1">
+                  <label className={`flex items-center gap-2 px-3 py-2 border-2 border-dashed rounded-lg transition-colors text-sm ${
+                    loading 
+                      ? 'border-gray-400 cursor-not-allowed opacity-50' 
+                      : 'border-gray-300 dark:border-gray-600 cursor-pointer hover:border-purple-500'
+                  }`}>
+                    {loading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                        <span className="text-gray-600 dark:text-gray-400">Subiendo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 text-gray-400" />
+                        <span className="text-gray-600 dark:text-gray-400">
+                          {imagePreview ? 'Cambiar imagen' : 'Subir imagen'}
+                        </span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                      disabled={loading}
+                      className="hidden"
+                    />
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    PNG, JPG, GIF hasta 5MB
+                  </p>
                 </div>
               </div>
               {errors.bannerImage && <p className="mt-1 text-sm text-red-600">{errors.bannerImage}</p>}
             </div>
+          </div>
+
+          {/* Open Hours */}
+          <div className="space-y-4">
+            <h4 className="text-md font-medium text-gray-900 dark:text-white">Horarios del Evento</h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Hora de Apertura *
+                </label>
+                <input
+                  type="time"
+                  value={formData.openHours.open}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    openHours: { ...prev.openHours, open: e.target.value }
+                  }))}
+                  className={`w-full px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none ${
+                    errors.openHours ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'
+                  } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white`}
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Hora de Cierre *
+                </label>
+                <input
+                  type="time"
+                  value={formData.openHours.close}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    openHours: { ...prev.openHours, close: e.target.value }
+                  }))}
+                  className={`w-full px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none ${
+                    errors.openHours ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'
+                  } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white`}
+                />
+              </div>
+            </div>
+            {errors.openHours && <p className="mt-1 text-sm text-red-600">{errors.openHours}</p>}
           </div>
 
           {/* Submit Error */}
@@ -453,18 +484,22 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg transition-colors flex items-center space-x-2"
+              disabled={loading || !hasChanges()}
+              className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                !hasChanges() 
+                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                  : 'bg-purple-600 hover:bg-purple-700 text-white'
+              }`}
             >
               {loading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>Creando...</span>
+                  <span>Actualizando...</span>
                 </>
               ) : (
                 <>
                   <Calendar className="h-4 w-4" />
-                  <span>Crear Evento</span>
+                  <span>Actualizar Evento</span>
                 </>
               )}
             </button>

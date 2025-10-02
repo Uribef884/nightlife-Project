@@ -477,7 +477,7 @@ export function CreateTicketModal({ isOpen, onClose, onSuccess, clubId, events =
                   className={`w-full px-3 py-2 border-2 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none ${
                     errors.name ? 'border-red-500 dark:border-red-400' : 'border-gray-200 dark:border-gray-600'
                   } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white`}
-                placeholder="Ej: VIP Package with Drinks"
+                placeholder="Nombre del ticket"
                 maxLength={500}
               />
               {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
@@ -893,17 +893,17 @@ export function CreateTicketModal({ isOpen, onClose, onSuccess, clubId, events =
                           )}
 
                           {/* Quantity */}
-                          <div className="w-16">
+                          <div className="w-32">
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                               Cantidad
                             </label>
-                            <div className="flex items-center space-x-1">
+                            <div className="flex items-center space-x-3">
                               <button
                                 type="button"
                                 onClick={() => updateMenuItem(index, 'quantity', Math.max(1, item.quantity - 1))}
-                                className="w-6 h-6 flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                className="w-10 h-10 flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                               >
-                                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">-</span>
+                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">-</span>
                               </button>
                               <input
                                 type="number"
@@ -924,15 +924,15 @@ export function CreateTicketModal({ isOpen, onClose, onSuccess, clubId, events =
                                     updateMenuItem(index, 'quantity', 1);
                                   }
                                 }}
-                                className="w-12 px-1 py-1 border border-gray-200 dark:border-gray-600 rounded text-center text-sm bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-purple-500 focus:border-purple-500 focus:outline-none"
+                                className="w-20 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded text-center text-sm bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-purple-500 focus:border-purple-500 focus:outline-none"
                                 min="1"
                               />
                               <button
                                 type="button"
                                 onClick={() => updateMenuItem(index, 'quantity', item.quantity + 1)}
-                                className="w-6 h-6 flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                className="w-10 h-10 flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                               >
-                                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">+</span>
+                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">+</span>
                               </button>
                             </div>
                           </div>
@@ -1053,10 +1053,10 @@ export function CreateTicketModal({ isOpen, onClose, onSuccess, clubId, events =
                             <button
                               type="button"
                               onClick={() => removeMenuItem(index)}
-                              className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                              className="px-3 py-1 text-xs sm:text-sm bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
                               title="Eliminar elemento"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                             </button>
                           </div>
                         </div>

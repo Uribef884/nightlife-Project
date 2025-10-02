@@ -14,6 +14,7 @@ const formatNumber = (value: number | string): string => {
 import { CreateTicketModal } from './CreateTicketModal';
 import { UpdateTicketModal } from './UpdateTicketModal';
 import { CreateEventModal } from '../events/CreateEventModal';
+import { UpdateEventModal } from '../events/UpdateEventModal';
 
 interface TicketsManagementProps {
   clubId: string;
@@ -27,6 +28,10 @@ interface Event {
   description?: string;
   availableDate: string;
   bannerUrl?: string;
+  openHours?: {
+    open: string;
+    close: string;
+  };
   tickets: Ticket[];
   isActive?: boolean;
 }
@@ -40,6 +45,7 @@ interface Ticket {
   maxPerPerson: number;
   priority: number;
   quantity?: number;
+  originalQuantity?: number;
   category: 'general' | 'event' | 'free' | 'combo';
   isActive: boolean;
   dynamicPricingEnabled: boolean;
@@ -113,6 +119,8 @@ function getIncludedLines(ticket: Ticket): string[] {
 export function TicketsManagement({ clubId }: TicketsManagementProps) {
   const [activeTab, setActiveTab] = useState<TicketType>('event');
   const [events, setEvents] = useState<Event[]>([]);
+  const [activeEvents, setActiveEvents] = useState<Event[]>([]);
+  const [inactiveEvents, setInactiveEvents] = useState<Event[]>([]);
   const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [generalTickets, setGeneralTickets] = useState<Ticket[]>([]);
   const [comboTickets, setComboTickets] = useState<Ticket[]>([]);
@@ -123,9 +131,13 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDeleteEventModal, setShowDeleteEventModal] = useState(false);
   const [showCreateEventModal, setShowCreateEventModal] = useState(false);
+  const [showUpdateEventModal, setShowUpdateEventModal] = useState(false);
   const [ticketToDelete, setTicketToDelete] = useState<string | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   const [ticketToUpdate, setTicketToUpdate] = useState<Ticket | null>(null);
+  const [eventToUpdate, setEventToUpdate] = useState<Event | null>(null);
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
 
   const tabs = [
@@ -183,6 +195,27 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
     });
     
     return { generalTickets, comboTickets, freeTickets, inactiveTickets };
+  };
+
+  // Categorize events as active or inactive based on date
+  const categorizeEvents = (events: Event[]) => {
+    if (!Array.isArray(events)) {
+      return { activeEvents: [], inactiveEvents: [] };
+    }
+    
+    const activeEvents: Event[] = [];
+    const inactiveEvents: Event[] = [];
+
+    events.forEach(event => {
+      // Check if event date is in the past
+      if (event.availableDate && isPastDateInBogota(event.availableDate)) {
+        inactiveEvents.push(event);
+      } else {
+        activeEvents.push(event);
+      }
+    });
+
+    return { activeEvents, inactiveEvents };
   };
 
   // Categorize event tickets function
@@ -273,8 +306,23 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                       Dinámico
                     </span>
                   )}
-                  {ticket.quantity && (
-                    <span>Cantidad: {ticket.quantity}</span>
+                  {ticket.quantity && ticket.originalQuantity && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Cantidad:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {ticket.originalQuantity - ticket.quantity} / {ticket.originalQuantity}
+                        </span>
+                        <div className="w-16 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500 rounded-full transition-all duration-300"
+                            style={{ 
+                              width: `${Math.min(((ticket.originalQuantity - ticket.quantity) / ticket.originalQuantity) * 100, 100)}%` 
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
                 {ticket.description && (
@@ -467,6 +515,23 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
     }
   };
 
+  const deleteEvent = async (eventId: string): Promise<void> => {
+    const url = `${API_BASE}/events/${eventId}`;
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to delete event: ${response.status} - ${errorText}`);
+    }
+  };
+
   // Load data on component mount
   useEffect(() => {
     const loadData = async () => {
@@ -488,6 +553,11 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
         
         setEvents(eventsData);
         setAllTickets(ticketsArray);
+        
+        // Categorize events as active/inactive
+        const { activeEvents, inactiveEvents } = categorizeEvents(eventsData);
+        setActiveEvents(activeEvents);
+        setInactiveEvents(inactiveEvents);
         
         // Categorize tickets while maintaining original order
         const { generalTickets, comboTickets, freeTickets, inactiveTickets } = categorizeTickets(ticketsArray);
@@ -519,13 +589,16 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
     setInactiveTickets(prev => updateArray(prev));
   };
 
-  // Toggle event expansion
+  // Toggle event expansion (accordion behavior - only one event can be expanded at a time)
   const toggleEventExpansion = (eventId: string) => {
     setExpandedEvents(prev => {
       const newSet = new Set(prev);
       if (newSet.has(eventId)) {
-        newSet.delete(eventId);
+        // If the event is already expanded, collapse it
+        newSet.clear();
       } else {
+        // If the event is not expanded, collapse all others and expand this one
+        newSet.clear();
         newSet.add(eventId);
       }
       return newSet;
@@ -623,8 +696,8 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
       await toggleEventVisibility(eventId);
       
       // Update the events array and cascade to child tickets
-      setEvents(prevEvents => 
-        prevEvents.map(event => 
+      setEvents(prevEvents => {
+        const updatedEvents = prevEvents.map(event => 
           event.id === eventId 
             ? { 
                 ...event, 
@@ -635,26 +708,32 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                 })) || []
               }
             : event
-        )
-      );
+        );
+        
+        // Update categorized event arrays
+        const { activeEvents, inactiveEvents } = categorizeEvents(updatedEvents);
+        setActiveEvents(activeEvents);
+        setInactiveEvents(inactiveEvents);
+        
+        return updatedEvents;
+      });
 
       // Also update the allTickets array to reflect the cascaded changes
-      setAllTickets(prevTickets => 
-        prevTickets.map(ticket => 
+      setAllTickets(prevTickets => {
+        const updatedTickets = prevTickets.map(ticket => 
           ticket.eventId === eventId 
             ? { ...ticket, isActive: !ticket.isActive }
             : ticket
-        )
-      );
-
-      // Update categorized arrays to reflect the changes
-      setAllTickets(prevTickets => {
-        const { generalTickets, comboTickets, freeTickets, inactiveTickets } = categorizeTickets(prevTickets);
+        );
+        
+        // Update categorized ticket arrays
+        const { generalTickets, comboTickets, freeTickets, inactiveTickets } = categorizeTickets(updatedTickets);
         setGeneralTickets(generalTickets);
         setComboTickets(comboTickets);
         setFreeTickets(freeTickets);
         setInactiveTickets(inactiveTickets);
-        return prevTickets;
+        
+        return updatedTickets;
       });
       
     } catch (error) {
@@ -698,9 +777,52 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
     setTicketToDelete(null);
   };
 
+  const handleDeleteEventClick = (eventId: string) => {
+    setEventToDelete(eventId);
+    setShowDeleteEventModal(true);
+  };
+
+  const handleDeleteEventConfirm = async () => {
+    if (!eventToDelete) return;
+    
+    try {
+      await deleteEvent(eventToDelete);
+      
+      // Remove the event from local state
+      setEvents(prevEvents => 
+        prevEvents.filter(event => event.id !== eventToDelete)
+      );
+      
+      // Update the categorized event lists
+      setEvents(currentEvents => {
+        const { activeEvents, inactiveEvents } = categorizeEvents(currentEvents);
+        setActiveEvents(activeEvents);
+        setInactiveEvents(inactiveEvents);
+        return currentEvents;
+      });
+      
+      // Close modal and reset state
+      setShowDeleteEventModal(false);
+      setEventToDelete(null);
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      setError(error instanceof Error ? error.message : 'Failed to delete event');
+    }
+  };
+
+  const handleDeleteEventCancel = () => {
+    setShowDeleteEventModal(false);
+    setEventToDelete(null);
+  };
+
   const handleUpdateClick = (ticket: Ticket) => {
     setTicketToUpdate(ticket);
     setShowUpdateModal(true);
+  };
+
+  const handleUpdateEventClick = (event: Event) => {
+    setEventToUpdate(event);
+    setShowUpdateEventModal(true);
   };
 
   const handleUpdateSuccess = () => {
@@ -723,6 +845,53 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
         
         setEvents(eventsData);
         setAllTickets(ticketsArray);
+        
+        // Categorize events as active/inactive
+        const { activeEvents, inactiveEvents } = categorizeEvents(eventsData);
+        setActiveEvents(activeEvents);
+        setInactiveEvents(inactiveEvents);
+        
+        const { generalTickets, comboTickets, freeTickets, inactiveTickets } = categorizeTickets(ticketsArray);
+        
+        setGeneralTickets(generalTickets);
+        setComboTickets(comboTickets);
+        setFreeTickets(freeTickets);
+        setInactiveTickets(inactiveTickets);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+        console.error('Error loading tickets data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  };
+
+  const handleUpdateEventSuccess = () => {
+    setShowUpdateEventModal(false);
+    setEventToUpdate(null);
+    // Refresh data
+    const loadData = async () => {
+      if (!clubId) return;
+      
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const [eventsData, ticketsData] = await Promise.all([
+          fetchEvents(clubId),
+          fetchTickets()
+        ]);
+        
+        const ticketsArray = Array.isArray(ticketsData) ? ticketsData : [];
+        
+        setEvents(eventsData);
+        setAllTickets(ticketsArray);
+        
+        // Categorize events as active/inactive
+        const { activeEvents, inactiveEvents } = categorizeEvents(eventsData);
+        setActiveEvents(activeEvents);
+        setInactiveEvents(inactiveEvents);
         
         const { generalTickets, comboTickets, freeTickets, inactiveTickets } = categorizeTickets(ticketsArray);
         
@@ -819,8 +988,23 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                       Dinámico
                     </span>
                   )}
-                  {ticket.quantity && (
-                    <span>Cantidad: {ticket.quantity}</span>
+                  {ticket.quantity && ticket.originalQuantity && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Cantidad:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {ticket.originalQuantity - ticket.quantity} / {ticket.originalQuantity}
+                        </span>
+                        <div className="w-16 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500 rounded-full transition-all duration-300"
+                            style={{ 
+                              width: `${Math.min(((ticket.originalQuantity - ticket.quantity) / ticket.originalQuantity) * 100, 100)}%` 
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
                 {ticket.description && (
@@ -998,9 +1182,10 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
           <div className="space-y-4">
               {activeTab === 'event' ? (
                 // Events Tab - Show events with their tickets
-                events.length > 0 ? (
-                  <div className="space-y-4">
-                    {events.some(event => !event.isActive) && (
+                (activeEvents.length > 0 || inactiveEvents.length > 0) ? (
+                  <div className="space-y-6">
+                    {/* Information Banner - Only show when there are active events that are hidden */}
+                    {activeEvents.some(event => !event.isActive) && (
                       <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
                         <div className="flex items-center gap-2">
                           <EyeOff className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
@@ -1010,7 +1195,18 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                         </div>
                       </div>
                     )}
-                    {events.map((event) => {
+                    
+                    {/* Active Events Section */}
+                    {activeEvents.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Eventos Activos</h3>
+                          <span className="px-2 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
+                            {activeEvents.length}
+                          </span>
+                        </div>
+                        {activeEvents.map((event) => {
                     const isExpanded = expandedEvents.has(event.id);
                     
                     return (
@@ -1065,6 +1261,12 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                                 {event.description}
                               </p>
                             )}
+                            {event.openHours && (
+                              <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                <Clock className="h-4 w-4" />
+                                <span>{event.openHours.open} - {event.openHours.close}</span>
+                              </div>
+                            )}
                             <div className="flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
                               <span>Tickets: {event.tickets?.length || 0}</span>
                             </div>
@@ -1074,11 +1276,11 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                               onClick={() => toggleEventExpansion(event.id)}
                               className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded-md hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors flex items-center gap-1"
                             >
-                              {isExpanded ? (
-                                <ChevronUp className="w-3 h-3" />
-                              ) : (
+                              <div className={`transition-transform duration-300 ease-in-out ${
+                                isExpanded ? 'rotate-180' : 'rotate-0'
+                              }`}>
                                 <ChevronDown className="w-3 h-3" />
-                              )}
+                              </div>
                               {isExpanded ? 'Ocultar Reservas' : 'Ver Reservas'}
                             </button>
                             <button 
@@ -1092,18 +1294,27 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                             >
                               {event.isActive ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                             </button>
-                            <button className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                            <button 
+                              onClick={() => handleUpdateEventClick(event)}
+                              className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                            >
                               Editar Evento
                             </button>
-                            <button className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-800 transition-colors" title="Eliminar">
+                            <button 
+                              onClick={() => handleDeleteEventClick(event.id)}
+                              className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-800 transition-colors" 
+                              title="Eliminar"
+                            >
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
                           </div>
                         </div>
                         
-                        {/* Collapsible Content */}
-                        {isExpanded && (
+                        {/* Collapsible Content with Animation */}
+                        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                          isExpanded ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'
+                        }`}>
                           <div className="border-t border-gray-200 dark:border-gray-600 pt-4 px-4 pb-4">
                             {/* Event Tickets - Categorized */}
                             {event.tickets && event.tickets.length > 0 ? (
@@ -1117,10 +1328,132 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                               </p>
                             )}
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })}
+                      </div>
+                    )}
+                    
+                    {/* Inactive Events Section */}
+                    {inactiveEvents.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Eventos Pasados</h3>
+                          <span className="px-2 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
+                            {inactiveEvents.length}
+                          </span>
+                        </div>
+                        {inactiveEvents.map((event) => {
+                          const isExpanded = expandedEvents.has(event.id);
+                          
+                          return (
+                            <div key={event.id} className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden opacity-75">
+                              {/* Event Banner */}
+                              {event.bannerUrl && (
+                                <div className="relative h-48 w-full overflow-hidden">
+                                  <img
+                                    src={event.bannerUrl}
+                                    alt={event.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.style.display = 'none';
+                                    }}
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                                </div>
+                              )}
+                              
+                              {/* Event Header - Always Visible */}
+                              <div className="p-4">
+                                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
+                                  <div className="flex-1">
+                                    <div className="mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                          {event.name}
+                                        </h3>
+                                        {!event.isActive && (
+                                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                            OCULTO
+                                          </span>
+                                        )}
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                          VENCIDO
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {event.availableDate && (
+                                      <div className="mb-2">
+                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                          <Calendar className="h-4 w-4 mr-2" />
+                                          {formatBogotaDate(event.availableDate, 'dd/MM/yyyy')} (Vencido)
+                                        </span>
+                                      </div>
+                                    )}
+                                    {event.description && (
+                                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                        {event.description}
+                                      </p>
+                                    )}
+                                    {event.openHours && (
+                                      <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span>{event.openHours.open} - {event.openHours.close}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                      <span>Tickets: {event.tickets?.length || 0}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex space-x-2">
+                                    <button 
+                                      onClick={() => toggleEventExpansion(event.id)}
+                                      className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded-md hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors flex items-center gap-1"
+                                    >
+                                      <div className={`transition-transform duration-300 ease-in-out ${
+                                        isExpanded ? 'rotate-180' : 'rotate-0'
+                                      }`}>
+                                        <ChevronDown className="w-3 h-3" />
+                                      </div>
+                                      {isExpanded ? 'Ocultar Reservas' : 'Ver Reservas'}
+                                    </button>
+                                    <button 
+                                      onClick={() => handleDeleteEventClick(event.id)}
+                                      className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-800 transition-colors" 
+                                      title="Eliminar"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Collapsible Content with Animation */}
+                              <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                                isExpanded ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'
+                              }`}>
+                                <div className="border-t border-gray-200 dark:border-gray-600 pt-4 px-4 pb-4">
+                                  {/* Event Tickets - Categorized */}
+                                  {event.tickets && event.tickets.length > 0 ? (
+                                    <div className="space-y-4">
+                                      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">Tickets del Evento:</h4>
+                                      {renderCategorizedEventTickets(event.tickets)}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                                      No hay tickets para este evento
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-12">
@@ -1137,6 +1470,17 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                 // General Tab - Show separated ticket sections
                 (comboTickets.length > 0 || generalTickets.length > 0 || freeTickets.length > 0 || inactiveTickets.length > 0) ? (
                   <div className="space-y-8">
+                    {/* Information Banner - Show when there are hidden tickets (but not inactive/past date tickets) */}
+                    {allTickets.some(ticket => !ticket.isActive && (!ticket.availableDate || !isPastDateInBogota(ticket.availableDate))) && (
+                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <EyeOff className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                          <span className="text-sm text-yellow-800 dark:text-yellow-200">
+                            Algunos tickets están ocultos para el público pero visibles para ti como propietario del club.
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     <TicketSection 
                       title="Combos" 
                       tickets={comboTickets} 
@@ -1287,6 +1631,60 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
         </div>
       )}
 
+      {/* Delete Event Confirmation Modal */}
+      {showDeleteEventModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={handleDeleteEventCancel} />
+          
+          {/* Modal */}
+          <div className="relative bg-slate-800 rounded-lg shadow-xl border border-slate-700 max-w-md w-full">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-700">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-red-500/20 rounded-lg">
+                  <Trash2 className="h-6 w-6 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100">
+                    Eliminar Evento
+                  </h3>
+                </div>
+              </div>
+              <button
+                onClick={handleDeleteEventCancel}
+                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-slate-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <p className="text-slate-300">
+                ¿Estás seguro de que quieres eliminar este evento? Esta acción no se puede deshacer y también eliminará todos los tickets asociados.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex space-x-3 p-6 border-t border-slate-700">
+              <button
+                onClick={handleDeleteEventCancel}
+                className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDeleteEventConfirm}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium transition-colors"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create Event Modal */}
       <CreateEventModal
         isOpen={showCreateEventModal}
@@ -1312,6 +1710,11 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
               if (eventsResponse.ok) {
                 const eventsData = await eventsResponse.json();
                 setEvents(eventsData);
+                
+                // Categorize events as active/inactive
+                const { activeEvents, inactiveEvents } = categorizeEvents(eventsData);
+                setActiveEvents(activeEvents);
+                setInactiveEvents(inactiveEvents);
               }
 
               // Load all tickets
@@ -1342,6 +1745,14 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
           loadData();
         }}
         clubId={clubId}
+      />
+
+      {/* Update Event Modal */}
+      <UpdateEventModal
+        isOpen={showUpdateEventModal}
+        onClose={() => setShowUpdateEventModal(false)}
+        onSuccess={handleUpdateEventSuccess}
+        event={eventToUpdate}
       />
     </div>
   );

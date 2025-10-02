@@ -180,11 +180,6 @@ export class UnifiedCartService {
       throw new Error('Cannot select a past date');
     }
 
-    // Validate date is within selectable range (today to 21 days from today)
-    if (!isDateSelectableInBogota(date)) {
-      throw new Error('Cannot select a date more than 21 days in the future');
-    }
-
     // Get existing cart items for validation
     const existingItems = await this.getCartItems(userId, sessionId);
 
@@ -208,7 +203,7 @@ export class UnifiedCartService {
       throw new Error('Club must be in structured menu mode to add menu items');
     }
 
-    // Check if there's an event on this date - if so, bypass openDays validation
+    // Check if there's an event on this date - if so, bypass 21-day validation
     const eventRepo = AppDataSource.getRepository('Event');
     const event = await eventRepo.findOne({
       where: {
@@ -217,6 +212,14 @@ export class UnifiedCartService {
         isActive: true
       }
     });
+
+    // Only apply 21-day validation if there's no event for this date
+    if (!event) {
+      // Validate date is within selectable range (today to 21 days from today)
+      if (!isDateSelectableInBogota(date)) {
+        throw new Error('Cannot select a date more than 21 days in the future');
+      }
+    }
 
     // Check if there are free tickets available on this date - if so, bypass openDays validation
     const ticketRepo = AppDataSource.getRepository('Ticket');

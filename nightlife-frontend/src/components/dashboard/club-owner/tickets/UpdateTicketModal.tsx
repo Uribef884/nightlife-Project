@@ -111,6 +111,21 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
     menuItems: []
   });
   
+  const [originalData, setOriginalData] = useState<TicketFormData>({
+    name: '',
+    description: '',
+    price: 0,
+    maxPerPerson: 10,
+    priority: 1,
+    category: 'general',
+    quantity: null,
+    availableDate: null,
+    eventId: null,
+    dynamicPricingEnabled: true,
+    includesMenuItem: false,
+    menuItems: []
+  });
+  
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([]);
   const [loading, setLoading] = useState(false);
@@ -197,6 +212,13 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
           menuItems: formattedMenuItems,
           includesMenuItem: formattedMenuItems.length > 0
         }));
+        
+        // Also update originalData to match the loaded menu items
+        setOriginalData(prev => ({
+          ...prev,
+          menuItems: formattedMenuItems,
+          includesMenuItem: formattedMenuItems.length > 0
+        }));
       } else {
         console.error('Failed to load ticket menu items:', response.status, response.statusText);
         
@@ -225,7 +247,7 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
   // Initialize form data when ticket changes
   useEffect(() => {
     if (ticket && isOpen) {
-      setFormData({
+      const initialData = {
         name: ticket.name || '',
         description: ticket.description || '',
         price: ticket.price || 0,
@@ -238,8 +260,10 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
         dynamicPricingEnabled: ticket.dynamicPricingEnabled || false,
         includesMenuItem: ticket.includesMenuItem || false,
         menuItems: []
-      });
+      };
       
+      setFormData(initialData);
+      setOriginalData(initialData);
       setErrors({});
       
       // Load menu items first, then load ticket menu items
@@ -292,6 +316,24 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
       }
     };
   }, [isOpen]);
+
+  // Check if form has changes
+  const hasChanges = (): boolean => {
+    return (
+      formData.name !== originalData.name ||
+      formData.description !== originalData.description ||
+      formData.price !== originalData.price ||
+      formData.maxPerPerson !== originalData.maxPerPerson ||
+      formData.priority !== originalData.priority ||
+      formData.category !== originalData.category ||
+      formData.quantity !== originalData.quantity ||
+      formData.availableDate !== originalData.availableDate ||
+      formData.eventId !== originalData.eventId ||
+      formData.dynamicPricingEnabled !== originalData.dynamicPricingEnabled ||
+      formData.includesMenuItem !== originalData.includesMenuItem ||
+      JSON.stringify(formData.menuItems) !== JSON.stringify(originalData.menuItems)
+    );
+  };
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -360,7 +402,15 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!ticket || !validateForm()) {
+    if (!ticket) return;
+    
+    // Check if there are any changes
+    if (!hasChanges()) {
+      onClose();
+      return;
+    }
+    
+    if (!validateForm()) {
       return;
     }
 
@@ -368,29 +418,67 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
     try {
       const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
       
-      // Prepare the request body for ticket update (without menu items)
-      const requestBody: Record<string, unknown> = {
-        name: formData.name.trim(),
-        description: formData.description.trim(),
-        price: formData.price,
-        maxPerPerson: formData.maxPerPerson,
-        priority: formData.priority,
-        dynamicPricingEnabled: formData.dynamicPricingEnabled,
-        includesMenuItem: formData.includesMenuItem
-      };
+      // Build update payload with only changed fields
+      const requestBody: Record<string, unknown> = {};
+      
+      if (formData.name !== originalData.name) {
+        requestBody.name = formData.name.trim();
+      }
+      
+      if (formData.description !== originalData.description) {
+        requestBody.description = formData.description.trim();
+      }
+      
+      if (formData.price !== originalData.price) {
+        requestBody.price = formData.price;
+      }
+      
+      if (formData.maxPerPerson !== originalData.maxPerPerson) {
+        requestBody.maxPerPerson = formData.maxPerPerson;
+      }
+      
+      if (formData.priority !== originalData.priority) {
+        requestBody.priority = formData.priority;
+      }
+      
+      if (formData.dynamicPricingEnabled !== originalData.dynamicPricingEnabled) {
+        requestBody.dynamicPricingEnabled = formData.dynamicPricingEnabled;
+      }
+      
+      if (formData.includesMenuItem !== originalData.includesMenuItem) {
+        requestBody.includesMenuItem = formData.includesMenuItem;
+      }
+      
+      if (formData.quantity !== originalData.quantity) {
+        requestBody.quantity = formData.quantity;
+      }
+      
+      if (formData.availableDate !== originalData.availableDate) {
+        requestBody.availableDate = formData.availableDate;
+      }
+      
+      if (formData.eventId !== originalData.eventId) {
+        requestBody.eventId = formData.eventId;
+      }
+      
+      if (formData.category !== originalData.category) {
+        requestBody.category = formData.category;
+      }
 
-      // Update the ticket first
-      const ticketResponse = await fetch(`${API_BASE}/tickets/${ticket.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(requestBody)
-      });
+      // Only send ticket update if there are changes
+      if (Object.keys(requestBody).length > 0) {
+        const ticketResponse = await fetch(`${API_BASE}/tickets/${ticket.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(requestBody)
+        });
 
-      if (!ticketResponse.ok) {
-        const errorData = await ticketResponse.json();
-        setErrors({ submit: errorData.error || 'Error al actualizar el ticket' });
-        return;
+        if (!ticketResponse.ok) {
+          const errorData = await ticketResponse.json();
+          setErrors({ submit: errorData.error || 'Error al actualizar el ticket' });
+          return;
+        }
       }
 
       // Handle menu items if the ticket includes them
@@ -892,17 +980,17 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
                           )}
 
                           {/* Quantity */}
-                          <div className="w-16">
+                          <div className="w-32">
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                               Cantidad
                             </label>
-                            <div className="flex items-center space-x-1">
+                            <div className="flex items-center space-x-3">
                               <button
                                 type="button"
                                 onClick={() => updateMenuItem(index, 'quantity', Math.max(1, item.quantity - 1))}
-                                className="w-6 h-6 flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                className="w-10 h-10 flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                               >
-                                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">-</span>
+                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">-</span>
                               </button>
                               <input
                                 type="number"
@@ -923,15 +1011,15 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
                                     updateMenuItem(index, 'quantity', 1);
                                   }
                                 }}
-                                className="w-12 px-1 py-1 border border-gray-200 dark:border-gray-600 rounded text-center text-sm bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-purple-500 focus:border-purple-500 focus:outline-none"
+                                className="w-20 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded text-center text-sm bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-1 focus:ring-purple-500 focus:border-purple-500 focus:outline-none"
                                 min="1"
                               />
                               <button
                                 type="button"
                                 onClick={() => updateMenuItem(index, 'quantity', item.quantity + 1)}
-                                className="w-6 h-6 flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                                className="w-10 h-10 flex items-center justify-center border border-gray-200 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                               >
-                                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">+</span>
+                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">+</span>
                               </button>
                             </div>
                           </div>
@@ -1052,10 +1140,10 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
                             <button
                               type="button"
                               onClick={() => removeMenuItem(index)}
-                              className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                              className="px-3 py-1 text-xs sm:text-sm bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-md hover:bg-red-200 dark:hover:bg-red-800 transition-colors"
                               title="Eliminar elemento"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                             </button>
                           </div>
                          </div>
@@ -1104,8 +1192,12 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
             </button>
             <button
               type="submit"
-              disabled={loading}
-              className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-lg transition-colors flex items-center space-x-2"
+              disabled={loading || !hasChanges()}
+              className={`px-6 py-2 rounded-lg transition-colors flex items-center space-x-2 ${
+                !hasChanges() 
+                  ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                  : 'bg-purple-600 hover:bg-purple-700 text-white'
+              }`}
             >
               {loading ? (
                 <>

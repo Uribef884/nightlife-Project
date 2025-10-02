@@ -103,7 +103,9 @@ function buildDayCellForISO(
   const d = parseISO(iso);
 
   const isPast = isPastDateInBogota(iso);
-  const isTooFarFuture = !isDateSelectableInBogota(iso);
+  const hasEvent = eventDates.has(iso);
+  // Only apply 21-day limit if there's no event for this date
+  const isTooFarFuture = !hasEvent && !isDateSelectableInBogota(iso);
   const disabled = isPast || isTooFarFuture;
   const isToday = iso === todayISO;
 
@@ -215,7 +217,9 @@ export function ClubCalendar({
       const iso = toISO(date);
 
       const isPast = isPastDateInBogota(iso);
-      const isTooFarFuture = !isDateSelectableInBogota(iso);
+      const hasEvent = eventDates.has(iso);
+      // Only apply 21-day limit if there's no event for this date
+      const isTooFarFuture = !hasEvent && !isDateSelectableInBogota(iso);
       const inPast = isPast || isTooFarFuture;
       const isToday = iso === todayISO;
 

@@ -24,7 +24,8 @@ export const getAllEvents = async (req: Request, res: Response) => {
     const eventRepo = AppDataSource.getRepository(Event);
     const events = await eventRepo.find({ 
       where: { isActive: true, isDeleted: false, availableDate: MoreThanOrEqual(getTodayDate()) },
-      relations: ["club"] 
+      relations: ["club"],
+      order: { availableDate: "DESC", createdAt: "DESC" }
     });
     res.status(200).json(events);
   } catch (err) {
@@ -90,18 +91,25 @@ export const getEventsByClubId = async (req: Request, res: Response) => {
     const ticketIncludedMenuRepo = AppDataSource.getRepository(TicketIncludedMenuItem);
     
     // Build where clause based on includeHidden parameter
-    let whereClause: any = { clubId, isDeleted: false, availableDate: MoreThanOrEqual(getTodayDate()) };
+    let whereClause: any = { clubId, isDeleted: false };
     
     // Only include active events unless includeHidden=true
     if (includeHidden !== 'true') {
       whereClause.isActive = true;
+      whereClause.availableDate = MoreThanOrEqual(getTodayDate());
+      console.log('🔍 Filtering events: Active events from today onwards');
+    } else {
+      console.log('🔍 Filtering events: All events (past and future) - includeHidden=true');
     }
+    // If includeHidden=true, include all events (past and future) regardless of isActive status
     
     const events = await eventRepo.find({
       where: whereClause,
       relations: ["club", "tickets"],
-      order: { availableDate: "ASC", createdAt: "DESC" }
+      order: { availableDate: "DESC", createdAt: "DESC" }
     });
+    
+    console.log(`📊 Found ${events.length} events for club ${clubId} (includeHidden: ${includeHidden})`);
     
     // Apply dynamic pricing to event tickets and fetch included menu items
     const eventsWithDynamicPricing = await Promise.all(events.map(async event => {
@@ -246,7 +254,7 @@ export const getMyClubEvents = async (req: AuthenticatedRequest, res: Response):
     const events = await eventRepo.find({
       where: { clubId },
       relations: ["club", "tickets"],
-      order: { availableDate: "ASC", createdAt: "DESC" }
+      order: { availableDate: "DESC", createdAt: "DESC" }
     });
 
     // Add some useful metadata for each event

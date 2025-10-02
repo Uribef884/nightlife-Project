@@ -211,15 +211,8 @@ export const useCartStore = create<CartState>()(
             throw new Error(errorData.error || 'Failed to update quantity');
           }
 
-          // Update local state (no need to set isLoading since we didn't set it)
-          set(state => ({
-            items: state.items.map(item => 
-              item.id === itemId 
-                ? { ...item, quantity, subtotal: item.unitPrice * quantity }
-                : item
-            ),
-            lastUpdated: new Date(),
-          }));
+          // Refresh cart from server to get updated breakdown with dynamic pricing
+          await get().refreshCart();
         } catch (error) {
           set({ 
             error: error instanceof Error ? error.message : 'Failed to update quantity'
@@ -243,11 +236,8 @@ export const useCartStore = create<CartState>()(
             throw new Error(errorData.error || 'Failed to remove item');
           }
 
-          // Update local state (no need to set isLoading since we didn't set it)
-          set(state => ({
-            items: state.items.filter(item => item.id !== itemId),
-            lastUpdated: new Date(),
-          }));
+          // Refresh cart from server to get updated breakdown
+          await get().refreshCart();
         } catch (error) {
           set({ 
             error: error instanceof Error ? error.message : 'Failed to remove item'

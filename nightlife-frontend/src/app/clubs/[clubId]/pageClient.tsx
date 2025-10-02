@@ -397,6 +397,29 @@ export default function ClubPageClient({ clubId, clubSSR }: Props) {
     return () => off();
   }, [clubId, clubSSR, syncFromLocation]); // removed cartItems to prevent reload on cart changes
 
+  // Separate effect to handle cart-based date selection when cart loads
+  useEffect(() => {
+    // Only run when cart finishes loading and we have items but no selected date
+    if (!isLoading && cartItems.length > 0 && !selectedDate) {
+      const dateCounts = new Map<string, number>();
+      cartItems.forEach(item => {
+        if (item.date) {
+          dateCounts.set(item.date, (dateCounts.get(item.date) || 0) + 1);
+        }
+      });
+      
+      if (dateCounts.size > 0) {
+        const mostCommonDate = Array.from(dateCounts.entries())
+          .sort(([,a], [,b]) => b - a)[0][0];
+        
+        setSelectedDate(mostCommonDate);
+        setAvailable(null);
+        setAvailError(null);
+        setDateCache({});
+      }
+    }
+  }, [isLoading, cartItems, selectedDate, setSelectedDate, setAvailable, setAvailError, setDateCache]);
+
   // Test scroll function on mount when coming from ad
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.hash === "#reservas") {

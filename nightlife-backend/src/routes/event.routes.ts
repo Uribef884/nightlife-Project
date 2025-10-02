@@ -18,11 +18,13 @@ const router = Router();
 
 // 📣 Public routes
 router.get("/", getAllEvents);                    // GET /events
-router.get("/:id", getEventById);                 // GET /events/:id
 router.get("/club/:clubId", getEventsByClubId);   // GET /events/club/:clubId
 
 // 🔐 Club Owner routes
 router.get("/my-club", authMiddleware, getMyClubEvents); // GET /events/my-club
+
+// 📣 Public routes (must be after specific routes)
+router.get("/:id", getEventById);                 // GET /events/:id
 router.post("/", createLimiter, authMiddleware, upload.single('image'), createEvent);   // POST /events
 router.put("/:id", authMiddleware, updateEvent);   // PUT /events/:id
 router.put("/:id/image", authMiddleware, upload.single('image'), updateEventImage);   // PUT /events/:id/image
