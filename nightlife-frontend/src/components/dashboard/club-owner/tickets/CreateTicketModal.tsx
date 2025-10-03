@@ -144,7 +144,7 @@ export function CreateTicketModal({ isOpen, onClose, onSuccess, clubId, events =
     } finally {
       setLoadingMenuItems(false);
     }
-  }, [clubId]);
+  }, []);
 
   // Load menu items when modal opens and clear form
   useEffect(() => {
@@ -377,22 +377,8 @@ export function CreateTicketModal({ isOpen, onClose, onSuccess, clubId, events =
     return menuItems.filter(item => item.categoryId === categoryId);
   };
 
-  const getCategoryName = (categoryId: string) => {
-    const category = menuCategories.find(cat => cat.id === categoryId);
-    return category?.name || 'Sin categoría';
-  };
-
-  const getSelectedCategory = (categoryId: string) => {
-    return menuCategories.find(cat => cat.id === categoryId);
-  };
-
   const getSelectedMenuItem = (menuItemId: string) => {
     return menuItems.find(item => item.id === menuItemId);
-  };
-
-  const getSelectedVariant = (menuItemId: string, variantId: string) => {
-    const menuItem = getSelectedMenuItem(menuItemId);
-    return menuItem?.variants?.find(variant => variant.id === variantId);
   };
 
   const handleCategoryChange = (index: number, categoryId: string) => {
@@ -518,7 +504,7 @@ export function CreateTicketModal({ isOpen, onClose, onSuccess, clubId, events =
                   <button
                     key={value}
                     type="button"
-                    onClick={() => handleTicketCategoryChange(value as any)}
+                    onClick={() => handleTicketCategoryChange(value as 'general' | 'event' | 'free')}
                     className={`p-3 border-2 rounded-lg text-left transition-colors ${
                       formData.category === value
                         ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'

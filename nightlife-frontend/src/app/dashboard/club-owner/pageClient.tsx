@@ -8,6 +8,13 @@ export default function ClubOwnerDashboard() {
   const { user } = useAuth();
   const router = useRouter();
 
+  // Redirect to club profile page
+  useEffect(() => {
+    if (user?.role === 'clubowner' || user?.role === 'admin') {
+      router.replace('/dashboard/club-owner/club-profile');
+    }
+  }, [router, user?.role]);
+
   // Only allow club owners and admins
   if (user?.role !== 'clubowner' && user?.role !== 'admin') {
     return (
@@ -23,11 +30,6 @@ export default function ClubOwnerDashboard() {
       </div>
     );
   }
-
-  // Redirect to club profile page
-  useEffect(() => {
-    router.replace('/dashboard/club-owner/club-profile');
-  }, [router]);
 
   // Show loading while redirecting
   return (

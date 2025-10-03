@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, ChangeEvent, FormEvent } from 'react';
-import { Edit2, Save, X, Upload, MapPin, Clock, Music, Users, Instagram, MessageCircle, Plus, Trash2, Link, Home } from 'lucide-react';
+import { useState, useEffect, ChangeEvent } from 'react';
+import { Save, X, Upload, MapPin, Clock, Music, Users, Plus, Link, Home } from 'lucide-react';
 import { UnsavedChangesProvider } from '@/components/common/UnsavedChangesProvider';
+import Image from 'next/image';
 
 interface ClubProfileFormProps {
   clubId: string;
@@ -87,9 +88,9 @@ export function ClubProfileForm({ clubId, onImageUploaded }: ClubProfileFormProp
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [newMusicGenre, setNewMusicGenre] = useState('');
   const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
+  const [, setRefreshTrigger] = useState(0);
 
   // Fetch club data
   useEffect(() => {
@@ -188,7 +189,7 @@ export function ClubProfileForm({ clubId, onImageUploaded }: ClubProfileFormProp
       setError(null);
 
       // Only send fields that have changed
-      const updateData: any = {};
+      const updateData: Partial<ClubData> = {};
       
       if (formData.name !== originalData.name) updateData.name = formData.name;
       if (formData.description !== originalData.description) updateData.description = formData.description;
@@ -331,7 +332,7 @@ export function ClubProfileForm({ clubId, onImageUploaded }: ClubProfileFormProp
     return { latitude: null, longitude: null };
   };
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: string | number | string[] | File | null | Array<{ day: string; open: string; close: string }>) => {
     // Apply character limits
     const limits: { [key: string]: number } = {
       name: 500,
@@ -489,7 +490,6 @@ export function ClubProfileForm({ clubId, onImageUploaded }: ClubProfileFormProp
         onImageUploaded();
       }
 
-      console.log('Image uploaded successfully:', imageData.imageUrl);
     } catch (err) {
       console.error('Error uploading image:', err);
       setError(err instanceof Error ? err.message : 'Error al subir la imagen');
@@ -586,10 +586,11 @@ export function ClubProfileForm({ clubId, onImageUploaded }: ClubProfileFormProp
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
                       </div>
                     ) : formData.profileImageUrl ? (
-                      <img
+                      <Image
                         src={formData.profileImageUrl}
                         alt="Club profile"
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                       />
                     ) : (
                       <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">

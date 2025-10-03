@@ -6,7 +6,6 @@ import type { TicketDTO } from "@/services/clubs.service";
 import { nowInBogota, parseBogotaDate } from '@/utils/timezone';
 import { EVENT_GRACE_PERIOD_HOURS } from '@/lib/constants';
 import { ShareButton } from "@/components/common/ShareButton";
-import type { ShareableTicket } from "@/utils/share";
 
 // Local types for type safety
 type TicketWithAny = {
@@ -35,6 +34,8 @@ type TicketWithAny = {
   menuItems?: unknown[];
   category?: string;
   event?: {
+    id?: string | number;
+    name?: string;
     availableDate?: string;
     openHours?: {
       open?: string;

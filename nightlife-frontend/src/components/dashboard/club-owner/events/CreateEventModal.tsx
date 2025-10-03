@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Calendar, Clock, Image, Upload, AlertCircle } from 'lucide-react';
-import { formatBogotaDate, isPastDateInBogota, todayInBogota } from '@/utils/timezone';
+import { X, Calendar, Clock, Image, AlertCircle } from 'lucide-react';
+import { isPastDateInBogota, todayInBogota } from '@/utils/timezone';
+import NextImage from 'next/image';
 
 interface CreateEventModalProps {
   isOpen: boolean;
@@ -22,7 +23,7 @@ interface EventFormData {
   bannerImage: File | null;
 }
 
-export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateEventModalProps) {
+export function CreateEventModal({ isOpen, onClose, onSuccess }: CreateEventModalProps) {
   const [formData, setFormData] = useState<EventFormData>({
     name: '',
     description: '',
@@ -394,10 +395,12 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
                 <div className="space-y-1 text-center">
                   {imagePreview ? (
                     <div className="space-y-2">
-                      <img
+                      <NextImage
                         src={imagePreview}
-                        alt="Preview"
-                        className="mx-auto h-32 w-auto rounded-lg object-cover"
+                        alt="Event banner preview"
+                        width={128}
+                        height={128}
+                        className="mx-auto rounded-lg object-cover"
                       />
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         {formData.bannerImage?.name}
@@ -405,7 +408,8 @@ export function CreateEventModal({ isOpen, onClose, onSuccess, clubId }: CreateE
                     </div>
                   ) : (
                     <>
-                      <Image className="mx-auto h-12 w-12 text-gray-400" />
+                      {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                      <Image className="mx-auto h-12 w-12 text-gray-400" aria-hidden="true" />
                       <div className="flex text-sm text-gray-600 dark:text-gray-400">
                         <label
                           htmlFor="banner-image"

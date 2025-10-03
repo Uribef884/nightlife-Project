@@ -47,7 +47,7 @@ export default function MenuManagementPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-                            Gestión del Menú
+                            Gestión de Menú
                   </h1>
                   <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
                             Gestiona los elementos del menú y categorías de tu club

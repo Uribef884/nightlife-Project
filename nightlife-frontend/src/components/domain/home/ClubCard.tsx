@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import type { ClubListItem } from "@/services/clubs.service";
 import type { Club as ApiClub } from "@/lib/apiClient";
 import { getClubByIdCSR } from "@/services/clubs.service";
+import { ImageSpinner } from "@/components/common/Spinner";
 
 /**
  * Accept either our list DTO (ClubListItem) or the broader API `Club` type.
@@ -63,6 +64,7 @@ export function ClubCard({ club }: { club: CardClub }) {
 
   // If city is missing, we lazy-fetch the detail and cache it
   const [cityResolved, setCityResolved] = useState<string>("");
+  const [imageLoading, setImageLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,13 +102,18 @@ export function ClubCard({ club }: { club: CardClub }) {
         "
       >
         {hasImage ? (
-          <Image
-            src={profileImageUrl!}
-            alt={club.name}
-            fill
-            className="object-cover"
-            sizes="(max-width: 640px) 64px, (max-width: 1024px) 72px, 80px"
-          />
+          <>
+            <Image
+              src={profileImageUrl!}
+              alt={club.name}
+              fill
+              className="object-cover"
+              sizes="(max-width: 640px) 64px, (max-width: 1024px) 72px, 80px"
+              onLoad={() => setImageLoading(false)}
+              onError={() => setImageLoading(false)}
+            />
+            {imageLoading && <ImageSpinner />}
+          </>
         ) : (
           <Image
             src="/assets/club-placeholder.svg"
@@ -114,8 +121,9 @@ export function ClubCard({ club }: { club: CardClub }) {
             fill
             className="object-cover"
             sizes="(max-width: 640px) 64px, (max-width: 1024px) 72px, 80px"
-            // If you remove the svg later, we still show initials
+            onLoad={() => setImageLoading(false)}
             onError={(e) => {
+              setImageLoading(false);
               const el = (e.currentTarget as HTMLImageElement).parentElement as HTMLElement | null;
               if (el) {
                 el.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#6B3FA0]/20 to-black/60"><span class="text-white/80 font-semibold text-base sm:text-lg lg:text-xl">${initials(

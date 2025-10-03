@@ -296,3 +296,50 @@ export async function clearTicketCartForMenuCSR(): Promise<void> {
   const res = await fetch(url, { method: "DELETE", cache: "no-store" });
   if (!res.ok) throw new Error("No se pudo limpiar el carrito de entradas.");
 }
+
+// MENU CONFIGURATION API
+
+export type MenuConfigResponse = {
+  menuType: 'structured' | 'pdf' | 'none';
+  pdfMenuUrl?: string;
+  pdfMenuName?: string;
+  pdfMenuId?: string;
+};
+
+export type MenuTypeUpdateRequest = {
+  menuType: 'structured' | 'pdf' | 'none';
+};
+
+/** GET menu configuration for the club */
+export async function getMenuConfig(): Promise<MenuConfigResponse> {
+  const url = joinUrl(API_BASE_CSR, `/menu/config`);
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    cache: "no-store",
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ error: 'Failed to fetch menu config' }));
+    throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+  }
+  
+  return (await res.json()) as MenuConfigResponse;
+}
+
+/** PUT update menu type for the club */
+export async function updateMenuType(menuType: 'structured' | 'pdf' | 'none'): Promise<void> {
+  const url = joinUrl(API_BASE_CSR, `/menu/type`);
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ menuType }),
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({ error: 'Failed to update menu type' }));
+    throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+  }
+}

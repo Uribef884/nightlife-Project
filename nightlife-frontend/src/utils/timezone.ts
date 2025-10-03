@@ -9,7 +9,7 @@
  * - Never parse YYYY-MM-DD with new Date(). Always parse as a local Bogota day
  */
 
-import { DateTime, Settings } from 'luxon';
+import { DateTime } from 'luxon';
 
 // Canonical timezone for all business logic
 export const BUSINESS_TIMEZONE = 'America/Bogota';

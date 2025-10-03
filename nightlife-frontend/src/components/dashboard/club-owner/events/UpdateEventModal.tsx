@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { X, Calendar, Image, Upload, AlertCircle } from 'lucide-react';
+import NextImage from 'next/image';
 
 interface UpdateEventModalProps {
   isOpen: boolean;
@@ -208,7 +209,7 @@ export function UpdateEventModal({ isOpen, onClose, onSuccess, event }: UpdateEv
       const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
       
       // Build update payload with only changed fields
-      const updatePayload: any = {};
+      const updatePayload: Record<string, unknown> = {};
       
       if (formData.name !== originalData.name) {
         updatePayload.name = formData.name.trim();
@@ -376,14 +377,16 @@ export function UpdateEventModal({ isOpen, onClose, onSuccess, event }: UpdateEv
               <div className="flex items-center gap-4">
                 <div className="w-32 h-24 rounded-lg overflow-hidden border-2 border-gray-200 dark:border-gray-600 relative">
                   {imagePreview ? (
-                    <img
+                    <NextImage
                       src={imagePreview}
-                      alt="Banner preview"
-                      className="w-full h-full object-cover"
+                      alt="Event banner preview"
+                      fill
+                      className="object-cover"
                     />
                   ) : (
                     <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                      <Image className="w-8 h-8 text-gray-400" />
+                      {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                      <Image className="w-8 h-8 text-gray-400" aria-hidden="true" />
                     </div>
                   )}
                 </div>

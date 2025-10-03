@@ -6,11 +6,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ResolvedAd } from "./GlobalAdCarousel";
 // ⬇️ Lightbox used to show the poster + CTA banner
 import AdLightbox, { type AdLike } from "@/components/common/AdLightbox";
+import { ImageSpinner } from "@/components/common/Spinner";
 
 export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(false);
+  const [imageLoadingStates, setImageLoadingStates] = useState<Record<string, boolean>>({});
 
   // 🔵 NEW: lightbox state
   const [open, setOpen] = useState(false);
@@ -128,6 +130,17 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
     };
   }, []);
 
+  // Initialize loading states for all ads
+  useEffect(() => {
+    if (ads && ads.length > 0) {
+      const initialStates: Record<string, boolean> = {};
+      ads.forEach(ad => {
+        initialStates[ad.id] = true;
+      });
+      setImageLoadingStates(initialStates);
+    }
+  }, [ads]);
+
   // On mount: center the first real slide
   useEffect(() => {
     if (!listRef.current || loopedAds.length === 0) return;
@@ -157,6 +170,39 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
       if (t) clearTimeout(t);
     };
   }, [maybeRelocateIfClone, cloneCount]);
+
+  const handleImageLoad = useCallback((adId: string) => {
+    setImageLoadingStates(prev => ({ ...prev, [adId]: false }));
+  }, []);
+
+  const handleImageError = useCallback((adId: string) => {
+    setImageLoadingStates(prev => ({ ...prev, [adId]: false }));
+  }, []);
+
+
+  // Initialize loading states for all ads
+  useEffect(() => {
+    if (ads && ads.length > 0) {
+      const initialStates: Record<string, boolean> = {};
+      ads.forEach(ad => {
+        initialStates[ad.id] = true;
+      });
+      setImageLoadingStates(initialStates);
+
+      // Fallback timeout to hide spinners after 3 seconds
+      const timeout = setTimeout(() => {
+        setImageLoadingStates(prev => {
+          const newStates = { ...prev };
+          Object.keys(newStates).forEach(key => {
+            newStates[key] = false;
+          });
+          return newStates;
+        });
+      }, 3000);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [ads]);
 
   if (!ads || n === 0) return null;
 
@@ -205,6 +251,7 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
           {loopedAds.map((ad, displayIndex) => {
             // Card width (depends on single vs multi)
             const outerSizing = isSingle ? singleSizing : snapSizing;
+            const isLoading = imageLoadingStates[ad.id] === true;
 
             // Reusable card (matches Club Ads look)
             const Card = (
@@ -233,7 +280,10 @@ export function GlobalAdCarouselClient({ ads }: { ads: ResolvedAd[] }) {
                     sizes="(max-width: 640px) 70vw, (max-width: 768px) 52vw, (max-width: 1024px) 42vw, 34vw"
                     className="object-cover w-full h-full"
                     priority={displayIndex === (cloneCount || 0)}
+                    onLoad={() => handleImageLoad(ad.id)}
+                    onError={() => handleImageError(ad.id)}
                   />
+                  {isLoading && <ImageSpinner />}
                 </div>
               </div>
             );

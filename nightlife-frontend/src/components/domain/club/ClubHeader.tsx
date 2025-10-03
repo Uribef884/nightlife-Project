@@ -2,8 +2,10 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import { isOpenNow } from "@/lib/openStatus";
 import { ClubSchedule } from "@/components/domain/club/ClubSchedule";
+import { ImageSpinner } from "@/components/common/Spinner";
 
 export type ClubHeaderDTO = {
   id: string;
@@ -90,6 +92,8 @@ const ClockIcon = (p: React.SVGProps<SVGSVGElement>) => (
 /* ======================== Component ======================== */
 
 export function ClubHeader({ club }: Props) {
+  const [imageLoading, setImageLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
   const open = isOpenNow(club.openHours ?? []);
   const today = getTodayHours(club.openHours);
 
@@ -107,24 +111,23 @@ export function ClubHeader({ club }: Props) {
       <div className="flex items-start gap-4">
         {/* Avatar with purple ring */}
         <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl ring-2 ring-nl-secondary/60 ring-offset-2 ring-offset-[#0B0F1A] bg-[#14192a]">
-          {club.profileImageUrl ? (
-            <Image
-              src={club.profileImageUrl}
-              alt={club.name}
-              fill
-              className="object-cover"
-              sizes="80px"
-              onError={(e) => {
-                const el = (e.currentTarget as HTMLImageElement).parentElement as HTMLElement | null;
-                if (el) {
-                  el.innerHTML = `<div class="w-full h-full flex items-center justify-center
-                    bg-gradient-to-br from-[#6B3FA0]/20 to-[#1C1F33]/60 text-white/70
-                    font-semibold text-xl select-none">${
-                      (club.name ?? "CL").trim().split(/\s+/).map((s) => s[0]).slice(0, 2).join("").toUpperCase()
-                    }</div>`;
-                }
-              }}
-            />
+          {club.profileImageUrl && !imageError ? (
+            <>
+              <Image
+                src={club.profileImageUrl}
+                alt={club.name}
+                fill
+                className="object-cover"
+                sizes="80px"
+                priority
+                onLoad={() => setImageLoading(false)}
+                onError={() => {
+                  setImageLoading(false);
+                  setImageError(true);
+                }}
+              />
+              {imageLoading && <ImageSpinner />}
+            </>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-[#14192a] text-white/70 font-semibold text-xl select-none">
               {(club.name ?? "CL").trim().split(/\s+/).map((s) => s[0]).slice(0, 2).join("").toUpperCase()}

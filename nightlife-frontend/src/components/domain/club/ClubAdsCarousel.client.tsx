@@ -4,6 +4,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AdLightbox, { type AdLike } from "@/components/common/AdLightbox";
+import { ImageSpinner } from "@/components/common/Spinner";
 
 export type ClubAdClient = {
   id: string;
@@ -25,6 +26,7 @@ export function ClubAdsCarouselClient({ ads }: { ads: ClubAdClient[] }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(false);
+  const [imageLoadingStates, setImageLoadingStates] = useState<Record<string, boolean>>({});
 
   // 🔵 lightbox state
   const [open, setOpen] = useState(false);
@@ -115,6 +117,17 @@ export function ClubAdsCarouselClient({ ads }: { ads: ClubAdClient[] }) {
     };
   }, []);
 
+  // Initialize loading states for all ads
+  useEffect(() => {
+    if (ads && ads.length > 0) {
+      const initialStates: Record<string, boolean> = {};
+      ads.forEach(ad => {
+        initialStates[ad.id] = true;
+      });
+      setImageLoadingStates(initialStates);
+    }
+  }, [ads]);
+
   useEffect(() => {
     if (!listRef.current || loopedAds.length === 0) return;
     const r = requestAnimationFrame(() => {
@@ -132,6 +145,39 @@ export function ClubAdsCarouselClient({ ads }: { ads: ClubAdClient[] }) {
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => { el.removeEventListener("scroll", onScroll); if (t) clearTimeout(t); };
   }, [maybeRelocateIfClone, cloneCount]);
+
+  const handleImageLoad = useCallback((adId: string) => {
+    setImageLoadingStates(prev => ({ ...prev, [adId]: false }));
+  }, []);
+
+  const handleImageError = useCallback((adId: string) => {
+    setImageLoadingStates(prev => ({ ...prev, [adId]: false }));
+  }, []);
+
+
+  // Initialize loading states for all ads
+  useEffect(() => {
+    if (ads && ads.length > 0) {
+      const initialStates: Record<string, boolean> = {};
+      ads.forEach(ad => {
+        initialStates[ad.id] = true;
+      });
+      setImageLoadingStates(initialStates);
+
+      // Fallback timeout to hide spinners after 3 seconds
+      const timeout = setTimeout(() => {
+        setImageLoadingStates(prev => {
+          const newStates = { ...prev };
+          Object.keys(newStates).forEach(key => {
+            newStates[key] = false;
+          });
+          return newStates;
+        });
+      }, 3000);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [ads]);
 
   if (!ads || n === 0) return null;
 
@@ -172,6 +218,7 @@ export function ClubAdsCarouselClient({ ads }: { ads: ClubAdClient[] }) {
         >
           {loopedAds.map((ad, displayIndex) => {
             const outerSizing = isSingle ? singleSizing : snapSizing;
+            const isLoading = imageLoadingStates[ad.id] === true;
             const Card = (
               <div className="
                 rounded-3xl overflow-hidden border border-white/10 bg-black/20
@@ -188,7 +235,10 @@ export function ClubAdsCarouselClient({ ads }: { ads: ClubAdClient[] }) {
                     sizes="(max-width: 640px) 70vw, (max-width: 768px) 52vw, (max-width: 1024px) 42vw, 34vw"
                     className="object-cover"
                     priority={displayIndex === (cloneCount || 0)}
+                    onLoad={() => handleImageLoad(ad.id)}
+                    onError={() => handleImageError(ad.id)}
                   />
+                  {isLoading && <ImageSpinner />}
                 </div>
               </div>
             );

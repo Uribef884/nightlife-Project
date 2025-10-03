@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
+import Image from 'next/image';
 
 interface Club {
   id: string;
@@ -72,7 +73,7 @@ export function ClubSelector({ selectedClub, onClubChange, refreshTrigger }: Clu
         throw new Error(`Failed to select club: ${response.status} - ${errorText}`);
       }
 
-      const responseData = await response.json();
+      await response.json();
 
       // Close dropdown first
       setIsOpen(false);
@@ -102,16 +103,18 @@ export function ClubSelector({ selectedClub, onClubChange, refreshTrigger }: Clu
     <div className="relative w-full">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 sm:space-x-3 px-3 sm:px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors w-full sm:w-auto"
+        className="flex items-center space-x-2 sm:space-x-3 px-3 sm:px-4 py-2 !bg-white dark:!bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors w-full sm:w-auto text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
       >
         <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
           {selectedClub && selectedClubData ? (
             <div className="w-full h-full rounded-lg flex items-center justify-center">
               {selectedClubData.profileImageUrl ? (
-                <img 
+                <Image 
                   src={selectedClubData.profileImageUrl} 
                   alt={`${selectedClubData.name} logo`}
-                  className="w-full h-full object-cover rounded-lg"
+                  width={32}
+                  height={32}
+                  className="object-cover rounded-lg"
                   onError={(e) => {
                     // Hide the image and show SVG fallback
                     e.currentTarget.style.display = 'none';
@@ -201,10 +204,12 @@ export function ClubSelector({ selectedClub, onClubChange, refreshTrigger }: Clu
                 >
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
                     {club.profileImageUrl ? (
-                      <img 
+                      <Image 
                         src={club.profileImageUrl} 
                         alt={`${club.name} logo`}
-                        className="w-full h-full object-cover rounded-lg"
+                        width={32}
+                        height={32}
+                        className="object-cover rounded-lg"
                         onError={(e) => {
                           // Hide the image and show SVG fallback
                           e.currentTarget.style.display = 'none';

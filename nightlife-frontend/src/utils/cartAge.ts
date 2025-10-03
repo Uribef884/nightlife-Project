@@ -1,7 +1,11 @@
 /**
  * Cart age checking utilities
  * Checks if cart items are older than a specified time limit
+ * Uses Bogota timezone for consistent business logic
  */
+
+import { nowInBogota, parseBogotaDate } from './timezone';
+import { DateTime } from 'luxon';
 
 export interface CartAgeInfo {
   isOld: boolean;
@@ -26,30 +30,31 @@ export function checkCartAge(cartItems: { updatedAt?: string }[], maxAgeMinutes:
     };
   }
 
-  // Get current time
-  const now = new Date();
+  // Get current time in Bogota timezone
+  const now = nowInBogota();
   
   // Find the oldest and newest items based on updatedAt
-  let oldestDate: Date | null = null;
-  let newestDate: Date | null = null;
+  let oldestDateTime: DateTime | null = null;
+  let newestDateTime: DateTime | null = null;
 
   cartItems.forEach(item => {
     // Check if item has updatedAt timestamp (from backend)
     if (item.updatedAt) {
-      const itemDate = new Date(item.updatedAt);
+      // Parse the timestamp in Bogota timezone for consistent comparison
+      const itemDateTime = parseBogotaDate(item.updatedAt);
       
-      if (!oldestDate || itemDate < oldestDate) {
-        oldestDate = itemDate;
+      if (!oldestDateTime || itemDateTime < oldestDateTime) {
+        oldestDateTime = itemDateTime;
       }
       
-      if (!newestDate || itemDate > newestDate) {
-        newestDate = itemDate;
+      if (!newestDateTime || itemDateTime > newestDateTime) {
+        newestDateTime = itemDateTime;
       }
     }
   });
 
   // If no timestamps found, assume cart is not old
-  if (!oldestDate) {
+  if (!oldestDateTime) {
     return {
       isOld: false,
       ageInMinutes: 0,
@@ -58,14 +63,14 @@ export function checkCartAge(cartItems: { updatedAt?: string }[], maxAgeMinutes:
     };
   }
 
-  // Calculate age in minutes
-  const ageInMinutes = Math.floor((now.getTime() - oldestDate.getTime()) / (1000 * 60));
+  // Calculate age in minutes using Bogota timezone
+  const ageInMinutes = Math.floor(now.diff(oldestDateTime, 'minutes').minutes);
   
   return {
     isOld: ageInMinutes > maxAgeMinutes,
     ageInMinutes,
-    oldestItemDate: oldestDate,
-    newestItemDate: newestDate
+    oldestItemDate: (oldestDateTime as DateTime).toJSDate(),
+    newestItemDate: newestDateTime ? (newestDateTime as DateTime).toJSDate() : null
   };
 }
 

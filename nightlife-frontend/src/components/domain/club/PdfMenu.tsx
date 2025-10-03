@@ -49,7 +49,7 @@ interface MenuManifest {
 }
 
 // ---------------- Component ----------------
-export function PdfMenu({
+function PdfMenuComponent({
   url,
   filename,
   height = "70vh",
@@ -73,10 +73,13 @@ export function PdfMenu({
     return "";
   }, [url]);
 
-  // Device flags
-  const [deviceInfo, setDeviceInfo] = useState(() => detectDevice());
-  const isMobile = deviceInfo.isMobile;
-  const isDesktop = !isMobile;
+  // Lock render mode to prevent URL bar resize loops
+  const [renderMode, setRenderMode] = useState<"mobile" | "desktop">(() => {
+    const initial = detectDevice();
+    return initial.isMobile ? "mobile" : "desktop";
+  });
+  const isMobile = renderMode === "mobile";
+  const isDesktop = renderMode === "desktop";
 
   // Common loading
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -92,15 +95,60 @@ export function PdfMenu({
   const [manifestError, setManifestError] = useState(false);
   const [page, setPage] = useState(0); // 0-based index
   const [slideDir, setSlideDir] = useState<"left" | "right" | null>(null);
-  const [enterKey, setEnterKey] = useState(0);
   const pageCount = manifest?.pageCount ?? 0;
 
-  // Re-detect on resize (helps with orientation change)
+  // Update render mode only on meaningful viewport changes
   useEffect(() => {
-    const fn = () => setDeviceInfo(detectDevice());
-    window.addEventListener("resize", fn);
-    return () => window.removeEventListener("resize", fn);
-  }, []);
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    const handleResize = () => {
+      // Debounce resize events
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        const newDevice = detectDevice();
+        const newMode = newDevice.isMobile ? "mobile" : "desktop";
+        
+        // Only update if mode actually changed
+        if (newMode !== renderMode) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('🔍 PdfMenu Debug - Render mode changed:', {
+              from: renderMode,
+              to: newMode,
+              windowWidth: window.innerWidth,
+              windowHeight: window.innerHeight,
+              timestamp: new Date().toISOString()
+            });
+          }
+          setRenderMode(newMode);
+        }
+      }, 300); // 300ms debounce
+    };
+
+    // Also listen for orientation changes
+    const handleOrientationChange = () => {
+      const newDevice = detectDevice();
+      const newMode = newDevice.isMobile ? "mobile" : "desktop";
+      if (newMode !== renderMode) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('🔍 PdfMenu Debug - Orientation change:', {
+            from: renderMode,
+            to: newMode,
+            timestamp: new Date().toISOString()
+          });
+        }
+        setRenderMode(newMode);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleOrientationChange);
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleOrientationChange);
+    };
+  }, [renderMode]);
 
   // ---------- Helpers ----------
   const preloadNeighbors = useCallback((index: number, man: MenuManifest = manifest!) => {
@@ -118,12 +166,36 @@ export function PdfMenu({
     let cancelled = false;
 
     const load = async () => {
-      if (!isMobile) {
+      // Guard: Only load manifest for mobile mode
+      if (renderMode !== "mobile") {
         // Desktop: show iframe only
         setIsLoading(false);
         setManifest(null);
         setManifestError(false);
         return;
+      }
+
+      // Guard: Don't refetch if manifest already loaded for this clubId/menuId
+      if (manifest && manifest.pageCount > 0) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('🔍 PdfMenu Debug - Manifest already loaded, skipping fetch:', {
+            clubId,
+            menuId,
+            pageCount: manifest.pageCount,
+            timestamp: new Date().toISOString()
+          });
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('🔍 PdfMenu Debug - Loading manifest:', {
+          renderMode,
+          clubId,
+          menuId,
+          timestamp: new Date().toISOString()
+        });
       }
 
       setIsLoading(true);
@@ -156,7 +228,15 @@ export function PdfMenu({
         setManifest(data);
         setIsLoading(false);
         queueMicrotask(() => preloadNeighbors(0, data));
-      } catch {
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('🔍 PdfMenu Debug - Manifest load error:', {
+            error,
+            clubId,
+            menuId,
+            timestamp: new Date().toISOString()
+          });
+        }
         if (!cancelled) {
           setManifestError(true);
           setIsLoading(false);
@@ -168,7 +248,7 @@ export function PdfMenu({
     return () => {
       cancelled = true;
     };
-  }, [isMobile, clubId, menuId, preloadNeighbors]);
+  }, [renderMode, clubId, menuId, preloadNeighbors, manifest]);
 
   // ---------- Desktop: Ctrl/Cmd + wheel zoom (updates iframe hash) ----------
   useEffect(() => {
@@ -219,8 +299,8 @@ export function PdfMenu({
     maxAngleDeg: 35,
   });
 
-  // Compose pointer handlers so pinch + swipe can coexist
-  const composedHandlers = {
+  // Compose pointer handlers so pinch + swipe can coexist (memoized to reduce churn)
+  const composedHandlers = useMemo(() => ({
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
       pinchBind.onPointerDown?.(e);
       if (swipeEnabled) swipeBind.onPointerDown?.(e);
@@ -237,7 +317,7 @@ export function PdfMenu({
       // pinch supports cancel; swipe doesn't need it
       pinchBind.onPointerCancel?.(e);
     },
-  };
+  }), [pinchBind, swipeBind, swipeEnabled]);
 
   const goTo = useCallback(
     (nextIndex: number, dir: "left" | "right" | null = null) => {
@@ -246,13 +326,11 @@ export function PdfMenu({
       // Out of bounds → small pulse on current page
       if (nextIndex < 0 || nextIndex >= manifest.pageCount) {
         setSlideDir(null);
-        setEnterKey((k) => k + 1);
         return;
       }
 
       setSlideDir(dir);
       setPage(nextIndex);
-      setEnterKey((k) => k + 1);
       preloadNeighbors(nextIndex);
 
       // Reset gestures between pages
@@ -424,7 +502,7 @@ export function PdfMenu({
             {/* Success: render current page */}
             {showMobileImages && (
               <AnimatedMobilePage
-                key={enterKey}
+                key={`page-${page}-${manifest!.pages[page].url}`}
                 src={manifest!.pages[page].url}
                 alt={`Página ${page + 1} de ${filename || "Menú"}`}
                 // Combine transforms: swipe drag (when unzoomed) + pinch pan + pinch scale
@@ -513,6 +591,8 @@ export function PdfMenu({
   );
 }
 
+export { PdfMenuComponent as PdfMenu };
+
 // --------------- Mobile page (animated) ---------------
 function AnimatedMobilePage({
   src,
@@ -530,6 +610,8 @@ function AnimatedMobilePage({
   slideDir: "left" | "right" | null;
 }) {
   const [enterOffset, setEnterOffset] = useState(0);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Subtle slide-in animation when page changes
@@ -541,20 +623,56 @@ function AnimatedMobilePage({
     return () => cancelAnimationFrame(id);
   }, [slideDir]);
 
+  // No direct DOM manipulation - height controlled via React state
+
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      alt={alt}
-      // Natural height → no letterboxing; rounded is inherited from parent
-      className="w-full select-none object-contain transition-transform duration-200 ease-out"
+    <div 
+      ref={containerRef}
+      className="relative w-full"
       style={{
-        transform: `translate3d(${tx + enterOffset}px, ${ty}px, 0) scale(${scale})`,
-        transformOrigin: "center center",
-        willChange: "transform",
-        userSelect: "none",
+        // Fixed container to prevent layout shifts
+        height: imageLoaded ? "auto" : "400px",
+        minHeight: "400px",
+        backgroundColor: imageLoaded ? "transparent" : "rgba(0,0,0,0.1)",
+        overflow: "hidden"
       }}
-      draggable={false}
-    />
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className="w-full select-none object-contain transition-transform duration-200 ease-out"
+        style={{
+          transform: `translate3d(${tx + enterOffset}px, ${ty}px, 0) scale(${scale})`,
+          transformOrigin: "center center",
+          willChange: "transform",
+          userSelect: "none",
+          height: imageLoaded ? "auto" : "400px",
+          minHeight: "400px",
+        }}
+        draggable={false}
+        onLoad={() => {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('🔍 PdfMenu Debug - Image loaded:', { 
+              src, 
+              alt, 
+              timestamp: new Date().toISOString() 
+            });
+          }
+          setImageLoaded(true);
+        }}
+        onError={(e) => {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('🔍 PdfMenu Debug - Image error:', { 
+              src, 
+              alt, 
+              error: e, 
+              timestamp: new Date().toISOString() 
+            });
+          }
+          setImageLoaded(true);
+        }}
+      />
+    </div>
   );
 }

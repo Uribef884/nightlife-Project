@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import type { MenuItemDTO, MenuVariantDTO } from "@/services/menu.service";
 import { VariantRow } from "./VariantRow";
+import { ImageSpinner } from "@/components/common/Spinner";
 
 // Local types for type safety
 type MenuItemWithAny = {
@@ -90,6 +91,7 @@ export function MenuItemCard({
 }) {
   const [descExpanded, setDescExpanded] = useState(false);
   const [showVariants, setShowVariants] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
 
   const hasVariants = !!item.hasVariants && (item.variants?.length ?? 0) > 0;
 
@@ -138,13 +140,16 @@ export function MenuItemCard({
             alt={item.name || "Menu item"}
             fill
             className="object-cover"
+            onLoad={() => setImageLoading(false)}
             onError={(e) => {
               const img = e.currentTarget as HTMLImageElement;
+              setImageLoading(false);
               if (img.src !== PLACEHOLDER_DATA_URL) {
                 img.src = PLACEHOLDER_DATA_URL; // guaranteed to exist
               }
             }}
           />
+          {imageLoading && <ImageSpinner />}
         </div>
 
         <div className="min-w-0 flex-1">

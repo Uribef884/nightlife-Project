@@ -4,17 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { 
-  User, 
   Ticket, 
-  Calendar, 
   Menu, 
   ShoppingCart, 
   Megaphone, 
   Users,
-  Music,
   Settings,
-  X,
-  Sparkles
+  Sparkles,
+  Utensils
 } from 'lucide-react';
 
 interface ClubOwnerSidebarProps {
@@ -25,7 +22,6 @@ interface ClubOwnerSidebarProps {
 }
 
 export function ClubOwnerSidebar({ 
-  selectedClub, 
   isMobileMenuOpen: externalIsMobileMenuOpen, 
   setIsMobileMenuOpen: externalSetIsMobileMenuOpen 
 }: ClubOwnerSidebarProps) {
@@ -53,15 +49,9 @@ export function ClubOwnerSidebar({
       active: pathname === '/dashboard/club-owner/tickets'
     },
     {
-      name: 'Gestión de Eventos',
-      href: '/dashboard/club-owner/events',
-      icon: Calendar,
-      active: pathname === '/dashboard/club-owner/events'
-    },
-    {
-      name: 'Gestión del Menú',
+      name: 'Gestión de Menú',
       href: '/dashboard/club-owner/menu',
-      icon: Menu,
+      icon: Utensils,
       active: pathname === '/dashboard/club-owner/menu'
     },
     {

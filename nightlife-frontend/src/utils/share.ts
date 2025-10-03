@@ -46,42 +46,31 @@ export function generateShareUrl(options: ShareOptions): string {
     // For events, link to the club page with the event date selected
     const eventDate = options.event.availableDate.split('T')[0]; // Get YYYY-MM-DD part
     const url = `${clubUrl}?date=${eventDate}&highlight=event:${options.event.id}#reservas`;
-    console.log('Generated event share URL:', url);
     return url;
   }
   
   if (options.ticket) {
     // For tickets, link to the club page with the ticket's date
-    console.log('Ticket share options:', {
-      eventDate: options.ticket.eventDate,
-      eventId: options.ticket.eventId,
-      category: options.ticket.category,
-      name: options.ticket.name
-    });
     
     if (options.ticket.eventDate) {
       // Event tickets: use the event date
       const eventDate = options.ticket.eventDate.split('T')[0];
       const url = `${clubUrl}?date=${eventDate}&highlight=ticket:${options.ticket.id}#reservas`;
-      console.log('Generated ticket share URL (with event date):', url);
       return url;
     } else if (options.selectedDate) {
       // General tickets with a selected date: use the selected date
       const generalDate = options.selectedDate.split('T')[0];
       const url = `${clubUrl}?date=${generalDate}&highlight=ticket:${options.ticket.id}#reservas`;
-      console.log('Generated general ticket share URL (with selected date):', url);
       return url;
     } else {
       // General tickets without a specific date: use today's date
       const today = new Date().toISOString().split('T')[0];
       const url = `${clubUrl}?date=${today}&highlight=ticket:${options.ticket.id}#reservas`;
-      console.log('Generated general ticket share URL (using today):', url);
       return url;
     }
   }
   
   // Fallback to club page
-  console.log('Generated fallback share URL:', clubUrl);
   return clubUrl;
 }
 
@@ -125,23 +114,15 @@ export function shareToWhatsApp(options: ShareOptions): void {
 }
 
 /**
- * Share to Facebook
+ * Share via SMS/iMessage
  */
-export function shareToFacebook(options: ShareOptions): void {
-  const url = generateShareUrl(options);
-  const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
-  window.open(facebookUrl, '_blank');
-}
-
-/**
- * Share to Twitter
- */
-export function shareToTwitter(options: ShareOptions): void {
+export function shareToSMS(options: ShareOptions): void {
   const url = generateShareUrl(options);
   const text = generateShareText(options);
-  const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
-  window.open(twitterUrl, '_blank');
+  const smsUrl = `sms:?body=${encodeURIComponent(`${text}\n\n${url}`)}`;
+  window.location.href = smsUrl;
 }
+
 
 /**
  * Copy to clipboard

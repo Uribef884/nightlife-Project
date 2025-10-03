@@ -8,7 +8,6 @@ import { ClubOwnerSidebar } from '@/components/dashboard/club-owner/ClubOwnerSid
 import { ClubSelector } from '@/components/dashboard/club-owner/ClubSelector';
 import { MobileMenuButton } from '@/components/dashboard/club-owner/MobileMenuButton';
 import { ScrollToTopButton } from '@/components/dashboard/club-owner/ScrollToTopButton';
-import { EventsManagement } from '@/components/dashboard/club-owner/events/EventsManagement';
 
 export default function EventsManagementPage() {
   const { user } = useAuth();
@@ -68,18 +67,14 @@ export default function EventsManagementPage() {
           </header>
 
           <main className="flex-1 p-3 sm:p-4 lg:p-6 overflow-x-hidden">
-              {selectedClub ? (
-                <EventsManagement clubId={selectedClub} />
-              ) : (
-                <div className="text-center py-12">
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                            Selecciona un Club
-                  </h2>
-                  <p className="text-gray-600 dark:text-gray-400">
-                            Por favor selecciona un club para gestionar sus eventos.
-                  </p>
-                </div>
-              )}
+              <div className="text-center py-12">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                  Gestión de Eventos
+                </h2>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Esta funcionalidad ha sido removida temporalmente.
+                </p>
+              </div>
           </main>
         </div>
         <ScrollToTopButton />

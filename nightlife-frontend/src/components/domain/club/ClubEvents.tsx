@@ -10,7 +10,7 @@ import { useCartContext } from "@/contexts/CartContext";
 import { useClubProtection } from "@/hooks/useClubProtection";
 import { CartClubChangeModal } from "@/components/cart";
 import { ShareButton } from "@/components/common/ShareButton";
-import type { ShareableEvent } from "@/utils/share";
+import { ImageSpinner } from "@/components/common/Spinner";
 
 /* ---------------- small helpers ---------------- */
 type AvailableForDay = {
@@ -291,7 +291,7 @@ function ExpandedEventTickets({
               clubId={clubId}
               clubName={clubName}
               showShareButton={true}
-              selectedDate={selectedDate}
+              selectedDate={selectedDate ?? undefined}
             />
           );
         })}
@@ -325,7 +325,7 @@ function ExpandedEventTickets({
               clubId={clubId}
               clubName={clubName}
               showShareButton={true}
-              selectedDate={selectedDate}
+              selectedDate={selectedDate ?? undefined}
             />
           );
         })}
@@ -383,6 +383,7 @@ export function ClubEvents({
 }) {
   // Local lightbox (no redirect)
   const [lightbox, setLightbox] = useState<{ open: boolean; url: string | null }>({ open: false, url: null });
+  const [eventImageLoading, setEventImageLoading] = useState<Record<string, boolean>>({});
 
   // Smooth scroll to the expanded tickets of the selected event
   const ticketsRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -390,6 +391,21 @@ export function ClubEvents({
 
   // Per-event "show full description" state
   const [descExpanded, setDescExpanded] = useState<Record<string, boolean>>({});
+
+  // Initialize loading states for event images
+  useEffect(() => {
+    if (events && events.length > 0) {
+      const initialStates: Record<string, boolean> = {};
+      events.forEach(event => {
+        const eventWithAny = event as EventWithAny;
+        const evId = String(eventWithAny.id ?? "");
+        if (eventWithAny.bannerUrl) {
+          initialStates[evId] = true;
+        }
+      });
+      setEventImageLoading(initialStates);
+    }
+  }, [events]);
 
   const {
     items: cartItems,
@@ -521,7 +537,15 @@ export function ClubEvents({
                     className="relative h-28 w-28 sm:h-32 sm:w-32 overflow-hidden rounded-xl shrink-0 ring-1 ring-white/10 hover:ring-white/20 transition-all duration-200"
                     aria-label={`Ver imagen del evento ${eventWithAny.name ?? ""}`}
                   >
-                    <Image src={eventWithAny.bannerUrl ?? ""} alt={eventWithAny.name ?? ""} fill className="object-cover" />
+                    <Image 
+                      src={eventWithAny.bannerUrl ?? ""} 
+                      alt={eventWithAny.name ?? ""} 
+                      fill 
+                      className="object-cover"
+                      onLoad={() => setEventImageLoading(prev => ({ ...prev, [evId]: false }))}
+                      onError={() => setEventImageLoading(prev => ({ ...prev, [evId]: false }))}
+                    />
+                    {eventImageLoading[evId] !== false && <ImageSpinner />}
                   </button>
 
                   <div className="flex-1 min-w-0">
@@ -654,7 +678,7 @@ export function ClubEvents({
                             } : undefined}
                             clubId={clubId}
                             clubName={clubName}
-                            selectedDate={selectedDate}
+                            selectedDate={selectedDate ?? undefined}
                           />
                         ) : (
                           <div className="text-white/60">No hay reservas disponibles para esta fecha.</div>

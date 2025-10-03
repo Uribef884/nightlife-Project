@@ -42,6 +42,25 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
   const [autoAllowCarta, setAutoAllowCarta] = useState<boolean>(true);
   const allowCarta = showCarta ?? autoAllowCarta;
 
+  // Render counter for debugging rapid re-renders
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+
+  // Debug logging for PDF mode flashing issue - REMOVED to prevent infinite re-renders
+  // useEffect(() => {
+  //   console.log('🔍 ClubTabs Debug - Component mounted/updated:', {
+  //     renderCount: renderCountRef.current,
+  //     showCarta,
+  //     autoAllowCarta,
+  //     allowCarta,
+  //     current,
+  //     timestamp: new Date().toISOString(),
+  //     userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'SSR',
+  //     isMobile: typeof window !== 'undefined' && window.innerWidth < 768,
+  //     dataClubMenu: typeof document !== 'undefined' ? document.documentElement.getAttribute('data-club-menu') : 'SSR'
+  //   });
+  // });
+
   // 🔧 measure this nav height and publish --nl-sticky-top on :root
   const navRef = useRef<HTMLElement | null>(null);
 
@@ -49,24 +68,111 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
     if (!navRef.current || typeof window === "undefined") return;
     const root = document.documentElement;
 
+    // More aggressive throttling for mobile PDF mode
+    let timeoutId: NodeJS.Timeout | null = null;
+    let rafId: number | null = null;
+    
+    const throttleApply = (callback: () => void, delay = 100) => { // Increased delay for mobile
+      if (timeoutId) return;
+      timeoutId = setTimeout(() => {
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          callback();
+          timeoutId = null;
+          rafId = null;
+        });
+      }, delay);
+    };
+
+    let lastValues = { navbarH: 0, tabsH: 0, stickyTop: 0 };
+    let stableCount = 0; // Track consecutive stable measurements
+    
     const apply = () => {
       const navbarH = readPxVar(root, "--nl-navbar-h", 56);
       const tabsH = navRef.current?.offsetHeight ?? 0;
-
-      // ⬇️ CHANGE: remove extra 8px padding so the category bar sits flush
       const stickyTop = Math.max(0, navbarH + tabsH);
 
-      root.style.setProperty("--nl-sticky-top", `${stickyTop}px`);
-      // Keep a tiny cushion for section headings only (does NOT affect the gap)
-      root.style.setProperty("--nl-sticky-scroll-margin", `${stickyTop + 8}px`);
+      // Only update if values actually changed significantly (> 1px)
+      const navbarChanged = Math.abs(lastValues.navbarH - navbarH) > 1;
+      const tabsChanged = Math.abs(lastValues.tabsH - tabsH) > 1;
+      
+      if (navbarChanged || tabsChanged) {
+        stableCount = 0;
+        console.log('🔍 ClubTabs Debug - ResizeObserver values changed:', {
+          navbarH,
+          tabsH,
+          stickyTop,
+          previousValues: lastValues,
+          navbarChanged,
+          tabsChanged,
+          timestamp: new Date().toISOString(),
+          isMobile: typeof window !== "undefined" && window.innerWidth < 768,
+          dataClubMenu: typeof document !== "undefined" ? document.documentElement.getAttribute('data-club-menu') : 'SSR'
+        });
+
+        root.style.setProperty("--nl-sticky-top", `${stickyTop}px`);
+        root.style.setProperty("--nl-sticky-scroll-margin", `${stickyTop + 8}px`);
+        
+        lastValues = { navbarH, tabsH, stickyTop };
+      } else {
+        stableCount++;
+        // Log only every 10th stable measurement to reduce noise
+        if (stableCount % 10 === 0) {
+          console.log('🔍 ClubTabs Debug - Stable measurements:', {
+            stableCount,
+            navbarH,
+            tabsH,
+            stickyTop,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
     };
 
     apply();
-    const ro = new ResizeObserver(() => apply());
+    
+    // More conservative ResizeObserver with better filtering
+    const ro = new ResizeObserver((entries) => {
+      // Filter out entries that are likely from image loading
+      const relevantEntries = entries.filter(entry => {
+        const target = entry.target as HTMLElement;
+        // Skip if it's an image or image container
+        if (target.tagName === 'IMG' || target.closest('img')) return false;
+        // Skip if it's inside the PDF menu area
+        if (target.closest('[data-tab="carta"]')) return false;
+        return true;
+      });
+
+      if (relevantEntries.length > 0) {
+        console.log('🔍 ClubTabs Debug - ResizeObserver entries (filtered):', {
+          totalEntries: entries.length,
+          relevantEntries: relevantEntries.length,
+          entries: relevantEntries.map(e => ({
+            target: e.target.tagName,
+            contentRect: e.contentRect,
+            borderBoxSize: e.borderBoxSize
+          })),
+          timestamp: new Date().toISOString()
+        });
+        throttleApply(apply, 100); // More conservative throttling
+      }
+    });
+    
     ro.observe(navRef.current);
-    const onResize = () => apply();
+    
+    const onResize = () => {
+      console.log('🔍 ClubTabs Debug - Window resize event (throttled):', {
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        timestamp: new Date().toISOString()
+      });
+      throttleApply(apply, 100);
+    };
+    
     window.addEventListener("resize", onResize);
     return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (rafId) cancelAnimationFrame(rafId);
       ro.disconnect();
       window.removeEventListener("resize", onResize);
     };
@@ -80,41 +186,115 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
     const root = document.documentElement;
     const compute = () => {
       const mt = (root.getAttribute("data-club-menu") || "unknown").toLowerCase();
-      return mt === "structured" || mt === "pdf";
+      const result = mt === "structured" || mt === "pdf";
+      console.log('🔍 ClubTabs Debug - Menu type detection:', {
+        menuType: mt,
+        isPdfMode: mt === "pdf",
+        result,
+        timestamp: new Date().toISOString(),
+        previousValue: autoAllowCarta
+      });
+      return result;
     };
 
     setAutoAllowCarta(compute()); // initial
-    const obs = new MutationObserver(() => setAutoAllowCarta(compute()));
+    const obs = new MutationObserver((mutations) => {
+      console.log('🔍 ClubTabs Debug - MutationObserver triggered:', {
+        mutations: mutations.map(m => ({
+          type: m.type,
+          attributeName: m.attributeName,
+          oldValue: m.oldValue,
+          target: m.target
+        })),
+        timestamp: new Date().toISOString()
+      });
+      setAutoAllowCarta(compute());
+    });
     obs.observe(root, { attributes: true, attributeFilter: ["data-club-menu"] });
     return () => obs.disconnect();
-  }, [showCarta]);
+  }, [showCarta, autoAllowCarta]);
 
   // Internal active state mirrors either the prop (controlled) or the URL hash (uncontrolled)
   const [active, setActive] = useState<Tab>("general");
 
+  // Debug logging for active state changes - REMOVED to prevent infinite re-renders
+  // useEffect(() => {
+  //   console.log('🔍 ClubTabs Debug - Active state changed:', {
+  //     active,
+  //     current,
+  //     timestamp: new Date().toISOString()
+  //   });
+  // }, [active, current]);
+
   // Controlled mode: follow `current` prop
   useEffect(() => {
-    if (current) setActive(current);
-  }, [current]);
+    if (current && current !== active) {
+      console.log('🔍 ClubTabs Debug - Setting active from prop:', {
+        current,
+        previousActive: active,
+        timestamp: new Date().toISOString()
+      });
+      setActive(current);
+    }
+  }, [current, active]);
 
   // Uncontrolled mode: follow URL hash and normalize based on allowCarta
   useEffect(() => {
     if (current !== undefined) return; // parent controls it
-    const apply = () => setActive(readTabFromUrl(allowCarta));
+    const apply = () => {
+      const newTab = readTabFromUrl(allowCarta);
+      // Only update if the tab actually changed
+      if (newTab !== active) {
+        console.log('🔍 ClubTabs Debug - URL hash change detected:', {
+          hash: window.location.hash,
+          allowCarta,
+          newTab,
+          previousActive: active,
+          timestamp: new Date().toISOString()
+        });
+        setActive(newTab);
+      }
+    };
     apply();
-    const onHash = () => setActive(readTabFromUrl(allowCarta));
-    const onPop = () => setActive(readTabFromUrl(allowCarta));
+    const onHash = () => {
+      console.log('🔍 ClubTabs Debug - Hash change event:', {
+        hash: window.location.hash,
+        allowCarta,
+        timestamp: new Date().toISOString()
+      });
+      const newTab = readTabFromUrl(allowCarta);
+      if (newTab !== active) {
+        setActive(newTab);
+      }
+    };
+    const onPop = () => {
+      console.log('🔍 ClubTabs Debug - Pop state event:', {
+        hash: window.location.hash,
+        allowCarta,
+        timestamp: new Date().toISOString()
+      });
+      const newTab = readTabFromUrl(allowCarta);
+      if (newTab !== active) {
+        setActive(newTab);
+      }
+    };
     window.addEventListener("hashchange", onHash);
     window.addEventListener("popstate", onPop);
     return () => {
       window.removeEventListener("hashchange", onHash);
       window.removeEventListener("popstate", onPop);
     };
-  }, [current, allowCarta]);
+  }, [current, allowCarta, active]);
 
   // If Carta becomes disallowed while on it, normalize to General and update URL
   useEffect(() => {
     if (!allowCarta && active === "carta") {
+      console.log('🔍 ClubTabs Debug - Normalizing carta to general:', {
+        allowCarta,
+        active,
+        currentHash: typeof window !== "undefined" ? window.location.hash : 'SSR',
+        timestamp: new Date().toISOString()
+      });
       if (typeof window !== "undefined" && window.location.hash !== "#general") {
         window.location.hash = "general";
       }
@@ -124,10 +304,42 @@ export function ClubTabs({ current, onChange, showCarta }: Props) {
   }, [allowCarta, active, onChange]);
 
   const handleChange = (t: Tab) => {
+    const originalTab = t;
     if (!allowCarta && t === "carta") t = "general";
-    if (typeof window !== "undefined" && window.location.hash !== `#${t}`) {
+    
+    // Prevent unnecessary updates if already on the target tab
+    if (active === t) {
+      console.log('🔍 ClubTabs Debug - Tab change skipped (already active):', {
+        originalTab,
+        finalTab: t,
+        active,
+        currentHash: typeof window !== "undefined" ? window.location.hash : 'SSR',
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+    
+    console.log('🔍 ClubTabs Debug - Tab change initiated:', {
+      originalTab,
+      finalTab: t,
+      allowCarta,
+      active,
+      currentHash: typeof window !== "undefined" ? window.location.hash : 'SSR',
+      isControlled: current !== undefined,
+      timestamp: new Date().toISOString()
+    });
+
+    // Only update hash if it's actually different
+    const targetHash = `#${t}`;
+    if (typeof window !== "undefined" && window.location.hash !== targetHash) {
+      console.log('🔍 ClubTabs Debug - Updating URL hash:', {
+        from: window.location.hash,
+        to: targetHash,
+        timestamp: new Date().toISOString()
+      });
       window.location.hash = t;
     }
+    
     onChange?.(t);
     if (current !== undefined) setActive(t);
   };

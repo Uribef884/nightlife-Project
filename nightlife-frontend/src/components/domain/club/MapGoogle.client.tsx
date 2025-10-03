@@ -102,7 +102,7 @@ type GMapsNS = {
 type GoogleNS = { maps?: GMapsNS };
 
 /* ───────────────────────────────── Component ─────────────────────────────── */
-export default function MapGoogle({
+function MapGoogleComponent({
   latitude,
   longitude,
   googleMapsUrl,
@@ -117,6 +117,7 @@ export default function MapGoogle({
   const [scriptReady, setScriptReady] = useState(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [useOsmImage, setUseOsmImage] = useState(false);
+  const [staticImageError, setStaticImageError] = useState(false);
 
   // Debug state
   const debug = useDebugEnabled(debugProp);
@@ -223,6 +224,14 @@ export default function MapGoogle({
           keyboardShortcuts: false,
           scrollwheel: true,
           disableDoubleClickZoom: true,
+          // Options to make event listeners more passive-friendly
+          draggable: true,
+          zoomControl: false,
+          mapTypeControl: false,
+          scaleControl: false,
+          streetViewControl: false,
+          rotateControl: false,
+          fullscreenControl: false,
         } as Record<string, unknown>);
 
         new g.maps.Marker({ position: pos, map, title: center.label, icon } as Record<string, unknown>);
@@ -269,6 +278,7 @@ export default function MapGoogle({
     setScriptReady(false);
     setStatus(key ? "loading" : "fallback");
     setUseOsmImage(false);
+    setStaticImageError(false);
     setFallbackReason("");
     log("retry");
   }
@@ -306,10 +316,14 @@ export default function MapGoogle({
         ref={mapRef}
         className="h-56 w-full rounded-xl overflow-hidden bg-black/20 ring-1 ring-white/10"
         aria-label="Mapa de ubicación"
+        style={{
+          touchAction: 'pan-x pan-y',
+          overscrollBehavior: 'contain'
+        }}
       />
 
       {/* Static image fallback (Google Static → OSM). Also used until JS boots when status === 'fallback' */}
-      {status === "fallback" && (
+      {status === "fallback" && !staticImageError && (
         <Image
           src={useOsmImage || !googleStaticUrl ? osmStaticUrl : googleStaticUrl}
           alt={`Mapa estático: ${center.label}`}
@@ -322,8 +336,65 @@ export default function MapGoogle({
             const dur = measure("static_img_time", "script_wait_start", "static_img_loaded");
             log("static_img_loaded", { fromScriptWaitMs: dur, provider: useOsmImage || !googleStaticUrl ? "OSM" : "Google" });
           }}
-          onError={() => { log("static_img_error"); setUseOsmImage(true); }}
+          onError={() => { 
+            log("static_img_error"); 
+            setUseOsmImage(true);
+            setStaticImageError(true);
+          }}
         />
+      )}
+
+      {/* Themed placeholder when all map loading fails */}
+      {status === "fallback" && staticImageError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#6B3FA0]/20 via-black/40 to-black/60 rounded-xl ring-1 ring-white/10">
+          {/* Map icon */}
+          <div className="w-16 h-16 mb-4 rounded-full bg-[#6B3FA0]/30 flex items-center justify-center ring-2 ring-[#6B3FA0]/50">
+            <svg 
+              className="w-8 h-8 text-[#6B3FA0]" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" 
+              />
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" 
+              />
+            </svg>
+          </div>
+          
+          {/* Location text */}
+          <h3 className="text-white/90 font-semibold text-lg mb-2 text-center px-4">
+            {center.label}
+          </h3>
+          
+          {/* Subtitle */}
+          <p className="text-white/70 text-sm text-center px-4 mb-4">
+            Mapa no disponible
+          </p>
+          
+          {/* Open in Maps button */}
+          {safeMapsUrl && (
+            <a
+              href={safeMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full bg-[#6B3FA0] hover:bg-[#5A2F8F] text-white px-4 py-2 text-sm font-semibold shadow-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Abrir en Maps
+            </a>
+          )}
+        </div>
       )}
 
       {/* Loading overlay (spinner only — no noisy text) */}
@@ -401,4 +472,73 @@ export default function MapGoogle({
       )}
     </div>
   );
+}
+
+// Error boundary wrapper
+export default function MapGoogle(props: Props) {
+  const [hasError, setHasError] = useState(false);
+
+  // Reset error state when props change
+  useEffect(() => {
+    setHasError(false);
+  }, [props.latitude, props.longitude, props.name]);
+
+  if (hasError) {
+    return (
+      <div className="relative">
+        <div className="h-56 w-full rounded-xl overflow-hidden bg-black/20 ring-1 ring-white/10">
+          {/* Themed error placeholder */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-[#6B3FA0]/20 via-black/40 to-black/60 rounded-xl ring-1 ring-white/10">
+            {/* Error icon */}
+            <div className="w-16 h-16 mb-4 rounded-full bg-red-500/30 flex items-center justify-center ring-2 ring-red-500/50">
+              <svg 
+                className="w-8 h-8 text-red-400" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" 
+                />
+              </svg>
+            </div>
+            
+            {/* Error text */}
+            <h3 className="text-white/90 font-semibold text-lg mb-2 text-center px-4">
+              {props.name || "Ubicación"}
+            </h3>
+            
+            <p className="text-white/70 text-sm text-center px-4 mb-4">
+              Error al cargar el mapa
+            </p>
+            
+            {/* Retry button */}
+            <button
+              onClick={() => {
+                setHasError(false);
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-[#6B3FA0] hover:bg-[#5A2F8F] text-white px-4 py-2 text-sm font-semibold shadow-lg transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Reintentar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  try {
+    return <MapGoogleComponent {...props} />;
+  } catch {
+    // This catch block will only catch synchronous errors
+    // For async errors, we need the error boundary
+    setHasError(true);
+    return null;
+  }
 }

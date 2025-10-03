@@ -11,6 +11,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { saveRedirectPath } from "@/utils/redirect";
 import { scrollToTop } from "@/utils/scrollUtils";
 import { CartButton, CartDrawer } from "@/components/cart";
+import { ImageSpinner } from "@/components/common/Spinner";
 
 type TabKey = "general" | "reservas" | "carta";
 
@@ -29,6 +30,7 @@ function resolveTabFromURL(): TabKey {
 
 export default function NavBar() {
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
+  const [logoLoading, setLogoLoading] = useState(true);
   const { isAuthenticated, user } = useAuthStore();
 
   const pathname = usePathname() || "/";
@@ -84,7 +86,18 @@ export default function NavBar() {
           className="flex items-center gap-1 sm:gap-2 hover:opacity-80 transition-opacity cursor-pointer"
           aria-label="Ir al inicio"
         >
-          <Image src="/icon.svg" alt="NightLife" width={40} height={40} className="pointer-events-none" />
+          <div className="relative">
+            <Image 
+              src="/icon.svg" 
+              alt="NightLife" 
+              width={40} 
+              height={40} 
+              className="pointer-events-none" 
+              onLoad={() => setLogoLoading(false)}
+              onError={() => setLogoLoading(false)}
+            />
+            {logoLoading && <ImageSpinner />}
+          </div>
           <span className="text-xl font-semibold text-slate-100 pointer-events-none">NightLife</span>
         </Link>
 

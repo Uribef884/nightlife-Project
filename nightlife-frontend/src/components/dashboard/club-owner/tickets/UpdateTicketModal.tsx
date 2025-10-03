@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Edit3, Calendar, DollarSign, Users, Star, Ticket, AlertCircle, Trash2 } from 'lucide-react';
-import { formatBogotaDate, maxSelectableDateInBogota } from '@/utils/timezone';
+import { X, Edit3, DollarSign, Users, Star, Ticket, AlertCircle, Trash2 } from 'lucide-react';
+import { formatBogotaDate } from '@/utils/timezone';
 
 // Utility function to format numbers with thousand separators
 const formatNumber = (value: number | string): string => {
@@ -95,7 +95,7 @@ interface TicketFormData {
   }>;
 }
 
-export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, events = [] }: UpdateTicketModalProps) {
+export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, events = [] }: UpdateTicketModalProps) {
   const [formData, setFormData] = useState<TicketFormData>({
     name: '',
     description: '',
@@ -200,8 +200,8 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
           
           const formatted = {
             categoryId: (menuItem.categoryId as string) || '',
-            menuItemId: (menuItem.menuItemId as string) || (menuItem.id as string) || (menuItem.menuItem?.id as string) || '',
-            variantId: (menuItem.variantId as string) || (menuItem.menuItemVariantId as string) || (menuItem.variant?.id as string) || null,
+            menuItemId: (menuItem.menuItemId as string) || (menuItem.id as string) || ((menuItem.menuItem as Record<string, unknown>)?.id as string) || '',
+            variantId: (menuItem.variantId as string) || (menuItem.menuItemVariantId as string) || ((menuItem.variant as Record<string, unknown>)?.id as string) || null,
             quantity: (menuItem.quantity as number) || (menuItem.qty as number) || 1
           };
           return formatted;
@@ -278,7 +278,7 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
       
       initializeData();
     }
-  }, [ticket, isOpen, loadMenuItems]);
+  }, [ticket, isOpen, loadMenuItems, loadTicketMenuItems]);
 
   // iOS scroll lock handling
   useEffect(() => {
@@ -732,7 +732,7 @@ export function UpdateTicketModal({ isOpen, onClose, onSuccess, ticket, clubId, 
                     ticket.price === 0 ? 'text-gray-400 dark:text-gray-400' : 'text-gray-400'
                   }`} />
                    {(() => {
-                     const isFreeTicket = ticket.price === 0 || ticket.price === '0' || ticket.price === null || ticket.price === undefined;
+                     const isFreeTicket = ticket.price === 0 || ticket.price === null || ticket.price === undefined;
                      
                      if (isFreeTicket) {
                          return (

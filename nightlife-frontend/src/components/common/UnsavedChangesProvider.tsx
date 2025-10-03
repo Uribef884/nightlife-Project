@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { UnsavedChangesModal } from '@/components/cart/UnsavedChangesModal';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
@@ -23,9 +22,6 @@ export function UnsavedChangesProvider({
   const [showModal, setShowModal] = useState(false);
 
   const {
-    handleNavigation,
-    saveAndNavigate,
-    discardAndNavigate,
     cancelNavigation,
     pendingNavigation,
   } = useUnsavedChanges({

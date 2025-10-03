@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef } from 'react';
-import { parseHighlightFromURL, highlightItem, type HighlightInfo } from '@/utils/highlight';
+import { parseHighlightFromURL, highlightItem } from '@/utils/highlight';
 
 /**
  * Hook to handle highlighting of shared items

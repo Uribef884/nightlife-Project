@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Ticket, Calendar, Loader2, Eye, EyeOff, Zap, ZapOff, Gift, Star, Clock, Trash2, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Ticket, Calendar, Loader2, Eye, EyeOff, Zap, ZapOff, Gift, Star, Clock, Trash2, X, ChevronDown } from 'lucide-react';
 import { isPastDateInBogota, formatBogotaDate } from '@/utils/timezone';
+import Image from 'next/image';
 
 // Utility function to format numbers with thousand separators
 const formatNumber = (value: number | string): string => {
@@ -16,7 +17,6 @@ import { UpdateTicketModal } from './UpdateTicketModal';
 import { CreateEventModal } from '../events/CreateEventModal';
 import { UpdateEventModal } from '../events/UpdateEventModal';
 import { ShareButton } from '@/components/common/ShareButton';
-import type { ShareableEvent, ShareableTicket } from '@/utils/share';
 
 interface TicketsManagementProps {
   clubId: string;
@@ -60,21 +60,6 @@ interface Ticket {
   availableDate?: string;
 }
 
-type IncludedItem = {
-  menuItemName?: string;
-  name?: string;
-  title?: string;
-  itemName?: string;
-  menuItem?: {
-    name?: string;
-  };
-  quantity?: string | number;
-  qty?: string | number;
-  variantName?: string;
-  variant?: {
-    name?: string;
-  };
-};
 
 /* ---------------- helpers ---------------- */
 function toNum(v: unknown): number | null {
@@ -99,7 +84,14 @@ function getIncludedLines(ticket: Ticket): string[] {
   const lines: string[] = [];
   for (const it of raw) {
     if (!it || typeof it !== 'object') continue;
-    const includedItem = it as any; // Use any since we know the structure from backend
+    const includedItem = it as {
+      menuItemName?: string;
+      name?: string;
+      title?: string;
+      quantity?: string | number;
+      qty?: string | number;
+      variantName?: string;
+    };
     
     // Use the actual property names from the backend API
     const baseName = includedItem.menuItemName || includedItem.name || includedItem.title || "";
@@ -257,7 +249,7 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
   const renderCategorizedEventTickets = (tickets: Ticket[]) => {
     const { generalTickets, comboTickets, freeTickets, inactiveTickets } = categorizeEventTickets(tickets);
     
-    const renderTicketList = (ticketList: Ticket[], title: string, emptyMessage: string) => {
+    const renderTicketList = (ticketList: Ticket[], title: string) => {
       if (ticketList.length === 0) return null;
       
       return (
@@ -434,10 +426,10 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
 
     return (
       <div className="space-y-6">
-        {renderTicketList(generalTickets, 'General', 'No hay tickets generales')}
-        {renderTicketList(comboTickets, 'Combos', 'No hay tickets de combo')}
-        {renderTicketList(freeTickets, 'Gratuitos', 'No hay tickets gratuitos')}
-        {renderTicketList(inactiveTickets, 'Ocultos', 'No hay tickets ocultos')}
+        {renderTicketList(generalTickets, 'General')}
+        {renderTicketList(comboTickets, 'Combos')}
+        {renderTicketList(freeTickets, 'Gratuitos')}
+        {renderTicketList(inactiveTickets, 'Ocultos')}
       </div>
     );
   };
@@ -445,7 +437,7 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
   // API service functions
   const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
 
-  const fetchEvents = async (clubId: string): Promise<Event[]> => {
+  const fetchEvents = useCallback(async (clubId: string): Promise<Event[]> => {
     const response = await fetch(`${API_BASE}/events/club/${clubId}?includeHidden=true`, {
       method: 'GET',
       headers: {
@@ -459,9 +451,9 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
     }
 
     return response.json();
-  };
+  }, [API_BASE]);
 
-  const fetchTickets = async (): Promise<Ticket[]> => {
+  const fetchTickets = useCallback(async (): Promise<Ticket[]> => {
     const response = await fetch(`${API_BASE}/tickets/my-club`, {
       method: 'GET',
       headers: {
@@ -475,7 +467,7 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
     }
 
     return response.json();
-  };
+  }, [API_BASE]);
 
   const toggleTicketVisibility = async (ticketId: string): Promise<void> => {
     const url = `${API_BASE}/tickets/${ticketId}/hide`;
@@ -599,7 +591,7 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
     };
 
     loadData();
-  }, [clubId]);
+  }, [clubId, fetchEvents, fetchTickets]);
 
   // Helper function to update a specific ticket in categorized arrays
   const updateTicketInCategorizedArrays = (ticketId: string, updatedTicket: Ticket) => {
@@ -937,14 +929,12 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
   const TicketSection = ({ 
     title, 
     tickets, 
-    emptyMessage, 
     icon: Icon,
     isInactive = false
   }: { 
     title: string; 
     tickets: Ticket[]; 
-    emptyMessage: string; 
-    icon: any;
+    icon: React.ComponentType<{ className?: string }>;
     isInactive?: boolean;
   }) => {
     if (tickets.length === 0) return null;
@@ -1261,10 +1251,11 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                         {/* Event Banner */}
                         {event.bannerUrl && (
                           <div className="relative h-48 w-full overflow-hidden">
-                            <img
+                            <Image
                               src={event.bannerUrl}
                               alt={event.name}
-                              className="w-full h-full object-cover"
+                              fill
+                              className="object-cover"
                               onError={(e) => {
                                 const target = e.target as HTMLImageElement;
                                 target.style.display = 'none';
@@ -1419,10 +1410,11 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                               {/* Event Banner */}
                               {event.bannerUrl && (
                                 <div className="relative h-48 w-full overflow-hidden">
-                                  <img
+                                  <Image
                                     src={event.bannerUrl}
                                     alt={event.name}
-                                    className="w-full h-full object-cover"
+                                    fill
+                                    className="object-cover"
                                     onError={(e) => {
                                       const target = e.target as HTMLImageElement;
                                       target.style.display = 'none';
@@ -1552,25 +1544,21 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
                     <TicketSection 
                       title="Combos" 
                       tickets={comboTickets} 
-                      emptyMessage="No hay combos"
                       icon={Gift}
                     />
                     <TicketSection 
                       title="General" 
                       tickets={generalTickets} 
-                      emptyMessage="No hay tickets generales"
                       icon={Ticket}
                     />
                     <TicketSection 
                       title="Gratuitos" 
                       tickets={freeTickets} 
-                      emptyMessage="No hay tickets gratuitos"
                       icon={Star}
                     />
                     <TicketSection 
                       title="Inactivos" 
                       tickets={inactiveTickets} 
-                      emptyMessage="No hay tickets inactivos"
                       icon={Clock}
                       isInactive={true}
                     />
@@ -1768,8 +1756,8 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
             try {
               const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
               
-              // Load events
-              const eventsResponse = await fetch(`${API_BASE}/events/club/${clubId}`, {
+              // Load events (include inactive events)
+              const eventsResponse = await fetch(`${API_BASE}/events/club/${clubId}?includeHidden=true`, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -1777,16 +1765,18 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
 
               if (eventsResponse.ok) {
                 const eventsData = await eventsResponse.json();
+                console.log('Reloaded events after creation:', eventsData);
                 setEvents(eventsData);
                 
                 // Categorize events as active/inactive
                 const { activeEvents, inactiveEvents } = categorizeEvents(eventsData);
+                console.log('Categorized events - Active:', activeEvents.length, 'Inactive:', inactiveEvents.length);
                 setActiveEvents(activeEvents);
                 setInactiveEvents(inactiveEvents);
               }
 
               // Load all tickets
-              const ticketsResponse = await fetch(`${API_BASE}/tickets/club/${clubId}`, {
+              const ticketsResponse = await fetch(`${API_BASE}/tickets/my-club`, {
                 method: 'GET',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -1795,9 +1785,11 @@ export function TicketsManagement({ clubId }: TicketsManagementProps) {
               if (ticketsResponse.ok) {
                 const ticketsData = await ticketsResponse.json();
                 const ticketsArray = Array.isArray(ticketsData) ? ticketsData : [];
+                console.log('Reloaded tickets after creation:', ticketsArray);
                 setAllTickets(ticketsArray);
                 
                 const { generalTickets, comboTickets, freeTickets, inactiveTickets } = categorizeTickets(ticketsArray);
+                console.log('Categorized tickets - General:', generalTickets.length, 'Combo:', comboTickets.length, 'Free:', freeTickets.length, 'Inactive:', inactiveTickets.length);
                 setGeneralTickets(generalTickets);
                 setComboTickets(comboTickets);
                 setFreeTickets(freeTickets);
